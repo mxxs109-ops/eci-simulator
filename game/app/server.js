@@ -500,7 +500,8 @@ async function simTick() {
   const { ok, err } = await runBrain({ prompt: fullPrompt, stream: false, on: { text: t => { out += t; }, tool: () => { out = ''; } } });
   busy = simming = false;
   if (!ok) return console.log(`整点模拟失败（${to}）：${(err || out).slice(0, 300)}`);
-  const say = out.trim();
+  // 只剩「（无）」（有的模型还会多带几个字、换行）就当没有她能察觉的事
+  const say = /^[（(]\s*无\s*[)）]/.test(out.trim()) ? '' : out.trim();
   if (newDay) { try { rotateSimLog(); } catch (e) { console.log('模拟日志归档失败：' + e.message); } }
   writeJson(SIM_FILE, { last: now.toISOString(), summary: say.slice(0, 300) });
   // 她能察觉到的事，作为一条旁白放进聊天记录，网页会自动显示出来

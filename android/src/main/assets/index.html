@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>恶雌模拟器</title>
+<style>
+  :root { --bg: #1f1915; --card: #2a221d; --ink: #f1e6da; --soft: #b8a493; --line: #43362d; --me: #d39a6f; --bad: #e0806e; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 sans-serif; padding: 24px 16px 40px; }
+  h1 { font-size: 26px; letter-spacing: 3px; margin: 8px 0 2px; }
+  .soft { color: var(--soft); font-size: 14px; }
+  button { font: inherit; width: 100%; padding: 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); color: var(--ink); margin: 8px 0; }
+  button.p { background: var(--me); border-color: var(--me); color: #1f1915; font-weight: 700; font-size: 18px; }
+  .pc { display: flex; gap: 8px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin: 8px 0; }
+  .pc .n { flex: 1; min-width: 0; } .pc .n b { display: block; } .pc .n span { color: var(--soft); font-size: 13px; word-break: break-all; }
+  .pc button { width: auto; margin: 0; padding: 8px 14px; }
+  #cam { display: none; position: fixed; inset: 0; background: #000; z-index: 9; }
+  #cam video { width: 100%; height: 100%; object-fit: cover; }
+  #cam .frame { position: absolute; left: 50%; top: 45%; width: 70vw; height: 70vw; transform: translate(-50%, -50%); border: 3px solid var(--me); border-radius: 18px; }
+  #cam .tip { position: absolute; left: 0; right: 0; bottom: 120px; text-align: center; color: #fff; }
+  #cam button { position: absolute; left: 16px; right: 16px; bottom: 30px; width: auto; }
+  input { width: 100%; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: transparent; color: inherit; font: inherit; }
+  .err { color: var(--bad); }
+  details { margin-top: 20px; } summary { color: var(--soft); }
+  ol { padding-left: 1.3em; } li { margin: 6px 0; }
+</style>
+</head>
+<body>
+<h1>恶雌模拟器</h1>
+<div class="soft">游戏在你的电脑上跑，手机扫码连过去玩。</div>
+<p class="err" id="err"></p>
+<button class="p" id="scan">📷 扫码连接</button>
+<div id="list"></div>
+<details><summary>扫不了码？手动输入地址</summary>
+  <p class="soft">电脑上：游戏右下角 ⚙️ → 手机连接，二维码里是一整串地址（带 ?t= 连接码）。扫不了码的话，用手机自带的相机或微信扫一下，复制出来的那串粘贴到这里。</p>
+  <input id="manual" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url" placeholder="http://192.168.x.x:7788/?t=……">
+  <button id="go">连接</button>
+</details>
+<details><summary>连不上怎么办</summary>
+  <ol class="soft">
+    <li>电脑上的游戏开着吗？（桌面「恶雌模拟器」那个黑窗口不能关）</li>
+    <li>手机和电脑连的是不是同一个 Wi-Fi？公司、酒店、学校的 Wi-Fi 常常不让设备互相访问，换手机热点或家里的 Wi-Fi 试试。</li>
+    <li>电脑上的安装器 →「7 手机」→「放行防火墙」点过没有？</li>
+    <li>游戏 ⚙️ 里「允许同一个 Wi-Fi 下的手机连进来」勾上并保存了吗？</li>
+    <li>在外面玩：电脑和手机都装 Tailscale，登录同一个账号，再扫一次码。</li>
+  </ol>
+</details>
+<div id="cam"><video id="video" playsinline muted></video><div class="frame"></div><div class="tip">对准电脑屏幕上的二维码</div><button id="stop">取消</button></div>
+<canvas id="cv" hidden></canvas>
+<script src="jsQR.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const load = () => { try { return JSON.parse(localStorage.pcs || '[]'); } catch { return []; } };
+const save = a => { localStorage.pcs = JSON.stringify(a); };
+
+function draw() {
+  const pcs = load();
+  $('list').innerHTML = pcs.map((p, i) => `<div class="pc"><div class="n"><b>${esc(p.name)}</b><span>${esc(p.url.replace(/\?t=.*/, ''))}</span></div>
+    <button data-go="${i}">进入</button><button data-del="${i}">删</button></div>`).join('');
+}
+function connect(url) {
+  url = url.trim().replace(/^https?:/i, m => m.toLowerCase());   // 手机键盘常把开头自动大写
+  if (!/^https?:\/\/[^/]+\/\?t=\S+/.test(url)) { $('err').textContent = '这不是游戏的连接二维码'; return; }
+  const pcs = load().filter(p => p.url.split('?')[0] !== url.split('?')[0]);
+  pcs.unshift({ name: '我的电脑 ' + url.split('/')[2].split(':')[0], url });
+  save(pcs.slice(0, 8));
+  location.href = url;
+}
+$('list').onclick = e => {
+  const g = e.target.closest('[data-go]'), d = e.target.closest('[data-del]');
+  if (g) location.href = load()[g.dataset.go].url;
+  if (d) { const a = load(); a.splice(d.dataset.del, 1); save(a); draw(); }
+};
+$('go').onclick = () => connect($('manual').value.trim());
+
+let stream = null, timer = null;
+$('scan').onclick = async () => {
+  $('err').textContent = '';
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+  } catch (e) { $('err').textContent = '打不开摄像头：在手机「设置 → 应用 → 恶雌模拟器 → 权限」里允许相机'; return; }
+  $('cam').style.display = 'block';
+  const v = $('video'); v.srcObject = stream; await v.play();
+  const cv = $('cv'), ctx = cv.getContext('2d', { willReadFrequently: true });
+  timer = setInterval(() => {
+    if (!v.videoWidth) return;
+    cv.width = v.videoWidth; cv.height = v.videoHeight;
+    ctx.drawImage(v, 0, 0);
+    const code = jsQR(ctx.getImageData(0, 0, cv.width, cv.height).data, cv.width, cv.height);
+    if (code && code.data) { stop(); connect(code.data.trim()); }
+  }, 250);
+};
+function stop() { clearInterval(timer); if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; $('cam').style.display = 'none'; }
+$('stop').onclick = stop;
+
+// 从游戏页退回来时：上次连不上
+const off = decodeURIComponent((location.hash.match(/offline=(.*)/) || [])[1] || '');
+if (off) $('err').textContent = '连不上 ' + off.replace(/\?t=.*/, '') + '：电脑上的游戏开着吗？手机和电脑是同一个 Wi-Fi 吗？（下面有排查步骤）';
+draw();
+</script>
+</body>
+</html>

@@ -11,3 +11,5 @@ game/配音/缓存/
 game/开局.json
 game/归档/
 node_modules/
+android/build/
+android/*.apk
