@@ -375,7 +375,7 @@ function chat(text, res) {
 
   const send = obj => res.write(JSON.stringify(obj) + '\n');
   // 网页上显示的 = 回复里的 〔接手：…〕 换成交接模型写的那段（还在写时，后面先不显示）
-  const ho = localLLM.create(GAME_DIR, () => { if (!quiet) pushView(); }, readConfig().handoff);
+  const ho = localLLM.create(GAME_DIR, () => { if (!quiet) pushView(); }, readConfig().handoff, { her: text, history: readJson(HISTORY_FILE, []).slice(-6) });
   function pushView() {
     const v = ho.view(reply);
     if (v.startsWith(shown)) { if (v.length > shown.length) { send({ type: 'delta', text: v.slice(shown.length) }); shown = v; } }

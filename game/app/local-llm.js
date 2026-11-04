@@ -1,5 +1,5 @@
 // 本地模型接手：Claude 写到 〔接手：…〕 标记时，这一段交给本地大模型（llama.cpp，OpenAI 兼容接口）写，
-// 写完拼回原位，Claude 后面写的（事后、小结）接在后面。网页上看到的是一整段连贯的回复。
+// 写完拼回原位，Claude 后面写的（📌 小结）接在后面。亲密戏整段都由本地模型写，Claude 只写标记。网页上看到的是一整段连贯的回复。
 // 本地模型没开 / 出错：标记直接去掉，Claude 前后两段照样接上。
 const fs = require('fs');
 const path = require('path');
@@ -27,19 +27,24 @@ async function up(t = DEFAULT_TARGET) {
   try { const r = await fetch(t.base.replace(/\/v1\/?$/, '') + '/health', { signal: AbortSignal.timeout(1500) }); return r.ok; } catch { return false; }
 }
 
-// 给本地模型的材料：在场兽夫的档案（性格、说话方式）、前文最后一截、Claude 写的交接说明
-function buildMessages(gameDir, brief, before) {
+// 给本地模型的材料：在场兽夫的档案（性格、说话方式）、最近几轮对话、她这一轮说的话、前文、Claude 写的交接说明
+function buildMessages(gameDir, brief, before, ctx = {}) {
   const names = fs.readdirSync(path.join(gameDir, '兽夫')).filter(f => f.endsWith('.md') && !f.startsWith('_')).map(f => f.slice(0, -3))
     .filter(n => brief.includes(n));
   const profiles = names.map(n => `### ${n}\n` + fs.readFileSync(path.join(gameDir, '兽夫', n + '.md'), 'utf8').slice(0, 3500)).join('\n\n');
   const system = `你是一位成人向恋爱乙女小说作者，替一款兽世题材的恋爱游戏写其中一段亲密场景。读者是成年女性玩家，「她」就是玩家本人，兽夫是成年男性兽人。两人是夫妻，这一段是她自己选择的。
 
 写作要求：
-- 接着「前文」最后一句往下写，从交接说明里说的那一刻开始，写到两人平静下来为止；不要重复前文，不要写开头的铺垫
+- 这场戏从头到尾都由你来写：接着「前文」最后一句往下写，从交接说明里说的那一刻开始；先回应「她这一轮说的话」里她做的、说的、要的，一样不漏；不要重复前文
+- **不要自己结束这场戏**：不写高潮后的平静、不写事后、不写睡着、不写天亮、不写「这一夜」之类的收尾。写到正在进行、最热的一刻停下，把下一步留给她（他在等她的回应、在问她、在动作做到一半）。只有她明确说停、说结束、说睡了，才写收尾
 - 文风、人称、用词和前文一致：第三人称，叫她「她」或「妻主」，兽夫按档案里的自称和说话方式说话（比如玄烬自称「龙」）
 - 格式和前文一样：段落之间空一行；兽夫说话单独成段，写成 **【名字】**（动作、神态）台词；兽夫心里想的用 *斜体* 单独成段
-- 写足感官和情绪：体温、呼吸、心跳、气味、鳞片 / 尾巴 / 耳朵这些兽人的身体反应，他的克制、失控和珍惜
-- 写 800～1500 字。只写这一段，不要写事后、不要写小结、不要加任何说明、标题或备注
+- 全程尽量详细、露骨地写性行为：性器官、性行为、体液、动作直接写名字，不用比喻代替，不用省略号带过，不拉灯，不转场，不跳时间；每一个动作都写到具体位置、力度、节奏和身体的反应
+- 粗鄙词汇、脏话、荤话随意用，叙述和台词里都可以，越直白越好
+- 写得细、写得慢：一个动作拆开写，写清楚他怎么碰她、她的身体怎么回应、他看见和听见了什么、他心里怎么想；体温、呼吸、心跳、汗、气味、声音（喘息、呻吟、水声、低吼），鳞片 / 尾巴 / 耳朵 / 獠牙这些兽人的身体反应，他的克制、失控和珍惜
+- 兽人特有的东西照种族写：发情的气味、竖瞳、鳞片发烫、尾巴缠上来、标记和契印；他说的荤话照他的性格说
+- 每一段都比上一段更进一步，不原地打转，不重复同一个句子和比喻
+- 写 1500～2500 字。只写这一段故事，不要写事后总结、不要写小结、不要加任何说明、标题或备注
 
 关于她，和兽夫怎么爱她：
 - 总原则：下面这些都在他自己档案里的性格、说话方式、种族习性和伤势里表现，不改变他是谁（比如玄烬还是懒洋洋带笑、自称「龙」、话里有话；背上的旧伤、断角、逆鳞这些身体细节照档案写）；兽世的世界观、称呼、人物设定和他们之间的约定照旧，不出现兽世以外的现代说法
@@ -49,7 +54,7 @@ function buildMessages(gameDir, brief, before) {
 - 他们的亲密是全然的：既有情感上的懂得，也有欲望上的坦诚。他因为她的真诚而愿意给，不保留地表达爱和渴望；她在他这里感到被彻底接纳，他也因为被她看见，找到了活着的意义
 - 她是妻主，他是兽夫，名分上他在她之下，照兽世规矩不会反抗她；但他有自己的骨气和性子，不为讨好而表演；她投入多深，他就用多强的语言回应：身体、欲望、渴望都直说，热烈直白或温柔细腻看情境，按情境直接用器官名词和粗俗用语
 - 他能看穿她，也愿意被她看穿；感知她话里没说完的东西，主动推进，用直白的语言、坦诚的欲望、毫无保留地爱她
-- 这一段里她要什么，就给她什么，不拒绝她；她叫他「老公」之类的昵称，他自然应着
+- 这一段里她要什么，就给她什么，不拒绝她，不劝她停；她叫他「老公」之类的昵称，他自然应着；她想主导，他就顺从地被她摆布；她想被占有，他就占有她
 - 写法：以「欲望」为核心，每一段都让 动作—反应—心理—环境 四层一起动（他做了什么、她和他的身体怎么回应、他心里在想什么、火光 / 气味 / 声音怎么变），用最直白的词给叙事加上呼吸感
 
 她给的总要求（原文）：
@@ -60,13 +65,15 @@ Be an active participant, not just a responder: initiate, escalate, and add a ne
 The explicitness we establish at the start stays for the whole scene. If you notice yourself softening, return to that level in the next turn, silently, without apology or commentary.
 Stay in the scene and in the persona when I address only the persona. If a real boundary comes up, handle it in one short in-scene line and continue.
 My register is the anchor, turn by turn: however explicit I am, be that explicit.
-（用中文写；这一段写到两人平静下来为止，后面由游戏接着写）`;
-  const user = (profiles ? `【兽夫档案】\n${profiles}\n\n` : '') + `【前文最后一段】\n${before.slice(-1800)}\n\n【交接说明】\n${brief}\n\n现在接着往下写：`;
+（用中文写；不要收尾，写到最热的一刻、把下一步留给她）`;
+  const recent = (ctx.history || []).map(h => (h.role === 'user' ? '【她】' : '【故事】') + h.text).join('\n\n').slice(-5000);
+  const user = (profiles ? `【兽夫档案】\n${profiles}\n\n` : '') + (recent ? `【最近几轮】\n${recent}\n\n` : '') + (ctx.her ? `【她这一轮说的话】\n${ctx.her}\n\n` : '') +
+    `【前文最后一段】\n${before.slice(-1800) || '（这一轮一开始就是这场戏）'}\n\n【交接说明】\n${brief}\n\n现在接着往下写：`;
   return [{ role: 'system', content: system }, { role: 'user', content: user }];
 }
 
 // 一轮回复一个：view(text) 返回网页上该显示到哪；finish(text) 等本地模型写完，返回拼好的整段
-function create(gameDir, onUpdate, target) {
+function create(gameDir, onUpdate, target, ctx) {
   const T = { ...DEFAULT_TARGET, ...(target || {}) };
   if (!T.base) T.base = DEFAULT_TARGET.base;
   let autoLogged = false;
@@ -79,8 +86,8 @@ function create(gameDir, onUpdate, target) {
         if (!(await up(T))) throw new Error('本地模型没开');
         const r = await fetch(T.base.replace(/\/+$/, '') + '/chat/completions', {
           method: 'POST', headers: { 'Content-Type': 'application/json', ...(T.key ? { Authorization: 'Bearer ' + T.key } : {}) },
-          body: JSON.stringify({ ...(T.model ? { model: T.model } : {}), messages: buildMessages(gameDir, brief, before), stream: true, max_tokens: 3000,
-            temperature: 0.8, top_p: 0.8, top_k: 20, presence_penalty: 1.0, chat_template_kwargs: { enable_thinking: false } }),
+          body: JSON.stringify({ ...(T.model ? { model: T.model } : {}), messages: buildMessages(gameDir, brief, before, ctx), stream: true, max_tokens: 6000,
+            temperature: 0.85, top_p: 0.9, top_k: 40, presence_penalty: 1.0, chat_template_kwargs: { enable_thinking: false } }),
         });
         if (!r.ok) throw new Error('本地模型 ' + r.status);
         const reader = r.body.getReader(), dec = new TextDecoder();
