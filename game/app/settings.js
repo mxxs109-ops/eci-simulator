@@ -109,6 +109,12 @@
   };
   $('sClose').onclick = () => $('eciSet').classList.remove('on');
   $('eciSetBtn').onclick = open;
+  // 有新版本：右下角冒一条小提示
+  setTimeout(async () => {
+    const u = await fetch('/api/update').then(r => r.json()).catch(() => ({}));
+    if (!u.remote || !u.local || u.remote.version === u.local) return;
+    document.body.insertAdjacentHTML('beforeend', '<div id="eciUpd" style="position:fixed;right:60px;bottom:14px;z-index:9998;background:var(--card,#fffaf4);border:1px solid var(--line,#e2d3c2);border-radius:10px;padding:6px 12px;font-size:14px">🔔 有新版本 ' + u.remote.version + '：打开桌面上的「恶雌模拟器安装器」→ 游戏本体 → 更新</div>');
+  }, 3000);
   // 手机上（不是电脑本机）不显示设置按钮
   if (!/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) $('eciSetBtn').style.display = 'none';
 })();

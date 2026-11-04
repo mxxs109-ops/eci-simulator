@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>恶雌模拟器安装器</title>
+<style>
+  :root { --bg: #f6efe6; --card: #fffaf4; --ink: #3b2a20; --soft: #8a6f5c; --line: #e2d3c2; --me: #8a5a3c; --ok: #3f7a3a; --bad: #b4412f; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #1f1915; --card: #2a221d; --ink: #f1e6da; --soft: #b8a493; --line: #43362d; --me: #d39a6f; --ok: #8fc287; --bad: #e0806e; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.65 "PingFang SC", "Microsoft YaHei", sans-serif; }
+  header { padding: 18px 16px 6px; max-width: 980px; margin: 0 auto; }
+  h1 { margin: 0; font-size: 26px; letter-spacing: 2px; }
+  nav { max-width: 980px; margin: 0 auto; padding: 8px 16px; display: flex; gap: 6px; flex-wrap: wrap; position: sticky; top: 0; background: var(--bg); z-index: 5; }
+  nav a { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); text-decoration: none; color: var(--ink); background: var(--card); font-size: 14px; }
+  nav a.on { background: var(--me); color: #fff; border-color: var(--me); }
+  main { max-width: 980px; margin: 0 auto; padding: 8px 16px 60px; }
+  section { display: none; } section.on { display: block; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin: 12px 0; }
+  h2 { font-size: 19px; margin: 4px 0 8px; } h3 { font-size: 16px; margin: 14px 0 6px; }
+  button { font: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 10px; padding: 7px 16px; }
+  button.p { background: var(--me); border-color: var(--me); color: #fff; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.danger { border-color: var(--bad); color: var(--bad); }
+  input[type=text], input[type=password], select, textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; background: transparent; color: inherit; }
+  label { display: block; margin: 8px 0; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+  .soft { color: var(--soft); font-size: 14px; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+  .bar { height: 10px; background: var(--line); border-radius: 99px; overflow: hidden; margin: 8px 0 4px; }
+  .bar i { display: block; height: 100%; background: var(--me); width: 0; transition: width .5s; }
+  .log { font: 12px/1.5 Consolas, monospace; color: var(--soft); max-height: 120px; overflow: auto; white-space: pre-wrap; }
+  table { border-collapse: collapse; width: 100%; } td { padding: 4px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td:first-child { color: var(--soft); width: 32%; }
+  .choice { border: 2px solid var(--line); border-radius: 12px; padding: 12px 14px; margin: 8px 0; cursor: pointer; }
+  .choice.on { border-color: var(--me); }
+  .steps { counter-reset: s; padding: 0; list-style: none; }
+  .steps li { counter-increment: s; margin: 10px 0; padding-left: 36px; position: relative; }
+  .steps li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 26px; height: 26px; border-radius: 50%; background: var(--me); color: #fff; text-align: center; font-weight: 700; line-height: 26px; }
+  .shot { display: block; max-width: 100%; border: 1px solid var(--line); border-radius: 10px; margin: 8px 0; background: #fff; }
+  .msg { border-left: 3px solid var(--me); padding: 6px 12px; margin: 10px 0; }
+  .msg .t { font-weight: 700; } .msg .m { white-space: pre-wrap; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12px; border: 1px solid currentColor; margin-left: 6px; }
+</style>
+</head>
+<body>
+<header><h1>恶雌模拟器安装器</h1><div class="soft" id="where"></div></header>
+<nav id="nav">
+  <a data-s="loc">0 安装位置</a><a data-s="game">1 游戏本体</a><a data-s="llm">2 语言模型</a><a data-s="tts">3 配音</a>
+  <a data-s="phone">7 手机</a><a data-s="board">4 留言板</a><a data-s="del">5 卸载</a>
+</nav>
+<main>
+
+<section id="s-loc">
+  <div class="card"><h2>安装位置</h2>
+    <p>游戏、语言模型、配音都装在这个文件夹里。语言模型和配音加起来要 <b>40GB 左右</b>，建议选空间大的盘。</p>
+    <table><tr><td>现在的位置</td><td id="locNow"></td></tr><tr><td>这个盘剩余空间</td><td id="locFree"></td></tr></table>
+    <div class="row"><button class="p" id="locPick">选一个文件夹…</button><span class="soft">已经装了东西的话，会连同存档一起搬过去</span></div>
+    <div id="job-location"></div>
+  </div>
+</section>
+
+<section id="s-game">
+  <div class="card"><h2>游戏本体</h2>
+    <table><tr><td>已装版本</td><td id="gVer">—</td></tr><tr><td>GitHub 上的最新版</td><td id="gRemote">检查中…</td></tr></table>
+    <div class="row"><button class="p" id="gInstall">安装</button><button id="gOpen">打开游戏</button><button id="gCheck">检查更新</button></div>
+    <p class="soft">更新只换程序和规则，存档、设置、你给兽夫起的名字都不动。每次打开安装器都会自动检查一次。</p>
+    <div id="job-game"></div>
+  </div>
+</section>
+
+<section id="s-llm">
+  <div class="card"><h2>谁来当游戏的大脑？</h2>
+    <p>游戏里每一句话都是大语言模型写的。三种选一种：</p>
+    <div class="choice" data-brain="local"><b>A. 本地模型</b>（装在你电脑上，免费，不限尺度；要好显卡、大内存，比线上慢）</div>
+    <div class="choice" data-brain="api"><b>B. 线上 API</b>（DeepSeek、GPT、Claude、通义……按用量付费，快，任何电脑都能用）</div>
+    <div class="choice" data-brain="claude"><b>C. Claude Code</b>（有 Claude 订阅、装了 Claude Code 的人用，写得最好）</div>
+    <p class="soft">亲密段落：B、C 写不了的那一截，会自动交给本地模型写（装了的话）。只用 B、C 也能玩，那一段会被跳过。</p>
+  </div>
+
+  <div class="card" id="llmLocal" hidden><h2>A. 本地模型</h2>
+    <div class="row"><button class="p" id="lCheck">① 检查我的电脑</button></div>
+    <div id="lReport"></div>
+    <div class="row"><button class="p" id="lInstall" disabled>② 安装</button><button id="lTest" disabled>③ 试一下</button><button id="lUse" disabled>④ 用它当大脑</button></div>
+    <div id="job-llm"></div><div id="job-llmtest"></div>
+  </div>
+
+  <div class="card" id="llmApi" hidden><h2>B. 线上 API</h2>
+    <label>选一家 <select id="aPreset"></select></label>
+    <div id="aGuide"></div>
+    <label>接口地址 <input type="text" id="aBase"></label>
+    <label>模型名 <input type="text" id="aModel"></label>
+    <label>API key <input type="password" id="aKey" placeholder="把复制的 key 粘贴到这里"></label>
+    <div class="row"><button id="aTest">测试一下</button><button class="p" id="aSave">保存，用它当大脑</button><span id="aMsg"></span></div>
+  </div>
+
+  <div class="card" id="llmClaude" hidden><h2>C. Claude Code</h2>
+    <p id="cFound"></p>
+    <ol class="steps">
+      <li>要有 Claude 的付费订阅（Pro 或 Max），或者 Anthropic 的 API 额度。</li>
+      <li>装 Claude Code：装好 <a href="#" data-open="https://code.visualstudio.com/">VS Code</a>，在左边「扩展」里搜 <b>Claude Code</b>，点安装；或者按 <a href="#" data-open="https://docs.claude.com/en/docs/claude-code/setup">官方教程</a> 装命令行版。</li>
+      <li>打开一次 Claude Code，按提示用你的 Claude 账号登录。</li>
+      <li>回到这里点「重新检查」，找到了就点「用 Claude Code 当大脑」。</li>
+    </ol>
+    <div class="row"><button id="cRecheck">重新检查</button><button class="p" id="cUse">用 Claude Code 当大脑</button><span id="cMsg"></span></div>
+  </div>
+</section>
+
+<section id="s-tts">
+  <div class="card"><h2>配音（每句话用角色自己的声音读出来）</h2>
+    <p>用开源的 IndexTTS-2.5，在你电脑上跑。要 <b>NVIDIA 显卡、8GB 以上显存、驱动 570 以上、25GB 硬盘</b>。没有也不影响玩，只是没有声音。</p>
+    <div class="row"><button class="p" id="tCheck">① 检查我的电脑</button><button id="tInstall" disabled>② 安装（检查通过后才能点）</button></div>
+    <div id="tReport"></div>
+    <div id="job-tts"></div>
+  </div>
+</section>
+
+<section id="s-phone">
+  <div class="card"><h2>用手机玩</h2>
+    <p>游戏还是在电脑上跑，手机只是一个窗口。电脑开着游戏，手机和电脑连<b>同一个 Wi-Fi</b>，就能用手机玩。</p>
+    <ol class="steps">
+      <li>下载安卓 App：<a href="#" data-open="https://github.com/mxxs109-ops/eci-simulator/releases/latest">GitHub 发布页</a> 里的 <b>eci-simulator.apk</b>（用手机浏览器打开这个页面下载）。</li>
+      <li>手机上点下载好的 apk。第一次会提示「不允许安装未知来源的应用」，点「设置」→ 打开「允许来自此来源」，再返回点「安装」。</li>
+      <li>点下面的按钮，让 Windows 防火墙放行游戏（会弹一个「是否允许更改」，点「是」）。</li>
+      <li>电脑上打开游戏 → 右下角 ⚙️ → 勾上「允许同一个 Wi-Fi 下的手机连进来」→ 保存，会出现二维码。</li>
+      <li>手机 App 里点「扫码连接」，对准电脑屏幕上的二维码。第一次会问「允许访问本地网络」，点允许。</li>
+    </ol>
+    <div class="row"><button class="p" id="fwOn">放行防火墙</button><button id="fwOff">取消放行</button><span id="fwMsg"></span></div>
+    <h3>出门在外也想玩？</h3>
+    <p class="soft">装 <a href="#" data-open="https://tailscale.com/download">Tailscale</a>（免费）：电脑和手机都装、登录同一个账号。之后手机在哪都能连回家里的电脑，二维码照样扫。</p>
+    <h3>连不上？</h3>
+    <ul class="soft"><li>手机和电脑是不是同一个 Wi-Fi（公司、酒店的 Wi-Fi 常常不让设备互相访问，换手机热点试试）</li><li>第 3 步的防火墙放行做了没有</li><li>电脑上的游戏黑窗口还开着吗</li></ul>
+  </div>
+</section>
+
+<section id="s-board">
+  <div class="card"><h2>留言板</h2>
+    <p class="soft">留言收在 GitHub 上，所有人都看得到。发留言要有一个 GitHub 账号（免费注册）：点「写留言」会打开浏览器，内容已经帮你填好，点「Submit new issue」就发出去了。</p>
+    <label>标题 <input type="text" id="bTitle" placeholder="比如：玄烬太可爱了 / 配音装不上"></label>
+    <label>内容 <textarea id="bBody" rows="4"></textarea></label>
+    <div class="row"><button class="p" id="bNew">写留言</button><button id="bLoad">刷新留言</button></div>
+  </div>
+  <div id="bList"></div>
+</section>
+
+<section id="s-del">
+  <div class="card"><h2>一键卸载</h2>
+    <p>默认全部删干净：游戏和存档、语言模型、配音、安装器自己、桌面图标、防火墙规则。</p>
+    <label><input type="checkbox" class="dp" value="game" checked> 游戏本体和存档</label>
+    <label><input type="checkbox" class="dp" value="llm" checked> 语言模型</label>
+    <label><input type="checkbox" class="dp" value="tts" checked> 配音</label>
+    <label><input type="checkbox" class="dp" value="installer" checked> 安装器自己（最后删，删完这个页面就打不开了）</label>
+    <div class="row"><button class="danger" id="dGo">卸载选中的</button></div>
+    <div id="job-uninstall"></div>
+  </div>
+</section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const api = (u, b) => fetch(u, b === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json());
+let S = {};
+
+// 导航
+function go(s) {
+  document.querySelectorAll('nav a').forEach(a => a.classList.toggle('on', a.dataset.s === s));
+  document.querySelectorAll('section').forEach(x => x.classList.toggle('on', x.id === 's-' + s));
+  location.hash = s;
+  if (s === 'board') loadBoard();
+}
+$('nav').onclick = e => { const a = e.target.closest('a'); if (a) { e.preventDefault(); go(a.dataset.s); } };
+document.addEventListener('click', e => { const a = e.target.closest('[data-open]'); if (a) { e.preventDefault(); api('/api/open', { url: a.dataset.open }); } });
+
+async function refresh() {
+  S = await api('/api/state');
+  $('where').textContent = '装在：' + S.root;
+  $('locNow').textContent = S.root;
+  $('locFree').textContent = S.free == null ? '—' : S.free + ' GB';
+  $('gVer').innerHTML = S.game ? esc(S.game.version) + (S.running.game ? '<span class="pill ok">运行中</span>' : '') : '还没装';
+  $('gInstall').textContent = S.game ? '更新' : '安装';
+  $('gOpen').disabled = !S.game;
+  $('cFound').innerHTML = S.claude ? `<span class="ok">✅ 找到了 Claude Code（${esc(S.claude)}）</span>` : '<span class="bad">还没找到 Claude Code，照下面做：</span>';
+  document.querySelectorAll('[data-brain]').forEach(c => c.classList.toggle('on', c.dataset.brain === (S.brain === 'api' && /127\.0\.0\.1/.test(S.api.base || '') ? 'local' : S.brain)));
+}
+
+// 后台任务进度
+async function poll() {
+  const jobs = await api('/api/jobs').catch(() => ({}));
+  for (const [name, j] of Object.entries(jobs)) {
+    const box = $('job-' + name); if (!box) continue;
+    box.innerHTML = `<div class="bar"><i style="width:${j.pct}%"></i></div><div class="${j.error ? 'bad' : j.done ? 'ok' : ''}">${esc(j.error ? '出错：' + j.error : j.step)}</div><div class="log">${esc(j.log.slice(-6).join('\n'))}</div>`;
+    if (j.done && !box.dataset.done) { box.dataset.done = 1; refresh(); if (name === 'llm' && !j.error) { $('lTest').disabled = false; } if (name === 'llmtest' && !j.error) $('lUse').disabled = false; }
+    if (!j.done) delete box.dataset.done;
+  }
+}
+setInterval(poll, 1000);
+
+// 0 安装位置
+$('locPick').onclick = async () => {
+  const r = await api('/api/pick-folder', {});
+  if (!r.path) return;
+  const dir = /eci/i.test(r.path) ? r.path : r.path.replace(/[\\/]$/, '') + '\\EciSimulator';
+  if (!confirm('装到：' + dir + '\n' + (S.game || S.llm || S.tts ? '已经装的东西会搬过去。' : ''))) return;
+  await api('/api/location', { dir });
+};
+
+// 1 游戏
+async function checkUpdate() {
+  $('gRemote').textContent = '检查中…';
+  const r = await api('/api/game/check').catch(e => ({ error: e.message }));
+  if (r.error) return $('gRemote').innerHTML = `<span class="bad">${esc(r.error)}</span>`;
+  const newer = r.local && r.remote.version !== r.local;
+  $('gRemote').innerHTML = esc(r.remote.version) + (newer ? ` <span class="pill ok">有新版本</span><div class="soft">${esc(r.remote.notes || '')}</div>` : r.local ? ' <span class="soft">（已是最新）</span>' : '');
+  if (newer) document.querySelector('[data-s=game]').textContent = '1 游戏本体 🔔';
+}
+$('gInstall').onclick = () => api('/api/game/install', {});
+$('gOpen').onclick = () => api('/api/game/open', {});
+$('gCheck').onclick = checkUpdate;
+
+// 2 大脑
+document.querySelectorAll('[data-brain]').forEach(c => c.onclick = () => {
+  const b = c.dataset.brain;
+  $('llmLocal').hidden = b !== 'local'; $('llmApi').hidden = b !== 'api'; $('llmClaude').hidden = b !== 'claude';
+  document.querySelectorAll('[data-brain]').forEach(x => x.classList.toggle('on', x === c));
+});
+let plan = null;
+$('lCheck').onclick = async () => {
+  $('lReport').innerHTML = '<p class="soft">正在看你的显卡、内存、硬盘…</p>';
+  plan = await api('/api/llm/check');
+  const h = plan.hw;
+  const rows = [['显卡', h.nvidia ? `${h.nvidia.name}，${h.nvidia.vramGB}GB 显存，驱动 ${h.nvidia.driver}` : (h.gpus.join('、') || '没找到')], ['内存', h.ramGB + ' GB'], ['CPU', `${h.cpu}（${h.cores} 线程）`], ['安装盘剩余', plan.free == null ? '—' : plan.free + ' GB']];
+  const verdict = plan.tier === 'api'
+    ? `<p class="bad"><b>这台电脑带不动本地模型。</b>建议选 B 线上 API（DeepSeek 最便宜，几块钱能玩很久）。</p>`
+    : `<p class="ok"><b>可以装：${esc(plan.model.label)}</b>，用 ${plan.build === 'cuda' ? 'NVIDIA 显卡' : plan.build === 'vulkan' ? 'Vulkan（AMD / Intel 显卡）' : 'CPU'} 跑，要下载约 ${plan.needGB}GB。</p>`;
+  $('lReport').innerHTML = `<table>${rows.map(r => `<tr><td>${r[0]}</td><td>${esc(r[1])}</td></tr>`).join('')}</table>${verdict}${plan.why.map(w => `<p class="soft">· ${esc(w)}</p>`).join('')}
+    <p class="soft">本地模型当大脑：一轮回复大概 1～3 分钟（要读完三万字的规则）。想快一点：大脑用 B 或 C，本地模型只写亲密段落。</p>`;
+  $('lInstall').disabled = plan.tier === 'api' || !S.game;
+  if (!S.game) $('lReport').insertAdjacentHTML('beforeend', '<p class="bad">先去「1 游戏本体」装游戏。</p>');
+  $('lTest').disabled = $('lUse').disabled = !S.llm;
+};
+$('lInstall').onclick = () => api('/api/llm/install', { tier: plan.tier, build: plan.build });
+$('lTest').onclick = () => api('/api/llm/test', {});
+$('lUse').onclick = async () => {
+  await api('/api/brain', { brain: 'api', api: { base: 'http://127.0.0.1:8080/v1', model: 'local', key: '' } });
+  alert('好了：游戏的大脑换成本地模型。重新打开游戏生效。'); refresh();
+};
+
+// B. API：每家的申请步骤（示意图是按官网布局画的，官网改版时以官网为准）
+const PRESETS = [
+  { id: 'deepseek', name: 'DeepSeek（推荐，便宜）', base: 'https://api.deepseek.com/v1', model: 'deepseek-chat', site: 'https://platform.deepseek.com/',
+    steps: ['打开 <a href="#" data-open="https://platform.deepseek.com/">platform.deepseek.com</a>，用手机号注册登录。', '左边点「充值」，充 10 元就能玩很久（按字数扣钱）。', '左边点「API keys」→「创建 API key」，名字随便填（比如 恶雌）。', '弹出来的 <b>sk-</b> 开头的一串就是 key，<b>只显示这一次</b>，点「复制」。', '回到这里，粘贴到下面的「API key」框里，点「测试一下」。'] },
+  { id: 'openai', name: 'OpenAI（GPT）', base: 'https://api.openai.com/v1', model: '', site: 'https://platform.openai.com/api-keys',
+    steps: ['打开 <a href="#" data-open="https://platform.openai.com/">platform.openai.com</a> 注册登录（要能访问 OpenAI 的网络）。', '右上角 Settings → Billing，绑卡充值（最少 5 美元）。', '左边 API keys → Create new secret key → 复制 sk- 开头的 key。', '模型名填官网 Models 页面上的名字（比如 gpt- 开头的最新型号）。', '粘贴 key，点「测试一下」。'] },
+  { id: 'anthropic', name: 'Anthropic（Claude API）', base: 'https://api.anthropic.com/v1', model: 'claude-sonnet-5-5', site: 'https://console.anthropic.com/',
+    steps: ['打开 <a href="#" data-open="https://console.anthropic.com/">console.anthropic.com</a> 注册登录。', 'Plans & Billing 里充值。', 'API Keys → Create Key → 复制 sk-ant- 开头的 key。', '粘贴 key，点「测试一下」。（注意：Claude 不写最露骨的那一截，那段会交给本地模型）'] },
+  { id: 'qwen', name: '通义千问（阿里云百炼）', base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus', site: 'https://bailian.console.aliyun.com/',
+    steps: ['打开 <a href="#" data-open="https://bailian.console.aliyun.com/">阿里云百炼</a>，用阿里云账号登录（要实名）。', '开通「模型服务」，新用户有免费额度。', '右上角头像 → API-KEY → 创建 → 复制。', '粘贴 key，点「测试一下」。'] },
+  { id: 'kimi', name: 'Kimi（月之暗面）', base: 'https://api.moonshot.cn/v1', model: '', site: 'https://platform.moonshot.cn/',
+    steps: ['打开 <a href="#" data-open="https://platform.moonshot.cn/">platform.moonshot.cn</a> 注册登录。', '账户里充值。', 'API Key 管理 → 新建 → 复制。', '模型名照官网文档里的填。粘贴 key，点「测试一下」。'] },
+  { id: 'openrouter', name: 'OpenRouter（一个 key 用很多家）', base: 'https://openrouter.ai/api/v1', model: '', site: 'https://openrouter.ai/',
+    steps: ['打开 <a href="#" data-open="https://openrouter.ai/">openrouter.ai</a> 注册登录。', 'Credits 里充值。', 'Keys → Create Key → 复制。', '模型名照 Models 页面复制（比如 deepseek/ 开头的）。粘贴 key，点「测试一下」。'] },
+  { id: 'custom', name: '其他（自己填地址）', base: '', model: '', site: '', steps: ['填服务商给的「OpenAI 兼容」接口地址（一般以 /v1 结尾）、模型名和 key。'] },
+];
+$('aPreset').innerHTML = PRESETS.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+function showPreset(id) {
+  const p = PRESETS.find(x => x.id === id);
+  $('aBase').value = p.base; $('aModel').value = p.model;
+  $('aGuide').innerHTML = `<h3>怎么拿到 API key</h3><ol class="steps">${p.steps.map(s => `<li>${s}</li>`).join('')}</ol>
+    <img class="shot" src="guide/${p.id === 'deepseek' ? 'deepseek' : 'apikey'}.svg" alt="示意图">`;
+}
+$('aPreset').onchange = e => showPreset(e.target.value);
+showPreset('deepseek');
+const apiBody = () => ({ base: $('aBase').value.trim(), model: $('aModel').value.trim(), key: $('aKey').value.trim() });
+$('aTest').onclick = async () => {
+  $('aMsg').textContent = '正在连…';
+  const r = await api('/api/brain/test', { api: apiBody() }).catch(e => ({ error: e.message }));
+  $('aMsg').innerHTML = r.ok ? `<span class="ok">✅ 通了：${esc(r.reply)}</span>` : `<span class="bad">❌ ${esc(r.error)}</span>`;
+};
+$('aSave').onclick = async () => {
+  const r = await api('/api/brain', { brain: 'api', api: apiBody() }).catch(e => ({ error: e.message }));
+  $('aMsg').innerHTML = r.ok ? '<span class="ok">保存好了，重新打开游戏生效</span>' : `<span class="bad">${esc(r.error)}</span>`;
+};
+// C. Claude Code
+$('cRecheck').onclick = refresh;
+$('cUse').onclick = async () => { const r = await api('/api/brain', { brain: 'claude' }).catch(e => ({ error: e.message })); $('cMsg').innerHTML = r.ok ? '<span class="ok">好了</span>' : `<span class="bad">${esc(r.error)}</span>`; };
+
+// 3 配音
+$('tCheck').onclick = async () => {
+  $('tReport').innerHTML = '<p class="soft">检查中…</p>';
+  const r = await api('/api/tts/check');
+  const h = r.hw;
+  $('tReport').innerHTML = `<table><tr><td>显卡</td><td>${esc(h.nvidia ? `${h.nvidia.name}，${h.nvidia.vramGB}GB，驱动 ${h.nvidia.driver}` : '没有 NVIDIA 显卡')}</td></tr><tr><td>安装盘剩余</td><td>${r.free ?? '—'} GB</td></tr></table>
+    ${r.ok ? '<p class="ok"><b>✅ 可以装。</b>要下载十几 GB，大概半小时到几小时，看网速。</p>' : '<p class="bad"><b>这台电脑装不了配音。</b>不影响玩，只是没有声音。</p>'}
+    ${r.why.map(w => `<p class="soft">· ${esc(w)}</p>`).join('')}`;
+  $('tInstall').disabled = !r.ok || !S.game;
+  $('tInstall').classList.toggle('p', r.ok);
+};
+$('tInstall').onclick = () => api('/api/tts/install', {});
+
+// 7 手机
+$('fwOn').onclick = async () => { const r = await api('/api/firewall', { on: true }).catch(e => ({ error: e.message })); $('fwMsg').innerHTML = r.ok ? '<span class="ok">放行了</span>' : `<span class="bad">${esc(r.error)}</span>`; };
+$('fwOff').onclick = async () => { await api('/api/firewall', { on: false }); $('fwMsg').textContent = '取消了'; };
+
+// 4 留言板
+async function loadBoard() {
+  $('bList').innerHTML = '<p class="soft">读取中…</p>';
+  const list = await api('/api/board').catch(e => ({ error: e.message }));
+  if (list.error) return $('bList').innerHTML = `<p class="bad">${esc(list.error)}</p>`;
+  $('bList').innerHTML = list.length ? list.map(m => `<div class="card msg"><div class="t">${esc(m.title)} <span class="soft">— ${esc(m.user)} · ${esc(m.at.slice(0, 10))}${m.comments ? ` · ${m.comments} 条回复` : ''}</span></div><div class="m">${esc(m.body)}</div><a href="#" data-open="${esc(m.url)}" class="soft">在 GitHub 上看 / 回复 →</a></div>`).join('') : '<p class="soft">还没有留言，来写第一条吧。</p>';
+}
+$('bLoad').onclick = loadBoard;
+$('bNew').onclick = () => api('/api/board/new', { title: $('bTitle').value.trim(), body: $('bBody').value.trim() });
+
+// 5 卸载
+$('dGo').onclick = () => {
+  const parts = [...document.querySelectorAll('.dp:checked')].map(x => x.value);
+  if (!parts.length) return;
+  if (!confirm('确定删除：' + parts.map(p => ({ game: '游戏和存档', llm: '语言模型', tts: '配音', installer: '安装器' }[p])).join('、') + '？删了找不回来。')) return;
+  api('/api/uninstall', { parts });
+};
+
+refresh().then(() => { go(location.hash.slice(1) || (S.game ? 'llm' : 'game')); checkUpdate(); });
+</script>
+</body>
+</html>

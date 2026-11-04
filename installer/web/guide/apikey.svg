@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 360" font-family="Microsoft YaHei, PingFang SC, sans-serif">
+  <title>各家平台创建 API key 的通用流程示意图</title>
+  <rect width="760" height="360" fill="#f7f8fa"/>
+  <g font-size="14">
+    <rect x="20" y="30" width="160" height="120" rx="10" fill="#fff" stroke="#d0d5dd"/>
+    <text x="40" y="62" font-weight="700">① 注册 / 登录</text><text x="40" y="90" fill="#666">官网控制台</text><text x="40" y="114" fill="#666">（console / platform）</text>
+    <rect x="205" y="30" width="160" height="120" rx="10" fill="#fff" stroke="#d0d5dd"/>
+    <text x="225" y="62" font-weight="700">② 充值</text><text x="225" y="90" fill="#666">Billing / 充值</text><text x="225" y="114" fill="#666">按用量扣钱</text>
+    <rect x="390" y="30" width="160" height="120" rx="10" fill="#fff" stroke="#d0d5dd"/>
+    <text x="410" y="62" font-weight="700">③ 创建 key</text><text x="410" y="90" fill="#666">API Keys →</text><text x="410" y="114" fill="#666">Create / 新建</text>
+    <rect x="575" y="30" width="165" height="120" rx="10" fill="#fff" stroke="#c0392b" stroke-width="2"/>
+    <text x="595" y="62" font-weight="700" fill="#c0392b">④ 复制 key</text><text x="595" y="90" fill="#666">sk-…… 一长串</text><text x="595" y="114" fill="#c0392b">只显示一次！</text>
+    <path d="M182 90h20M367 90h20M552 90h20" stroke="#8a5a3c" stroke-width="3" marker-end="url(#a)"/>
+  </g>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#8a5a3c"/></marker></defs>
+  <rect x="20" y="190" width="720" height="130" rx="10" fill="#fff" stroke="#d0d5dd"/>
+  <text x="40" y="222" font-size="15" font-weight="700">⑤ 回到安装器</text>
+  <rect x="40" y="238" width="480" height="34" rx="6" fill="#fff" stroke="#8a5a3c"/><text x="52" y="261" font-size="14" fill="#999">API key：粘贴到这里（Ctrl+V）</text>
+  <rect x="540" y="238" width="90" height="34" rx="8" fill="#fff" stroke="#d0d5dd"/><text x="556" y="261" font-size="14">测试一下</text>
+  <rect x="640" y="238" width="90" height="34" rx="8" fill="#8a5a3c"/><text x="656" y="261" font-size="14" fill="#fff">保存</text>
+  <text x="40" y="300" font-size="13" fill="#888">示意图；每家官网布局不一样，照左边的文字步骤找对应按钮</text>
+</svg>

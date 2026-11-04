@@ -598,6 +598,11 @@ function recordBattle(b) {
   return { ok: true };
 }
 
+// ---------- 新版本提醒 ----------
+let remoteVersion = null;
+fetch('https://raw.githubusercontent.com/mxxs109-ops/eci-simulator/main/version.json?t=' + Date.now(), { signal: AbortSignal.timeout(15000) })
+  .then(r => r.ok ? r.json() : null).then(v => { remoteVersion = v; }).catch(() => {});
+
 // ---------- 静态文件 ----------
 function serveFile(res, root, rel) {
   const full = path.resolve(root, rel);
@@ -769,6 +774,8 @@ const server = http.createServer(async (req, res) => {
       return json(res, { enabled: readConfig().lan.enabled, urls: lanUrls() });
     }
 
+    // 有没有新版本（安装器更新）：启动时查一次 GitHub 上的 version.json
+    if (req.method === 'GET' && url === '/api/update') return json(res, { local: readJson(path.join(GAME_DIR, 'version.json'), {}).version || null, remote: remoteVersion });
     // 网页自己的小偏好（小图顺序等）
     if (req.method === 'GET' && url === '/api/settings') return json(res, readJson(path.join(APP_DIR, 'ui.json'), {}));
     if (req.method === 'POST' && url === '/api/settings') {
