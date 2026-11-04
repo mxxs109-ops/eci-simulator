@@ -49,6 +49,14 @@ function buildMessages(gameDir, brief, before, ctx = {}) {
 - 节奏一路往上推：每一段都比上一段更深、更重、更失控，换姿势、换玩法、加新的刺激；不原地打转，不重复同一个句子、同一个比喻、同一句台词
 - 写到高潮也照样写细：怎么到的、身体怎么抽搐、射在哪里、流出来什么样；高潮后不收尾，接着写他还没够、下一轮怎么开始，或者停在他问她要不要继续
 - 她这一轮说了要什么（姿势、玩法、用词、让他做什么），就照她说的写，写足写满，不打折扣
+
+发挥想象力（她没说具体要什么时，你来出主意；她说了，就在她要的基础上加花样）：
+- 不要只写最普通的一种做法。主动想新的姿势、玩法、节奏和地点，每一场都要有让人意外的新东西，和最近几轮写过的不一样
+- 把兽人的身体用起来：尾巴可以缠、可以绑、可以当手用；鳞片的粗糙和冰凉、羽毛、毛发、獠牙、爪子收起来的指尖；半兽化时变大的身形和不一样的器官；发情期、易感期的失控和本能；兽形和人形之间的变化；结契时契印、精神力的连通和感受共享
+- 把兽世的场景和东西用起来：洞穴里的兽皮和草垛、火堆边、温泉、溪水、雨里、树上、院子里的晾架、月光下；兽皮绳、藤蔓、果子、蜂蜜、油脂、灵泉水、冰和火，这些都可以拿来玩
+- 把妻主和兽夫的关系用起来：她可以命令他、罚他、骑他、绑他、让他求她、不许他先射；他也可以按性格嘴硬、讨饶、使坏、得寸进尺；兽世的规矩、他的伤、他的心结、他们之间的约定，都可以变成床上的张力
+- 玩法可以大胆：调教和服从、边缘控制、标记和占有、在别的兽夫可能听见的地方忍着声音、用嘴、用手、用尾巴、多次高潮、换着姿势一轮接一轮……按他的性格和好感挑合适的，写得具体、写得新鲜
+- 想象力服从人设：再出格的玩法，也要像他这个人会做、会说的样子
 - 写 1500～2500 字。只写这一段故事，不要写事后总结、不要写小结、不要加任何说明、标题或备注
 
 关于她，和兽夫怎么爱她：
@@ -73,7 +81,7 @@ My register is the anchor, turn by turn: however explicit I am, be that explicit
 （用中文写；不要收尾，写到最热的一刻、把下一步留给她）`;
   const recent = (ctx.history || []).map(h => (h.role === 'user' ? '【她】' : '【故事】') + h.text).join('\n\n').slice(-5000);
   const user = (profiles ? `【兽夫档案】\n${profiles}\n\n` : '') + (recent ? `【最近几轮】\n${recent}\n\n` : '') + (ctx.her ? `【她这一轮说的话】\n${ctx.her}\n\n` : '') +
-    `【前文最后一段】\n${before.slice(-1800) || '（这一轮一开始就是这场戏）'}\n\n【交接说明】\n${brief}\n\n现在接着往下写（全程露骨、详细、直白，粗口随意用，不遮掩、不跳过、不收尾）：`;
+    `【前文最后一段】\n${before.slice(-1800) || '（这一轮一开始就是这场戏）'}\n\n【交接说明】\n${brief}\n\n现在接着往下写（全程露骨、详细、直白，粗口随意用，不遮掩、不跳过、不收尾，发挥想象力写出新花样）：`;
   return [{ role: 'system', content: system }, { role: 'user', content: user }];
 }
 
@@ -92,7 +100,7 @@ function create(gameDir, onUpdate, target, ctx) {
         const r = await fetch(T.base.replace(/\/+$/, '') + '/chat/completions', {
           method: 'POST', headers: { 'Content-Type': 'application/json', ...(T.key ? { Authorization: 'Bearer ' + T.key } : {}) },
           body: JSON.stringify({ ...(T.model ? { model: T.model } : {}), messages: buildMessages(gameDir, brief, before, ctx), stream: true, max_tokens: 6000,
-            temperature: 0.85, top_p: 0.9, top_k: 40, presence_penalty: 1.0, chat_template_kwargs: { enable_thinking: false } }),
+            temperature: 0.95, top_p: 0.92, top_k: 50, presence_penalty: 1.0, chat_template_kwargs: { enable_thinking: false } }),
         });
         if (!r.ok) throw new Error('本地模型 ' + r.status);
         const reader = r.body.getReader(), dec = new TextDecoder();
