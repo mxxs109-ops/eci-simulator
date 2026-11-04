@@ -41,7 +41,23 @@ function shortcut(name, target, args, icon) {
   if (r.status !== 0) throw new Error('建桌面图标失败：' + (r.stderr || '').slice(0, 200));
 }
 const rmrf = p => { try { fs.rmSync(p, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 }); } catch {} };
-const killPort = port => { try { ps(`Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }`); } catch {} };
+// 端口上的程序是不是我们装的：模型、配音看程序文件在不在安装文件夹里；游戏问它自己的文件夹
+function portPid(port) { try { return Number(ps(`(Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess`)) || 0; } catch { return 0; } }
+async function stopOurs(...which) {
+  const d = dirs();
+  for (const w of which) {
+    const port = { game: 7788, llm: 8080, tts: 9880 }[w], pid = portPid(port);
+    if (!pid) continue;
+    let ours = false;
+    if (w === 'game') {
+      try { const st = await (await fetch('http://127.0.0.1:7788/api/status', { signal: AbortSignal.timeout(1500) })).json(); ours = !!st.gameDir && path.resolve(st.gameDir).toLowerCase() === path.resolve(d.game).toLowerCase(); } catch {}
+    } else {
+      try { ours = ps(`(Get-Process -Id ${pid}).Path`).toLowerCase().startsWith(path.resolve(d[w]).toLowerCase()); } catch {}
+    }
+    if (ours) { try { process.kill(pid); } catch {} }
+  }
+  await new Promise(r => setTimeout(r, 1500));
+}
 
 // ---------- 后台任务（下载、安装）：网页每秒来问进度 ----------
 const jobs = {};   // name → { step, pct, log[], done, error }
@@ -103,8 +119,7 @@ async function moveRoot(to, say) {
   if (to.toLowerCase().startsWith(path.resolve(from).toLowerCase() + path.sep)) throw new Error('不能搬到原来文件夹的里面');
   if (fs.existsSync(from) && (s.game || s.llm || s.tts)) {
     say('先关掉正在运行的游戏、模型和配音');
-    [7788, 8080, 9880].forEach(killPort);
-    await new Promise(r => setTimeout(r, 1500));
+    await stopOurs('game', 'llm', 'tts');
     fs.mkdirSync(to, { recursive: true });
     for (const name of ['game', 'llm', 'tts']) {
       const a = path.join(from, name), b = path.join(to, name);
@@ -172,7 +187,7 @@ async function installGame(say) {
   } else {
     // 更新：存档和设置不动；玩家改过名就把新文件也换成新名字
     say('更新游戏（存档和设置不动）');
-    killPort(7788);
+    await stopOurs('game');
     const start = readJson(path.join(d.game, '开局.json'), null);
     const src = path.join(repo, 'game');
     if (start && start.renamed) { say('把新文件里的名字换成你起的名字'); applyRenames(src, start.renamed); }
@@ -248,7 +263,7 @@ async function installLLM(tier, build, say) {
 }
 async function testLLM(say) {
   const d = dirs();
-  killPort(8080);
+  await stopOurs('llm');
   spawn('cmd', ['/c', 'start', '"恶雌模拟器-本地模型"', '/min', path.join(d.llm, '启动本地模型.bat')], { windowsHide: true, detached: true });
   say('启动本地模型（第一次要把模型从硬盘读进内存，1～3 分钟）');
   for (let i = 0; i < 180; i++) {
@@ -343,8 +358,7 @@ function firewall(on) {
 async function uninstall(parts, say) {
   const s = state(), d = dirs(s);
   say('关掉正在运行的游戏、模型和配音');
-  [7788, 8080, 9880].forEach(killPort);
-  await new Promise(r => setTimeout(r, 1500));
+  await stopOurs('game', 'llm', 'tts');
   const del = (p, name) => { say('删除 ' + name); rmrf(p); };
   if (parts.includes('llm')) { del(d.llm, '语言模型'); saveState({ llm: null }); }
   if (parts.includes('tts')) { del(d.tts, '配音'); saveState({ tts: null }); }

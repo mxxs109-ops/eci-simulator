@@ -809,7 +809,7 @@ const server = http.createServer(async (req, res) => {
       } catch (e) { res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('voice off: ' + e.message); }
     }
     if (req.method === 'GET' && url === '/api/history') return json(res, readJson(HISTORY_FILE, []));
-    if (req.method === 'GET' && url === '/api/status') return json(res, { busy, simming, started: fs.existsSync(START_FILE) });
+    if (req.method === 'GET' && url === '/api/status') return json(res, { busy, simming, started: fs.existsSync(START_FILE), gameDir: isLoopback(req) ? GAME_DIR : undefined });
     if (req.method === 'GET' && url === '/api/map') return json(res, readMap());
     if (req.method === 'GET' && url === '/api/cast') return json(res, listCast());
     if (req.method === 'GET' && url === '/api/husband-diary') return json(res, listHusbandDiaries());
