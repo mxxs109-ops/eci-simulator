@@ -89,9 +89,16 @@ async function download(url, file, say, label) {
   }
   throw new Error(label + ' 下载失败，检查一下网络再试');
 }
+// 解压：用 .NET 的 ZipFile 按 UTF-8 读文件名（Windows 自带的 tar 在日文、英文系统上读不了中文文件名）
+// 先解到临时文件夹再合并进去，目标文件夹里已经有东西也不怕
 function unzip(zip, dest) {
+  const tmp = dest.replace(/[\\/]+$/, '') + '.unzip-tmp';
+  rmrf(tmp);
+  const q = s => "'" + s.replace(/'/g, "''") + "'";
+  ps(`Add-Type -AssemblyName System.IO.Compression.FileSystem; [IO.Compression.ZipFile]::ExtractToDirectory(${q(zip)}, ${q(tmp)}, [Text.Encoding]::UTF8)`);
   fs.mkdirSync(dest, { recursive: true });
-  execSync(`tar -xf "${zip}" -C "${dest}"`, { windowsHide: true });
+  fs.cpSync(tmp, dest, { recursive: true, force: true });
+  rmrf(tmp);
 }
 function run(cmd, args, opts, say) {
   return new Promise((resolve, reject) => {
