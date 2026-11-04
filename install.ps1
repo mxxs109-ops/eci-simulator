@@ -44,14 +44,11 @@ Remove-Item $zip, $tmp -Recurse -Force
 $vbs = Join-Path $Home2 '打开安装器.vbs'
 $serverJs = Join-Path $Home2 'installer\server.js'
 Set-Content $vbs -Encoding Unicode -Value "CreateObject(""WScript.Shell"").Run """"""$node"""" """"$serverJs"""""", 0, False"
+# 用 shortcut.ps1（IShellLinkW）建图标：WScript.Shell 在非中文系统上存不了中文名字
 $desk = [Environment]::GetFolderPath('Desktop')
-$lnk = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $desk '恶雌模拟器安装器.lnk'))
-$lnk.TargetPath = 'wscript.exe'
-$lnk.Arguments = "`"$vbs`""
-$lnk.WorkingDirectory = $Home2
 $ico = Join-Path $Home2 'installer\web\icon.ico'
-if (Test-Path $ico) { $lnk.IconLocation = $ico }
-$lnk.Save()
+if (-not (Test-Path $ico)) { $ico = '' }
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Home2 'installer\shortcut.ps1') (Join-Path $desk '恶雌模拟器安装器.lnk') "$env:WINDIR\System32\wscript.exe" "`"$vbs`"" $Home2 $ico
 
 Write-Host '好了！桌面上多了「恶雌模拟器安装器」，现在帮你打开。' -ForegroundColor Green
 Start-Process wscript.exe "`"$vbs`""

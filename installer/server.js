@@ -29,12 +29,16 @@ const defaultRoot = () => path.join(os.homedir(), 'EciSimulator');
 function state() { return { root: defaultRoot(), game: null, llm: null, tts: null, ...readJson(STATE_FILE, {}) }; }
 function saveState(patch) { const s = { ...state(), ...patch }; writeJson(STATE_FILE, s); return s; }
 const dirs = (s = state()) => ({ game: path.join(s.root, 'game'), llm: path.join(s.root, 'llm'), tts: path.join(s.root, 'tts') });
-const ps = cmd => execSync(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${cmd.replace(/"/g, '\\"')}"`, { encoding: 'utf8', windowsHide: true }).trim();
+// PowerShell 的输出按 UTF-8 读：不然中文路径（选文件夹、桌面在中文用户名下）会变成乱码
+const ps = cmd => execSync(`powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncoding=[Text.Encoding]::UTF8; ${cmd.replace(/"/g, '\\"')}"`, { encoding: 'utf8', windowsHide: true }).trim();
 const desktop = () => { try { return ps('[Environment]::GetFolderPath(\'Desktop\')'); } catch { return path.join(os.homedir(), 'Desktop'); } };
 function writeBat(file, lines) { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, ['@echo off', 'chcp 65001 >nul', ...lines, ''].join('\r\n'), 'utf8'); }
+// 桌面图标：用 shortcut.ps1（IShellLinkW），中文名字、中文路径在任何语言的 Windows 上都行
 function shortcut(name, target, args, icon) {
   const lnk = path.join(desktop(), name + '.lnk');
-  ps(`$s=(New-Object -ComObject WScript.Shell).CreateShortcut('${lnk}');$s.TargetPath='${target}';$s.Arguments='${(args || '').replace(/'/g, "''")}';$s.WorkingDirectory='${path.dirname(target)}';${icon ? `$s.IconLocation='${icon}';` : ''}$s.Save()`);
+  const r = require('child_process').spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(HERE, 'shortcut.ps1'),
+    lnk, target, args || '', path.dirname(target), icon || ''], { windowsHide: true, encoding: 'utf8' });
+  if (r.status !== 0) throw new Error('建桌面图标失败：' + (r.stderr || '').slice(0, 200));
 }
 const rmrf = p => { try { fs.rmSync(p, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 }); } catch {} };
 const killPort = port => { try { ps(`Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }`); } catch {} };
