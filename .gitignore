@@ -1,0 +1,13 @@
+# 玩家自己的数据和设置，不进仓库
+game/app/config.json
+game/app/session*.json
+game/app/history*.json
+game/app/sim.json
+game/app/room.json
+game/app/ui.json
+game/app/snapshot.md
+game/app/uploads/
+game/配音/缓存/
+game/开局.json
+game/归档/
+node_modules/

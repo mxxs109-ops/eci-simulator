@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>恶雌模拟器 · 开局</title>
+<style>
+  :root { --bg: #f6efe6; --card: #fffaf4; --ink: #3b2a20; --soft: #8a6f5c; --line: #e2d3c2; --me: #8a5a3c; --ok: #4f7a4a; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #1f1915; --card: #2a221d; --ink: #f1e6da; --soft: #b8a493; --line: #43362d; --me: #d39a6f; --ok: #8fc287; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 24px 16px 120px; }
+  h1 { font-size: 28px; margin: 8px 0 4px; letter-spacing: 2px; }
+  .sub { color: var(--soft); margin: 0 0 18px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 16px; }
+  button { font: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 10px; padding: 8px 14px; }
+  button:hover { border-color: var(--me); }
+  button.primary { background: var(--me); color: #fff; border-color: var(--me); font-size: 18px; padding: 12px 28px; }
+  button.primary:disabled { opacity: .45; cursor: not-allowed; }
+  .list { display: grid; gap: 10px; }
+  .row { display: grid; grid-template-columns: 34px 64px 1fr auto; gap: 12px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; }
+  .row.off { opacity: .45; }
+  .row.drag { outline: 2px dashed var(--me); }
+  .no { font-size: 20px; font-weight: 700; color: var(--me); text-align: center; }
+  .pic { width: 64px; height: 64px; border-radius: 12px; background: var(--line) center/cover no-repeat; }
+  .who { min-width: 0; }
+  .who input { font: inherit; font-size: 18px; font-weight: 700; width: 9em; max-width: 100%; border: 1px solid transparent; border-bottom-color: var(--line); background: transparent; color: var(--ink); padding: 2px 4px; }
+  .who input:focus { outline: none; border-color: var(--me); border-radius: 6px; }
+  .orig { color: var(--soft); font-size: 13px; margin-left: 6px; }
+  .brief { color: var(--soft); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ops { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+  .ops button { padding: 4px 9px; font-size: 14px; }
+  .handle { cursor: grab; }
+  .foot { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--line); padding: 12px 16px; }
+  .foot .in { max-width: 980px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+  .err { color: #c0392b; }
+  @media (max-width: 600px) {
+    .row { grid-template-columns: 26px 52px 1fr; }
+    .pic { width: 52px; height: 52px; }
+    .ops { grid-column: 1 / -1; justify-content: flex-start; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>恶雌模拟器</h1>
+  <p class="sub">选兽夫、排登场顺序、给他们起名字。第 1 位第一天就在你的小院里，后面的人会一个一个出现。</p>
+  <div class="bar">
+    <button id="shuffle">🎲 随机顺序</button>
+    <button id="allOn">全选</button>
+    <button id="allOff">全不选</button>
+    <button id="nameAll">🎲 全部随机起名</button>
+    <button id="nameReset">↺ 全部用原名</button>
+  </div>
+  <div class="list" id="list"></div>
+</div>
+<div class="foot"><div class="in">
+  <label><input type="checkbox" id="adult"> 我已年满 18 岁，知道这是含成人内容的恋爱游戏</label>
+  <span class="err" id="err"></span>
+  <button class="primary" id="go" disabled>开始游戏</button>
+</div></div>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let items = [];   // { name, race, brief, img, on, nick }
+
+// 随机起名：姓 + 一两个字，偏古风
+const SUR = '墨苍玄夜沈顾楚萧谢陆裴江白温慕容南宫司马上官独孤长孙凌云月星霜寒澜烬'.match(/慕容|南宫|司马|上官|独孤|长孙|./g);
+const GIV = '渊寂澈珩砚尘澜霁烬枭琰翊珏宸瑾昀遥衍溯离曜凛弦漠璟玦砚'.split('');
+function randomName(taken) {
+  for (let i = 0; i < 200; i++) {
+    const s = SUR[Math.floor(Math.random() * SUR.length)];
+    const n = s.length > 1 ? 1 : 1 + Math.floor(Math.random() * 2);
+    let g = ''; while (g.length < n) { const c = GIV[Math.floor(Math.random() * GIV.length)]; if (!g.includes(c)) g += c; }
+    const name = s + g;
+    if (!taken.has(name)) return name;
+  }
+  return '';
+}
+const finalName = it => (it.nick || '').trim() || it.name;
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+function draw() {
+  let k = 0;
+  $('list').innerHTML = items.map((it, i) => `
+    <div class="row ${it.on ? '' : 'off'}" draggable="true" data-i="${i}">
+      <div class="no handle" title="拖动排序">${it.on ? ++k : '—'}</div>
+      <div class="pic" style="${it.img ? `background-image:url('/game/${encodeURI(it.img)}')` : ''}"></div>
+      <div class="who">
+        <input value="${esc(finalName(it))}" data-nick="${i}" maxlength="6" title="点这里改名">${it.nick && it.nick !== it.name ? `<span class="orig">原名 ${esc(it.name)}</span>` : ''}
+        <div class="brief">${esc([it.race, it.brief].filter(Boolean).join(' · '))}</div>
+      </div>
+      <div class="ops">
+        <button data-act="up" data-i="${i}" title="往前">↑</button>
+        <button data-act="down" data-i="${i}" title="往后">↓</button>
+        <button data-act="rand" data-i="${i}" title="随机起个名字">🎲 名字</button>
+        <button data-act="toggle" data-i="${i}">${it.on ? '不要他' : '要他'}</button>
+      </div>
+    </div>`).join('');
+}
+
+$('list').addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const i = +b.dataset.i, it = items[i];
+  if (b.dataset.act === 'up' && i > 0) [items[i - 1], items[i]] = [items[i], items[i - 1]];
+  if (b.dataset.act === 'down' && i < items.length - 1) [items[i + 1], items[i]] = [items[i], items[i + 1]];
+  if (b.dataset.act === 'toggle') it.on = !it.on;
+  if (b.dataset.act === 'rand') it.nick = randomName(new Set(items.map(finalName)));
+  draw();
+});
+$('list').addEventListener('change', e => {
+  const i = e.target.dataset.nick; if (i == null) return;
+  items[i].nick = e.target.value.trim();
+  draw();
+});
+// 拖动排序
+let dragFrom = null;
+$('list').addEventListener('dragstart', e => { const r = e.target.closest('.row'); if (r) dragFrom = +r.dataset.i; });
+$('list').addEventListener('dragover', e => { e.preventDefault(); document.querySelectorAll('.row').forEach(r => r.classList.toggle('drag', r === e.target.closest('.row'))); });
+$('list').addEventListener('drop', e => {
+  e.preventDefault();
+  const r = e.target.closest('.row'); if (!r || dragFrom == null) return;
+  const to = +r.dataset.i, [moved] = items.splice(dragFrom, 1);
+  items.splice(to, 0, moved); dragFrom = null; draw();
+});
+
+$('shuffle').onclick = () => { const on = shuffle(items.filter(x => x.on)), off = items.filter(x => !x.on); items = [...on, ...off]; draw(); };
+$('allOn').onclick = () => { items.forEach(x => x.on = true); draw(); };
+$('allOff').onclick = () => { items.forEach(x => x.on = false); draw(); };
+$('nameAll').onclick = () => { const taken = new Set(); items.forEach(x => { x.nick = randomName(taken); taken.add(x.nick); }); draw(); };
+$('nameReset').onclick = () => { items.forEach(x => x.nick = ''); draw(); };
+$('adult').onchange = e => { $('go').disabled = !e.target.checked; };
+
+$('go').onclick = async () => {
+  $('err').textContent = '';
+  const order = items.filter(x => x.on).map(x => x.name);
+  const rename = Object.fromEntries(items.filter(x => finalName(x) !== x.name).map(x => [x.name, finalName(x)]));
+  const names = items.map(finalName);
+  if (!order.length) return $('err').textContent = '至少选一位兽夫';
+  if (new Set(names).size !== names.length) return $('err').textContent = '有两个兽夫重名了';
+  $('go').disabled = true; $('go').textContent = '正在准备……';
+  const r = await fetch('/api/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ order, rename }) }).then(r => r.json()).catch(e => ({ error: e.message }));
+  if (!r.ok) { $('err').textContent = r.error || '出错了'; $('go').disabled = false; $('go').textContent = '开始游戏'; return; }
+  location.href = '/';
+};
+
+(async () => {
+  const list = await fetch('/api/roster').then(r => r.json());
+  items = shuffle(list.map(x => ({ ...x, on: true, nick: '' })));   // 默认随机顺序
+  draw();
+})();
+</script>
+</body>
+</html>

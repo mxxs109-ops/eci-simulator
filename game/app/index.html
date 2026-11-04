@@ -1,0 +1,1033 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>恶雌模拟器</title>
+<style>
+  :root {
+    --bg: #f4ede1;
+    --paper: #fbf7ef;
+    --ink: #3b2f25;
+    --muted: #8a7a68;
+    --line: #e2d6c3;
+    --me: #8c3b2e;
+    --me-ink: #fff8f0;
+    --c-cl: #b8860b;   /* 苍冽 金 */
+    --c-xj: #3a4a8c;   /* 玄烬 墨蓝 */
+    --c-mq: #2f5d4a;   /* 墨清寒 墨绿 */
+    --c-cy: #6f8394;   /* 楚月白 银 */
+    --c-qs: #2f8a96;   /* 栖朔 星青 */
+    --c-fj: #b3363a;   /* 焚寂 赤红 */
+    --c-nl: #1c7fae;   /* 南黎辰 碧海蓝 */
+    --c-ym: #a8841f;   /* 夜墨渊 暗金 */
+    --c-gy: #8e63c7;   /* 顾宴礼 紫 */
+    --c-lj: #1f4fb8;   /* 蓝槿初 孔雀蓝 */
+    --c-rt: #5e9c8f;   /* 容听澜 冰翡 */
+    --c-lr: #d14d7b;   /* 鳞峦 */
+    --c-jx: #c46a1c;   /* 君玄 */
+    --c-cj: #1f9d55;   /* 长珏 */
+    --c-wj: #6b7a1f;   /* 无咎 */
+    --c-mj: #9a3c9e;   /* 明镜 */
+    --c-fq: #5b54c9;   /* 方清然 */
+    --c-cx: #ec6a4c;   /* 灿星 */
+    --c-other: #7a4a8c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1814; --paper: #26201b; --ink: #ece2d4; --muted: #a3927e; --line: #3a3129;
+      --me: #9e4a3a; --me-ink: #fff3ea;
+      --c-cl: #e0b44a; --c-xj: #8fa2e8; --c-mq: #74b897; --c-cy: #d3dce4; --c-qs: #8ed6df; --c-fj: #f08a7a; --c-nl: #7cc4ea; --c-ym: #e6c45a; --c-gy: #c9aef0; --c-lj: #8fb4ff; --c-rt: #a3dccf; --c-lr: #f28fb2; --c-jx: #f0a35e; --c-cj: #62d690; --c-wj: #bccb5c; --c-mj: #d98ddb; --c-fq: #a6a0f2; --c-cx: #ff9f8a; --c-other: #c39ad6;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 16px/1.75 "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    display: flex; flex-direction: column;
+  }
+  header {
+    padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--paper);
+    display: flex; align-items: center; gap: 12px;
+  }
+  header h1 { margin: 0; font-size: 20px; letter-spacing: 4px; font-family: "STKaiti", "KaiTi", serif; }
+  .tabs { display: flex; gap: 4px; flex: 1; }
+  .tab { border-radius: 8px; border-color: transparent; background: none; }
+  .tab.on { background: var(--bg); border-color: var(--line); font-weight: 700; }
+  .view { flex: 1; display: none; flex-direction: column; min-height: 0; }
+  .view.on { display: flex; }
+  .scroll { flex: 1; overflow-y: auto; padding: 20px 16px 8px; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+
+  /* 聊天 */
+  .msg { margin: 0 0 18px; }
+  .me { display: flex; justify-content: flex-end; }
+  .me .bubble {
+    background: var(--me); color: var(--me-ink); padding: 8px 14px; border-radius: 14px 14px 4px 14px;
+    max-width: 80%; white-space: pre-wrap; word-break: break-word;
+  }
+  .bubble img, .entry img { display: block; max-width: 260px; max-height: 260px; border-radius: 8px; margin: 6px 0; cursor: zoom-in; }
+  .filechip {
+    display: inline-block; padding: 2px 10px; margin: 4px 0; border-radius: 6px;
+    background: rgba(0,0,0,.12); color: inherit; text-decoration: none; font-size: 14px;
+  }
+  .ai { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; }
+  .para { margin: 6px 0; }
+  .speaker { display: flex; gap: 10px; margin: 12px 0; }
+  .who { flex: none; width: 134px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .av {
+    width: 128px; height: 128px; border-radius: 12px; border: 3px solid var(--c); flex: none; font-size: 40px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .15);
+    background: var(--bg) no-repeat; display: flex; align-items: center; justify-content: center;
+    color: var(--c); font-weight: 700; font-family: "STKaiti", "KaiTi", serif;
+  }
+  .speaker .name { font-weight: 700; font-family: "STKaiti", "KaiTi", serif; font-size: 18px; color: var(--c); }
+  .speaker { gap: 16px; }  .speaker .text { border-left: 3px solid var(--c); padding-left: 10px; }
+
+  /* 兽夫栏 */
+  #view-chat.on { flex-direction: row; }
+  .chatcol { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #cast {
+    width: clamp(320px, 32vw, 600px); flex: none; padding: 14px; border-left: 1px solid var(--line);
+    background: var(--paper); display: flex; flex-direction: column; gap: 12px; min-height: 0;
+  }
+  /* 兽夫多了以后：小图一行 4 个，区域可以上下滚动，不挤掉上面的大立绘 */
+  #thumbs { display: flex; flex-wrap: wrap; gap: 8px; flex: 0 1 auto; min-height: 96px; overflow-y: auto; align-content: flex-start; padding: 2px; }
+  #thumbs .card { flex: 0 0 calc((100% - 24px) / 4); aspect-ratio: 1 / 1; cursor: pointer; }
+  #thumbs .card .info { padding: 18px 8px 6px; }
+  #thumbs .card .nm { font-size: 14px; }
+  #thumbs .card .lv, #thumbs .card .go, #thumbs .card .doing { display: none; }
+  .card {
+    position: relative; border-radius: 12px; overflow: hidden; cursor: zoom-in;
+    border: 1px solid var(--line); background: #fff no-repeat 50% 6% / 230% auto;
+    transition: box-shadow .3s, border-color .3s;
+  }
+  /* 大立绘：图片按高度铺满，人物居中 */
+  #stage { flex: 1 0 auto; min-height: 52vh; background-size: auto 100%; background-position: 50% 0; }
+  #stage .info { padding: 40px 16px 14px; font-size: 14px; }
+  #stage .nm { font-size: 28px; }
+  /* 大立绘上的字只留两行，不挡人；鼠标停上去能看全文 */
+  #stage .doing { opacity: .85; margin-top: 2px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  #stage .food { display: none; }
+  #stage .body .hv { display: inline-block; width: 60px; height: 6px; border-radius: 3px; background: rgba(255,255,255,.3); vertical-align: middle; overflow: hidden; }
+  #stage .body .hv i { display: block; height: 100%; }
+  #stage .body { opacity: .85; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #mefood {
+    flex: none; font-size: 13px; line-height: 1.6; padding: 8px 12px; border-radius: 10px;
+    background: var(--bg); border: 1px solid var(--line);
+  }
+  #mefood b { color: var(--me); }
+  /* 小地图：谁在哪 */
+  #minimap { flex: none; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); padding: 6px 8px 8px; cursor: zoom-in; }
+  #minimap .mhead { font-size: 13px; display: flex; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+  #minimap .mhead b { color: var(--me); }
+  /* 小地图 = 院子（有资产的地图）：家具 + Q 版小人 */
+  #minimap .yardbox { position: relative; width: 100%; aspect-ratio: 1/1; border-radius: 8px; overflow: hidden; background: #3b4a2f url(/game/%E7%AB%8B%E7%BB%98/2D/%E9%99%A2%E5%AD%90.png) center/100% 100% no-repeat; }
+  #minimap .yardbox .fu { position: absolute; transform: translate(-50%,-100%); pointer-events: none; }
+  #minimap .yardbox .fu.flip { transform: translate(-50%,-100%) scaleX(-1); }
+  #minimap .yardbox .kid { position: absolute; width: 9%; transform: translate(-50%,-100%); transform-origin: 50% 100%; animation: ykid 2.2s ease-in-out infinite; }
+  #minimap .yardbox .kid .dot { width: 100%; aspect-ratio: 1/1; border-radius: 50%; background: var(--me); color: #fff; font-size: 11px; display: flex; align-items: center; justify-content: center; }
+  @keyframes ykid { 0%,100% { transform: translate(-50%,-100%) scale(1,1); } 50% { transform: translate(-50%,-100%) scale(1.05,.95); } }
+  #minimap .yardbox.cave { background-image: url(/game/%E7%AB%8B%E7%BB%98/2D/%E5%B1%B1%E6%B4%9E%E5%B1%8B%E5%AD%90.png); background-color: #3b2f25; }
+  #minimap .yardbox .backyard { position: absolute; left: 6px; top: 6px; padding: 2px 10px; font-size: 12px; background: rgba(255,250,240,.9); z-index: 2; }
+  #minimap .yardbox[data-scene="yard"] { cursor: pointer; }
+  #minimap .mout { font-size: 12px; margin-top: 4px; opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #minimap .mlog { font-size: 12px; opacity: .75; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mapbox { position: relative; width: 100%; aspect-ratio: 2 / 1; border-radius: 8px; overflow: hidden; background: #eef1e6; }
+  .mapbox svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .mapbox .pin { position: absolute; transform: translate(-50%, -50%); display: flex; gap: 2px; z-index: 1; }
+  .mapbox .dot { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--c); background: #fff no-repeat; box-shadow: 0 1px 3px rgba(0,0,0,.3);
+    display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--c); }
+  .mapbox .dot.me { background: var(--me); color: #fff; border-color: #fff; }
+  #mapview { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none; align-items: center; justify-content: center; z-index: 50; }
+  #mapview .panel { background: var(--paper); border-radius: 14px; padding: 14px 18px; width: min(900px, 94vw); max-height: 92vh; overflow-y: auto; }
+  #mapview .mapbox .dot { width: 52px; height: 52px; font-size: 18px; border-width: 3px; }
+  #mapview ul { font-size: 14px; line-height: 1.7; padding-left: 1.2em; }
+  /* 饮食与身体分析 */
+  .hbtn { font-size: 13px; margin-top: 8px; }
+  .health { margin-top: 10px; padding: 10px 14px; border-radius: 10px; background: var(--bg); border: 1px dashed var(--line); font-size: 15px; }
+  .health h4 { margin: 10px 0 2px; color: var(--me); font-size: 15px; }
+  .health h4:first-child { margin-top: 0; }
+  .health ul { margin: 2px 0; padding-left: 1.4em; }
+  .health p { margin: 2px 0; }
+  #stage .go { font-size: 14px; padding: 3px 14px; top: 12px; right: 12px; }
+  /* 切换图片的按钮：竖着排在右边，只显示图标，鼠标停上去才展开文字（向左展开，不挡脸） */
+  #stage .modes { position: absolute; right: 12px; top: 12px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; z-index: 2; }
+  #stage .modes .go { position: static; font-size: 16px; padding: 4px 8px; display: flex; align-items: center; gap: 6px; }
+  #stage .modes .go .lb { display: none; font-size: 13px; white-space: nowrap; }
+  #stage .modes .go:hover .lb { display: inline; }
+  #stage .modes .go.on { background: var(--me); color: #fff; }
+  /* 全身立绘：整个人都放进卡片里，从头到脚 */
+  #stage.fullmode, #stage.fullmode.tall { background-color: #fff; background-size: contain; background-position: 50% 0; }
+  /* 动态证件照：盖在大立绘上循环播放（静音） */
+  #stage .idvid { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: 50% 50%; background: #fff; border-radius: inherit; pointer-events: none; }
+  #stage .info, #stage .go, #stage .modes { z-index: 2; }
+  #stage .dtl { position: absolute; left: 12px; top: 12px; z-index: 3; width: 46px; height: 46px; border-radius: 50%; border: 2px solid var(--c); background: rgba(255,255,255,.9); font-size: 22px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.25); transition: transform .15s; }
+  #stage .dtl:hover { transform: scale(1.1) rotate(-6deg); }
+  /* 战损、易感期半身像：铺满整个框，下面不留白边 */
+  #stage.covermode, #stage.covermode.tall { background-color: #fff; background-size: cover; background-position: 50% 0; }
+  #stage.threemode, #stage.threemode.tall { background-color: #fff; background-size: contain; background-position: 50% 45%; }
+  /* 兽形图是横版整只动物：放大到宽度的 1.7 倍，动物大致铺满卡片宽度，避开底部的文字 */
+  #stage.beastmode { background-size: 170% auto; background-position: 50% 38%; }
+  /* 竖版图（全身立绘）：按高度铺满；小图放大到上半身 */
+  #stage.tall { background-size: cover; background-position: 50% 0; }
+  #stage.beastmode.tall { background-size: auto 100%; background-position: 50% 0; }
+  #thumbs .card.onstage { opacity: .45; }
+  #thumbs .card.dragging { opacity: .3; }
+  #thumbs .card.dropto { outline: 3px dashed var(--me); outline-offset: 2px; }
+  #thumbs .card { cursor: grab; }
+  #thumbs .card.tall { background-size: 140% auto; background-position: 50% 6%; }
+  #thumbs .card.idpic { background-size: 100% auto; background-position: 50% 36%; }
+  .card.noimg { background: var(--bg); display: flex; align-items: center; justify-content: center;
+    font: 700 48px "STKaiti", "KaiTi", serif; color: var(--c); }
+  .card.speaking { border-color: var(--c); box-shadow: 0 0 0 2px var(--c), 0 0 18px var(--c); }
+  .card .info {
+    position: absolute; left: 0; right: 0; bottom: 0; padding: 26px 10px 8px; color: #fff;
+    background: linear-gradient(transparent, rgba(20, 12, 8, .78)); font-size: 12px; line-height: 1.5;
+  }
+  .card .nm { font: 700 18px "STKaiti", "KaiTi", serif; }
+  .card .lv { display: block; opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  @media (max-width: 1100px) { #cast { width: 300px; } }
+  .card .bar { height: 4px; background: rgba(255,255,255,.25); border-radius: 2px; margin: 4px 0 3px; }
+  .card .bar i { display: block; height: 100%; border-radius: 2px; background: var(--c); }
+  .card .go {
+    position: absolute; top: 8px; right: 8px; font-size: 12px; padding: 1px 10px;
+    background: rgba(255,255,255,.85); color: #3b2f25; border: none;
+  }
+  @media (max-width: 900px) { #cast { display: none; } }
+  .act { color: var(--muted); font-style: italic; }
+  .env { color: var(--muted); font-size: 13px; text-align: center; margin: 10px 0 2px; }
+  .sum { margin: 14px 0 2px; padding: 10px 14px; border-radius: 10px; background: #fff6e2; border: 1px dashed #d9b77a; font-size: 14px; line-height: 1.7; color: #5a4632; }
+  .narr { opacity: .85; }
+  .err { color: #c0392b; }
+  .typing { color: var(--muted); font-size: 14px; }
+  .tick { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 6px 12px; padding-left: 8px; border-left: 2px solid var(--muted); opacity: .8; }
+  .typing::after { content: "…"; animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: .2; } }
+  .intro { color: var(--muted); text-align: center; padding: 30px 10px; }
+  .intro b { color: var(--ink); }
+
+  /* 手机竖屏：上面立绘，下面聊天；地图收成一行（日期天气），点开看大地图 */
+  @media (max-width: 900px) {
+    html, body { height: 100dvh; }
+    header { padding: 6px 10px; gap: 8px; }
+    header h1 { font-size: 16px; letter-spacing: 2px; }
+    .tabs { overflow-x: auto; flex-wrap: nowrap; min-width: 0; scrollbar-width: none; }
+    #reset { flex: none; padding: 4px 8px; }
+    body { overflow-x: hidden; }
+    .tab { white-space: nowrap; padding: 4px 8px; }
+    #view-chat.on { flex-direction: column; }
+    .chatcol { min-height: 0; }
+    #cast { display: flex; flex: none; order: -1; width: auto; padding: 8px 10px; gap: 6px; border-left: none; border-bottom: 1px solid var(--line); }
+    #stage { flex: none; height: 36vh; min-height: 0; }
+    #stage .nm { font-size: 22px; }
+    #stage .info { padding: 30px 12px 10px; font-size: 13px; }
+    #stage .modes .go { font-size: 14px; padding: 2px 6px; }
+    #minimap { padding: 4px 8px; }
+    #minimap .mapbox, #minimap .mlog, #minimap .mbody, #mefood { display: none; }
+    #minimap .mhead { margin: 0; font-size: 12px; white-space: nowrap; }
+    #minimap .mhead span:last-child { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    #thumbs { flex-wrap: nowrap; overflow-x: auto; min-height: 0; }
+    #thumbs .card { flex: 0 0 56px; }
+    #thumbs .card .info { display: none; }
+    .scroll { padding: 12px 10px 6px; }
+    .who { width: 60px; }
+    .av { width: 56px; height: 56px; border-width: 2px; font-size: 22px; }
+    .speaker { gap: 8px; }
+    .speaker .name { font-size: 14px; }
+    .ai { padding: 10px 12px; }
+    .composer { padding: 8px 10px 10px; }
+    textarea { font-size: 16px; }
+  }
+
+  /* 输入区 */
+  footer, .composer { border-top: 1px solid var(--line); background: var(--paper); padding: 10px 16px 14px; }
+  .quick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  button {
+    font: inherit; font-size: 14px; color: var(--ink); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; cursor: pointer;
+  }
+  button:hover { border-color: var(--muted); }
+  .row { display: flex; gap: 8px; align-items: stretch; }
+  textarea {
+    flex: 1; resize: none; font: inherit; color: var(--ink); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; height: 64px;
+  }
+  textarea:focus { outline: 2px solid var(--me); outline-offset: -1px; }
+  .primary { background: var(--me); color: var(--me-ink); border: none; border-radius: 10px; padding: 0 20px; font-size: 16px; }
+  .primary:disabled { opacity: .5; cursor: default; }
+  .clip { border-radius: 10px; padding: 0 12px; font-size: 18px; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 6px; display: flex; gap: 16px; flex-wrap: wrap; }
+  .hint label { cursor: pointer; }
+  .pending { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  .pending:empty { display: none; }
+  .pitem { position: relative; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); padding: 4px; font-size: 12px; max-width: 140px; }
+  .pitem img { display: block; width: 64px; height: 64px; object-fit: cover; border-radius: 6px; }
+  .pitem .x { position: absolute; top: -8px; right: -8px; padding: 0 6px; font-size: 12px; line-height: 18px; }
+  .dropping { outline: 3px dashed var(--me); outline-offset: -6px; }
+
+  /* 日记 */
+  .day { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 12px 18px; margin-bottom: 16px; }
+  .day h3 { margin: 0 0 6px; font-family: "STKaiti", "KaiTi", serif; font-size: 18px; }
+  .day h3 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-left: 8px; }
+  .entry { margin: 4px 0; white-space: pre-wrap; word-break: break-word; }
+  .tm { color: var(--me); font-weight: 700; margin-right: 4px; }
+  .empty { color: var(--muted); text-align: center; padding: 30px 0; }
+  .dtabs { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--paper); justify-content: center; }
+  .dtab { display: flex; align-items: center; gap: 6px; padding: 3px 14px 3px 3px; }
+  .dtab.mine { padding: 4px 14px; }
+  .dtab .mini { width: 30px; height: 30px; border-radius: 50%; background: var(--bg) no-repeat; border: 2px solid var(--c); }
+  .dtab.on { background: var(--me); color: var(--me-ink); border-color: var(--me); }
+  .hdhead { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+  .hdhead .nm { font: 700 26px "STKaiti", "KaiTi", serif; color: var(--c); }
+  .hdhead .sub { color: var(--muted); font-size: 13px; }
+  .hday { border-left: 4px solid var(--c); }
+  .hday h3 { color: var(--c); }
+  .hday .entry { font-family: "STKaiti", "KaiTi", serif; font-size: 17px; line-height: 1.9; text-indent: 2em; }
+
+  .mday h3 small { margin-left: 10px; font-weight: 400; color: var(--muted, #888); font-size: 14px; }
+  .mday ol { list-style: none; margin: 8px 0 0; padding: 0; }
+  .mday li { display: grid; grid-template-columns: 68px 62px 1fr; gap: 4px 12px; padding: 12px 0; border-top: 1px dashed var(--line); align-items: baseline; }
+  .mday li:first-child { border-top: none; }
+  .mday .no { color: var(--me); font-weight: 700; white-space: nowrap; }
+  .mday .tm { color: var(--muted, #888); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .mday .what { font-weight: 700; }
+  .mday .how { grid-column: 3; color: var(--ink, #333); line-height: 1.75; }
+  .mday.today { border-color: var(--me); }
+  #mefood .last { display: block; margin-top: 4px; cursor: pointer; }
+  #mefood .last:hover { text-decoration: underline; }
+  .icard { --c: var(--me); border-left: 4px solid var(--c); }
+  .icard .ihead { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+  .icard .ihead .av { width: 56px; height: 56px; flex: none; border-radius: 10px; border: 2px solid var(--c); background: var(--bg) no-repeat; }
+  .icard .ihead h3 { margin: 0; color: var(--c); }
+  .icard .ihead .tag { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 10px; padding: 1px 8px; margin-left: 6px; }
+  .icard.away { opacity: .7; }
+  .icard ul { margin: 4px 0; padding-left: 20px; line-height: 1.8; }
+  .icard h4 { margin: 10px 0 2px; font-size: 15px; }
+  #itemsBox .note { color: var(--muted); font-size: 13px; margin: 0 4px 14px; }
+  #viewer { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: none; align-items: center; justify-content: center; z-index: 9; cursor: zoom-out; }
+  #viewer img { max-width: 95vw; max-height: 95vh; }
+</style>
+</head>
+<body>
+<header>
+  <h1>恶雌模拟器</h1>
+  <div class="tabs">
+    <button class="tab on" data-view="chat">💬 聊天</button>
+    <button class="tab" data-view="myday">📋 我的一天</button>
+    <button class="tab" data-view="items">🎒 物品与等级</button>
+    <button class="tab" data-view="diary">📔 兽夫日记</button>
+  </div>
+  <button id="reset" title="清空聊天窗口，开一段新对话（游戏存档保留）">新对话</button>
+</header>
+
+<!-- 聊天 -->
+<section class="view on" id="view-chat">
+ <div class="chatcol">
+  <main class="scroll" id="log"><div class="wrap" id="list"></div></main>
+  <footer>
+    <div class="wrap">
+      <div class="pending" id="chatPending"></div>
+      <div class="row">
+        <button class="clip" id="chatClip" title="发送图片或文件">📎</button>
+        <textarea id="input" placeholder="说点什么……动作写在括号里，例如：（递给他一碗汤）趁热喝。"></textarea>
+        <button class="primary" id="send">发送</button>
+      </div>
+      <div class="hint">
+        <span>Enter 发送，Shift+Enter 换行。图片可以直接粘贴或拖进来。开头写（OOC）可以暂时出戏。</span>
+      </div>
+    </div>
+  </footer>
+ </div>
+ <aside id="cast"></aside>
+</section>
+
+<!-- 我的一天：她在游戏里每天做了哪些事，按顺序 -->
+<section class="view" id="view-myday">
+  <main class="scroll"><div class="wrap" id="mydays"></div></main>
+</section>
+
+<!-- 物品与等级 -->
+<section class="view" id="view-items">
+  <main class="scroll"><div class="wrap" id="itemsBox"></div></main>
+</section>
+
+<!-- 日记 -->
+<section class="view" id="view-diary">
+  <div class="dtabs" id="dtabs"></div>
+  <main class="scroll"><div class="wrap" id="days"></div></main>
+</section>
+
+<input type="file" id="picker" multiple hidden>
+<div id="viewer"><img alt=""></div>
+<div id="mapview"><div class="panel"></div></div>
+
+<script src="/play.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const COLORS = { '苍冽': 'var(--c-cl)', '玄烬': 'var(--c-xj)', '墨清寒': 'var(--c-mq)', '楚月白': 'var(--c-cy)', '栖朔': 'var(--c-qs)', '焚寂': 'var(--c-fj)', '顾宴礼': 'var(--c-gy)', '南黎辰': 'var(--c-nl)', '夜墨渊': 'var(--c-ym)', '蓝槿初': 'var(--c-lj)', '容听澜': 'var(--c-rt)', '鳞峦': 'var(--c-lr)', '君玄': 'var(--c-jx)', '长珏': 'var(--c-cj)', '无咎': 'var(--c-wj)', '明镜': 'var(--c-mj)', '方清然': 'var(--c-fq)', '灿星': 'var(--c-cx)' };
+
+function esc(s) {
+  return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+function fileUrl(root, p) { return root + p.split('/').map(encodeURIComponent).join('/'); }
+
+/* ---------------- 附件 ---------------- */
+function makeAttach(listEl) {
+  const items = [];
+  function draw() {
+    listEl.innerHTML = '';
+    items.forEach((f, i) => {
+      const d = document.createElement('div');
+      d.className = 'pitem';
+      d.innerHTML = f.type.startsWith('image/')
+        ? `<img src="${URL.createObjectURL(f)}" alt="">`
+        : `📄 ${esc(f.name)}`;
+      const x = document.createElement('button');
+      x.className = 'x'; x.textContent = '×';
+      x.onclick = () => { items.splice(i, 1); draw(); };
+      d.appendChild(x);
+      listEl.appendChild(d);
+    });
+  }
+  return {
+    add(files) { for (const f of files) items.push(f); draw(); },
+    take() { const out = items.splice(0); draw(); return out; },
+    get count() { return items.length; },
+  };
+}
+function toPayload(files) {
+  return Promise.all(files.map(f => new Promise((ok, fail) => {
+    const r = new FileReader();
+    r.onload = () => ok({ name: f.name || 'paste.png', type: f.type, data: r.result.split(',')[1] });
+    r.onerror = fail;
+    r.readAsDataURL(f);
+  })));
+}
+function hookAttach(attach, clipBtn, textarea, dropZone) {
+  clipBtn.onclick = () => {
+    const p = $('picker');
+    p.value = '';
+    p.onchange = () => attach.add(p.files);
+    p.click();
+  };
+  textarea.addEventListener('paste', e => {
+    const files = [...(e.clipboardData?.files || [])];
+    if (files.length) { e.preventDefault(); attach.add(files); }
+  });
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dropping'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dropping'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.classList.remove('dropping');
+    attach.add(e.dataTransfer.files);
+  });
+}
+
+/* ---------------- 兽夫立绘 ---------------- */
+let cast = {};
+// 头像：从 16:9 的立绘里裁出脸。脸大约在图片宽 49%、高 27% 的位置
+const AV = 122, ZOOM = 6, FACE_X = 0.49, FACE_Y = 0.30, RATIO = 9 / 16; // AV = 头像内部尺寸（128 减去边框）
+function faceStyle(name, size, zoom = ZOOM) {
+  const p = cast[name];
+  if (!p || !(p.idImg || p.halfImg || p.img)) return '';
+  // 头像优先从证件照裁（纯正面、构图统一），其次半身图；位置在 立绘/头像位置.json 的「名字-证件照」「名字-半身」
+  const f = p.idImg ? (p.idFace || { x: 0.5, y: 0.43, z: 1.33, r: 1.5 })
+    : p.halfImg ? (p.halfFace || { x: 0.5, y: 0.33, z: 2.2, r: 4 / 3 }) : (p.face || {});
+  const src = p.idImg || p.halfImg || p.img;
+  // r = 图片高÷宽，z = 放大倍数；横版老图没写就用默认值
+  const fx = f.x ?? FACE_X, fy = f.y ?? FACE_Y, ratio = f.r ?? RATIO;
+  const w = size * (f.z ?? zoom), x = size / 2 - fx * w, y = size / 2 - fy * w * ratio;
+  return `background-image:url('${fileUrl('/game/', src)}');background-size:${w}px auto;background-position:${x}px ${y}px`;
+}
+function avatar(name) {
+  const st = faceStyle(name, AV);
+  return st ? `<div class="av" style="${st}"></div>` : `<div class="av">${esc(name[0])}</div>`;
+}
+// 右侧：正在说话的兽夫显示大立绘，其他人是下面的小图
+let castOrder = [], onStage = null, speaking = new Set(), viewMode = new Map();
+// 大立绘可以切换看哪张图：证件照（默认，每人一张对齐好的标准脸）/ 全身 / 三视图 / 兽形；小图和头像也用证件照
+const VIEWS = [['id', '🪪 证件照', 'idImg'], ['full', '🧍 全身', 'img'], ['three', '📐 三视图', 'threeImg'], ['beast', '🐾 兽形', 'beastImg'],
+  ['wreckHalf', '💀 战损', 'wreckHalfImg'], ['wreck', '☠️ 战损全身', 'wreckImg'],
+  ['feverHalf', '🔥 易感期', 'feverHalfImg'], ['fever', '❤️‍🔥 易感期全身', 'feverImg']];
+// 状态.md 里他「此刻在做什么」写着【战损】/【易感期】时，大立绘默认换成对应的半身像（她手动选过就听她的）
+function autoView(r) {
+  if (/【易感期】/.test(r.doing || '') && r.feverHalfImg) return 'feverHalf';
+  if (/【战损】/.test(r.doing || '') && r.wreckHalfImg) return 'wreckHalf';
+  return '';
+}
+function shownImg(r, id) {
+  if (id === 'stage') {
+    const v = VIEWS.find(v => v[0] === (viewMode.get(r.name) || autoView(r)));
+    if (v && r[v[2]]) return r[v[2]];
+  }
+  return r.idImg || r.halfImg || r.img;
+}
+function cardHtml(r, id) {
+  const c = COLORS[r.name] || 'var(--c-other)';
+  const img = shownImg(r, id);
+  const bg = img ? `background-image:url('${fileUrl('/game/', img)}')` : '';
+  const mode = id === 'stage' ? (VIEWS.find(v => r[v[2]] && img === r[v[2]]) || [''])[0] : '';
+  const cls = ['card', img ? '' : 'noimg', speaking.has(r.name) ? 'speaking' : '', mode === 'beast' ? 'beastmode' : '', ['full', 'id', 'wreck', 'fever'].includes(mode) ? 'fullmode' : ['wreckHalf', 'feverHalf'].includes(mode) ? 'covermode' : '', mode === 'three' ? 'threemode' : '', id !== 'stage' && img && img === r.idImg ? 'idpic' : (r.face?.r > 1 ? 'tall' : '')].join(' ');
+  // 大立绘左上角：有哪几种图就显示哪几个按钮，当前这张高亮
+  const avail = id === 'stage' ? VIEWS.filter(v => r[v[2]]) : [];
+  const modeBar = avail.length > 1
+    ? `<div class="modes">${avail.map(v => {
+        const [icon, ...words] = v[1].split(' ');
+        return `<button class="go${v[0] === mode ? ' on' : ''}" data-view="${v[0]}" data-who="${esc(r.name)}"><span class="ic">${icon}</span><span class="lb">${words.join(' ')}</span></button>`;
+      }).join('')}</div>` : '';
+  return `<div class="${cls}" ${id ? `id="${id}"` : ''} data-name="${esc(r.name)}" style="--c:${c};${bg}">
+    ${img ? '' : esc(r.name[0])}
+    ${id === 'stage' && mode === 'id' && r.idVideo ? `<video class="idvid" src="${fileUrl('/game/', r.idVideo)}" autoplay muted loop playsinline></video>` : ''}
+    ${modeBar}
+    ${id === 'stage' ? `<button class="dtl" data-inv-open="${esc(r.name)}" title="详情">📜</button>` : ''}
+    <div class="info">
+      <span class="nm">${esc(r.name)}</span><span class="lv">${esc(r.level || '')}</span>
+      <div class="bar"><i style="width:${Math.max(0, Math.min(100, r.favor))}%"></i></div>
+      好感 ${r.favor} · ${esc(r.mood || '')}
+      <div class="doing" title="${esc(r.doing || '')}">${esc((r.doing || '').replace('【战损】', '💀 ').replace('【易感期】', '🔥 ').replace(/【怀孕(·[^】]*)?】/, '🥚 '))}</div>
+      ${id === 'stage' && r.food ? (() => { const hv = +((r.food.nutrition || '').match(/健康值\s*(\d+)/) || [])[1]; const tip = [r.food.nutrition, r.food.body, r.food.sleep && '睡眠：' + r.food.sleep, r.food.exercise && '运动：' + r.food.exercise].filter(Boolean).join(' / ');
+        return `<div class="body" title="${esc(tip)}">${hv >= 0 ? `<span class="hv"><i style="width:${hv}%;background:${hv > 60 ? '#4caf50' : hv > 30 ? '#f0b429' : '#e53935'}"></i></span> 健康 ${hv}　` : ''}🩺 ${esc(r.food.body || '')}</div>`; })() : ''}
+      ${r.food ? `<div class="doing food">🍖 ${esc(r.food.meals || '')}<br>🩺 ${esc(r.food.nutrition || '')}${r.food.body ? '；' + esc(r.food.body) : ''}${r.food.sleep && r.food.sleep !== '—' ? '<br>😴 ' + esc(r.food.sleep) : ''}${r.food.exercise && r.food.exercise !== '—' ? '<br>🏃 ' + esc(r.food.exercise) : ''}</div>` : ''}
+    </div>
+  </div>`;
+}
+/* ---------------- 小地图 ---------------- */
+// 地点在地图上的位置（百分比）。名字要和 CLAUDE.md「在哪」一节的地点一字不差
+const PLACES = {
+  '北寒城': [10, 14], '山谷水潭': [30, 20], '莽荒森林深处': [58, 18], '十万大山': [88, 14],
+  '院外林子': [33, 52], '院子·她的洞': [47, 47], '院子·石桌火塘': [52, 66],
+  '溪边': [73, 60], '苍莽城': [15, 80], '路上': [34, 86], '河湾': [80, 86],
+};
+const MAP_SVG = `<svg viewBox="0 0 200 100" preserveAspectRatio="none">
+  <path d="M150 0 L200 0 L200 30 L180 24 L168 30 L158 18 Z" fill="#c9cfc0"/>
+  <path d="M0 0 L200 0 L200 4 L0 4 Z" fill="#dfe3d8"/>
+  <ellipse cx="110" cy="20" rx="34" ry="14" fill="#cbdcb8"/><ellipse cx="66" cy="54" rx="20" ry="12" fill="#cbdcb8"/>
+  <ellipse cx="60" cy="20" rx="9" ry="6" fill="#a9cbe0"/>
+  <path d="M120 0 C135 30 150 50 146 62 C142 76 152 84 160 100" stroke="#a9cbe0" stroke-width="5" fill="none"/>
+  <rect x="86" y="36" width="36" height="38" rx="4" fill="#efe4cf" stroke="#b09a72" stroke-width="1.2" stroke-dasharray="3 2"/>
+  <rect x="12" y="70" width="36" height="20" rx="3" fill="#e2d8c8" stroke="#9c8a6c"/>
+  <rect x="6" y="6" width="28" height="16" rx="3" fill="#e4e8ee" stroke="#8a96a6"/>
+  <path d="M48 80 C60 86 80 88 92 74" stroke="#c8b897" stroke-width="2" stroke-dasharray="3 3" fill="none"/>
+  <g font-size="5" fill="#6b6457" text-anchor="middle">
+    <text x="20" y="12">北寒城↑</text><text x="60" y="30">山谷水潭</text><text x="116" y="8">莽荒森林深处</text><text x="182" y="9">十万大山</text>
+    <text x="66" y="44">院外林子</text><text x="104" y="34">小院</text><text x="146" y="54">溪边</text>
+    <text x="30" y="96">苍莽城</text><text x="68" y="96">路上</text><text x="160" y="96">河湾</text>
+  </g></svg>`;
+let mapInfo = {};
+function mapPins(big) {
+  const size = big ? 46 : 22;
+  const groups = {};
+  for (const n of castOrder) {
+    const w = cast[n]?.where;
+    if (w && PLACES[w]) (groups[w] ||= []).push(n);
+  }
+  if (PLACES[mapInfo.me]) (groups[mapInfo.me] ||= []).unshift('我');
+  return Object.entries(groups).map(([w, names]) => `<div class="pin" style="left:${PLACES[w][0]}%;top:${PLACES[w][1]}%">${names.map(n =>
+    n === '我' ? `<div class="dot me" title="我">我</div>`
+      : `<div class="dot" title="${esc(n)}：${esc(cast[n].doing || '')}" style="--c:${COLORS[n] || 'var(--c-other)'};${faceStyle(n, size)}"></div>`).join('')}</div>`).join('');
+}
+// 院子：大场景就是院子图（她的小屋在院子里），家具摆法来自「🏠 小屋」页（/api/room 的 yard），人用 Q 版小人站在各自的位置
+const ROOM_W = { 她的床: 30, 草垛: 24, 木床: 27, 石桌: 24, 石凳: 18, 火塘: 21, 熏肉架: 23, 石槽: 22, 狼皮地毯: 27, 木箱: 16, 传送小箱子: 12, 陶水罐: 10, 柴堆: 18 };
+const YARD_DEFAULT = [{ k: '石桌', x: 42, y: 62, s: 1 }, { k: '石凳', x: 42, y: 72, s: 1 }, { k: '火塘', x: 62, y: 56, s: 1 }, { k: '熏肉架', x: 26, y: 48, s: 1 }, { k: '柴堆', x: 78, y: 74, s: 1 }];
+const YARD_SPOT = { '院子·她的洞': [49, 34], '院子·石桌火塘': [55, 66] };
+let roomData = null;
+// 地图框里看院子还是看洞里（点洞口进去，点门帘出来）；记在浏览器里，刷新、定时更新都停在她选的那一层
+let miniScene = (() => { try { return localStorage.getItem('miniScene') || 'yard'; } catch { return 'yard'; } })();
+const CAVE_DEFAULT = [{ k: '她的床', x: 34, y: 50, s: 1 }, { k: '草垛', x: 28, y: 62, s: 1 }];
+function miniCaveHtml() {
+  const enc = p => '/game/' + p.split('/').map(encodeURIComponent).join('/');
+  const items = ((roomData && roomData.items) || CAVE_DEFAULT).slice().sort((a, b) => a.y - b.y);
+  const furn = items.map(it => `<img class="fu${it.f ? ' flip' : ''}" src="${enc('立绘/2D/家具/' + it.k + '.png')}" onerror="this.onerror=null;this.src='${enc('立绘/2D/家具/木床.png')}'" style="left:${it.x}%;top:${it.y}%;width:${(ROOM_W[it.k] || 15) * (it.s || 1)}%">`).join('');
+  const ppl = castOrder.filter(n => cast[n] && cast[n].where === '院子·她的洞').map(n => ({ n, doing: cast[n].doing }));
+  if (mapInfo.me === '院子·她的洞') ppl.unshift({ n: '我', doing: mapInfo.meDoing || '' });
+  const spots = [[50, 72], [38, 66], [62, 66], [44, 56], [58, 56]];
+  const kids = ppl.map((p, i) => {
+    const act = window.kidAct ? window.kidAct(p.doing) : { cls: '', emo: '' }, say = window.kidSay ? window.kidSay(p.doing) : '';
+    if (p.n === '我' && act.near === '木床') act.near = '她的床';
+    const [x, y] = window.kidSpot ? window.kidSpot(act.near, items, spots[i % spots.length], act.cls) : spots[i % spots.length];
+    return `<div class="kid ${act.cls}" title="${esc(p.n === '我' ? '我' : p.n + '：' + (p.doing || ''))}" style="left:${x}%;top:${y}%;width:16%;animation-delay:${-i * .5}s"><img src="${enc('立绘/2D/' + p.n + '-小人.png')}" onerror="this.outerHTML='<div class=&quot;dot&quot;>${esc(p.n.slice(0, 1))}</div>'">${act.emo ? `<i class="emo">${act.emo}</i>` : ''}${say ? `<b class="say">${esc(say)}</b>` : ''}</div>`;
+  }).join('');
+  return `<div class="yardbox cave" data-scene="cave">${furn}${kids}<button class="backyard" data-miniyard>⬅ 院子</button></div>`;
+}
+function miniYardHtml() {
+  const enc = p => '/game/' + p.split('/').map(encodeURIComponent).join('/');
+  const items = ((roomData && roomData.yard) || YARD_DEFAULT).slice().sort((a, b) => a.y - b.y);
+  const furn = items.map(it => `<img class="fu${it.f ? ' flip' : ''}" src="${enc('立绘/2D/家具/' + it.k + '.png')}" style="left:${it.x}%;top:${it.y}%;width:${(ROOM_W[it.k] || 15) * (it.s || 1) * .5}%">`).join('');
+  const ppl = castOrder.filter(n => cast[n] && /^院子·/.test(cast[n].where || '')).map(n => ({ n, w: cast[n].where, doing: cast[n].doing }));
+  if (/^院子·/.test(mapInfo.me || '')) ppl.unshift({ n: '我', w: mapInfo.me, doing: mapInfo.meDoing || '' });
+  const cnt = {};
+  const kids = ppl.map(p => {
+    const act = window.kidAct ? window.kidAct(p.doing) : { cls: '', emo: '' }, say = window.kidSay ? window.kidSay(p.doing) : '';
+    if (p.w === '院子·她的洞') act.cls = '';   // 在屋里的人，院子里只在洞口露个面（躺着睡的进屋才看得到）
+    let [x, y] = YARD_SPOT[p.w] || [50, 76];
+    if (p.w !== '院子·她的洞' && window.kidSpot) [x, y] = window.kidSpot(act.near, items, [x, y]);   // 干什么活就站到哪
+    const key = x + ',' + y, k = (cnt[key] = (cnt[key] || 0) + 1) - 1; x += (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 9;
+    const tip = `${p.n}：${p.doing || ''}`;
+    return `<div class="kid ${act.cls}" title="${esc(tip)}" style="left:${x}%;top:${y}%;animation-delay:${-k * .5}s"><img src="${enc('立绘/2D/' + p.n + '-小人.png')}" onerror="this.outerHTML='<div class=&quot;dot&quot;>${esc(p.n.slice(0, 1))}</div>'">${act.emo ? `<i class="emo">${act.emo}</i>` : ''}${say ? `<b class="say">${esc(say)}</b>` : ''}</div>`; }).join('');
+  const out = castOrder.filter(n => cast[n] && cast[n].where && cast[n].where !== '未登场' && !/^院子·/.test(cast[n].where));
+  const meOut = mapInfo.me && !/^院子·/.test(mapInfo.me) ? [`我：${mapInfo.me}`] : [];
+  const outs = meOut.concat(out.map(n => `${n}：${cast[n].where}`));
+  return `<div class="yardbox" data-scene="yard">${furn}${kids}</div>${outs.length ? `<div class="mout">不在家：${esc(outs.join('　'))}</div>` : ''}`;
+}
+function minimapHtml() {
+  const m = mapInfo;
+  return `<div id="minimap" title="点开去「小屋」">
+    <div class="mhead"><span><b>${esc(m.day || '')}</b> · ${esc(m.period || '')}</span><span>${esc(m.weather || '')}${m.simming ? ' · ⏳ 兽夫们在过日子' : ''}</span></div>
+    <div class="mbody">${miniScene === 'cave' ? miniCaveHtml() : miniYardHtml()}</div>
+    ${m.recent?.length ? `<div class="mlog">🕐 ${esc(m.recent[m.recent.length - 1])}</div>` : ''}
+  </div>`;
+}
+function openMap() {
+  const here = castOrder.filter(n => cast[n]?.where && cast[n].where !== '未登场');
+  $('mapview').querySelector('.panel').innerHTML = `
+    <div class="mhead" style="font-size:16px;margin-bottom:8px"><b>${esc(mapInfo.day || '')} · ${esc(mapInfo.period || '')}</b> ${esc(mapInfo.weather || '')}　我在：${esc(mapInfo.me || '')}</div>
+    <div class="mapbox">${MAP_SVG}${mapPins(true)}</div>
+    <ul>${here.map(n => `<li><b>${esc(n)}</b>（${esc(cast[n].where)}）：${esc(cast[n].doing || '')}</li>`).join('')}</ul>
+    ${mapInfo.recent?.length ? `<b>最近几个小时</b><ul>${mapInfo.recent.map(l => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}`;
+  $('mapview').style.display = 'flex';
+}
+$('mapview').onclick = () => { $('mapview').style.display = 'none'; };
+async function loadMap() {
+  mapInfo = await fetch('/api/map').then(r => r.json()).catch(() => mapInfo);
+  roomData = (await fetch('/api/room').then(r => r.json()).catch(() => null)) || roomData;
+  drawCast();
+}
+
+function drawCast() {
+  // 还没登场的兽夫不显示，来一个显示一个
+  const shown = castOrder.filter(n => cast[n] && cast[n].where !== '未登场');
+  if (!shown.length) { $('cast').innerHTML = ''; return; }
+  if (!shown.includes(onStage)) onStage = shown[0];
+  // 重画会换掉 #thumbs，先记住滚动位置，画完放回去（不然一点就弹回最上面）
+  const keep = document.getElementById('thumbs')?.scrollTop || 0;
+  $('cast').innerHTML = cardHtml(cast[onStage], 'stage') + minimapHtml() +
+    `<div id="thumbs">${shown.map(n => cardHtml(cast[n]).replace('class="card', `draggable="true" class="card${n === onStage ? ' onstage' : ''}`)).join('')}</div>` +
+    (myFood || myLast ? `<div id="mefood">${myFood ? `<b>🍚 我今天</b>：${esc(myFood.meals || '')}<br><b>🩺 健康</b>：${esc((myFood.nutrition || '').replace(/健康值\s*(\d+)｜?/, '$1 分｜'))}${myFood.body ? '；' + esc(myFood.body) : ''}${myFood.sleep && myFood.sleep !== '—' ? `<br><b>😴 睡眠</b>：${esc(myFood.sleep)}` : ''}${myFood.exercise && myFood.exercise !== '—' ? `<br><b>🏃 运动</b>：${esc(myFood.exercise)}` : ''}` : ''}${myLast ? `<span class="last" data-goto="myday"><b>📋 今天做了 ${myLast.count} 件事</b>，最近：${esc(myLast.what)} ›</span>` : ''}</div>` : '');
+  const t = document.getElementById('thumbs'); if (t) t.scrollTop = keep;
+}
+let myFood = null, myLast = null;
+async function loadCast() {
+  fetch('/api/food').then(r => r.json()).then(f => { myFood = f['我'] || null; drawCast(); }).catch(() => {});
+  fetch('/api/myday').then(r => r.json()).then(d => {
+    const days = parseMyDay(d.text || '');
+    const t = days[days.length - 1];
+    myLast = t && t.items.length ? { count: t.items.length, what: t.items[t.items.length - 1].what } : null;
+    drawCast();
+  }).catch(() => {});
+  const rows = await fetch('/api/cast').then(r => r.json()).catch(() => []);
+  cast = Object.fromEntries(rows.map(r => [r.name, r]));
+  // 小图顺序固定：按 settings.json 里保存的 castOrder 排，没排过的接在后面
+  const saved = (await fetch('/api/settings').then(r => r.json()).catch(() => ({}))).castOrder || [];
+  const names = rows.map(r => r.name);
+  castOrder = saved.filter(n => names.includes(n)).concat(names.filter(n => !saved.includes(n)));
+  drawCast();
+  loadMap();
+}
+// 整点模拟会在后台改兽夫们的状态、往聊天里放旁白：每分钟刷新一次（正在聊天时不打断）
+let histLen = 0;
+setInterval(async () => {
+  if (sendBtn.disabled) return;
+  loadCast();
+  const h = await fetch('/api/history').then(r => r.json()).catch(() => null);
+  if (!h || h.length <= histLen || sendBtn.disabled) return;
+  if (list.querySelector('.intro')) list.innerHTML = '';
+  for (const m of h.slice(histLen)) addMsg(m);
+  histLen = h.length;
+  scroll();
+}, 60 * 1000);
+// 拖动小图调整顺序，顺序会保存下来
+let dragName = null;
+$('cast').addEventListener('dragstart', e => {
+  const c = e.target.closest('#thumbs .card');
+  if (!c) return;
+  dragName = c.dataset.name;
+  c.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+});
+$('cast').addEventListener('dragover', e => {
+  const c = e.target.closest('#thumbs .card');
+  if (!c || !dragName) return;
+  e.preventDefault();
+  document.querySelectorAll('#thumbs .card.dropto').forEach(x => x.classList.remove('dropto'));
+  if (c.dataset.name !== dragName) c.classList.add('dropto');
+});
+$('cast').addEventListener('dragend', () => {
+  dragName = null;
+  document.querySelectorAll('#thumbs .card').forEach(x => x.classList.remove('dragging', 'dropto'));
+});
+$('cast').addEventListener('drop', e => {
+  const c = e.target.closest('#thumbs .card');
+  if (!c || !dragName || c.dataset.name === dragName) return;
+  e.preventDefault();
+  const from = castOrder.indexOf(dragName), to = castOrder.indexOf(c.dataset.name);
+  castOrder.splice(from, 1);
+  castOrder.splice(to, 0, dragName);
+  dragName = null;
+  drawCast();
+  fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ castOrder }) });
+});
+// 这次回复里开口的兽夫亮起来，最后开口的那位上大立绘
+function markSpeakers(text) {
+  const names = [...(text || '').matchAll(/【([^】]+)】/g)].map(m => m[1]).filter(n => cast[n]);
+  const last = names[names.length - 1];
+  const changed = (last && last !== onStage) || names.length !== speaking.size || names.some(n => !speaking.has(n));
+  speaking = new Set(names);
+  if (last) onStage = last;
+  if (changed) drawCast();
+}
+$('cast').addEventListener('click', e => {
+  const dtl = e.target.closest('[data-inv-open]');
+  if (dtl) return window.openInv && window.openInv(dtl.dataset.invOpen);
+  const yb = e.target.closest('#minimap .yardbox');
+  if (yb) {
+    const r = yb.getBoundingClientRect(), px = (e.clientX - r.left) / r.width * 100, py = (e.clientY - r.top) / r.height * 100;
+    const go = to => { yb.animate([{ transform: 'scale(1)', opacity: 1 }, { transform: to === 'cave' ? 'scale(1.5)' : 'scale(.7)', opacity: 0 }], { duration: 220, easing: 'ease-in' }).onfinish = () => {
+      miniScene = to; try { localStorage.setItem('miniScene', to); } catch {} drawCast(); const nb = document.querySelector('#minimap .yardbox');
+      nb && nb.animate([{ transform: to === 'cave' ? 'scale(.7)' : 'scale(1.3)', opacity: 0 }, { transform: 'scale(1.03)', opacity: 1, offset: .7 }, { transform: 'scale(1)', opacity: 1 }], { duration: 360, easing: 'cubic-bezier(.3,1.4,.5,1)' }); }; };
+    if (yb.dataset.scene === 'yard' && px > 30 && px < 66 && py > 8 && py < 40) return go('cave');           // 洞口
+    if (yb.dataset.scene === 'cave' && (e.target.closest('[data-miniyard]') || (py > 72 && px > 34 && px < 66))) return go('yard');   // 门帘
+  }
+  if (e.target.closest('#minimap')) { document.querySelector('.tab[data-view="room"]')?.click(); return; }
+  const find = e.target.closest('[data-find]');
+  if (find) return send('/找 ' + find.dataset.find);
+  const view = e.target.closest('[data-view]');
+  if (view) {
+    viewMode.set(view.dataset.who, view.dataset.view);
+    return drawCast();
+  }
+  const card = e.target.closest('.card');
+  if (!card) return;
+  if (card.id !== 'stage') { onStage = card.dataset.name; return drawCast(); }
+  const p = cast[card.dataset.name];
+  const img = p && shownImg(p, 'stage');
+  if (img) {
+    $('viewer').querySelector('img').src = fileUrl('/game/', img);
+    $('viewer').style.display = 'flex';
+  }
+});
+
+/* ---------------- 聊天 ---------------- */
+const list = $('list'), log = $('log'), input = $('input'), sendBtn = $('send');
+const chatAttach = makeAttach($('chatPending'));
+hookAttach(chatAttach, $('chatClip'), input, $('view-chat'));
+
+function inline(s) {
+  return esc(s)
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/(（[^（）]*）|\([^()]*\))/g, '<span class="act">$1</span>')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\n/g, '<br>');
+}
+function render(text) {
+  const out = [];
+  for (const raw of text.split(/\n\s*\n/)) {
+    const p = raw.trim();
+    if (!p) continue;
+    const m = p.match(/^\*{0,2}【([^】]+)】\*{0,2}\s*([\s\S]*)$/);
+    if (m) {
+      const c = COLORS[m[1]] || 'var(--c-other)';
+      out.push(`<div class="speaker" style="--c:${c}"><div class="who">${avatar(m[1])}<div class="name">${esc(m[1])}</div></div><div class="text">${inline(m[2])}</div></div>`);
+    } else if (/^📌/.test(p)) {
+      out.push(`<div class="sum">${inline(p)}</div>`);
+    } else if (/^`?——/.test(p)) {
+      out.push(`<div class="env">${inline(p.replace(/`/g, ''))}</div>`);
+    } else {
+      out.push(`<div class="para narr">${inline(p)}</div>`);
+    }
+  }
+  return out.join('');
+}
+// 用户消息里的 [图片：app/uploads/x.png] / [文件：...] 显示成图片或链接
+function renderMine(text) {
+  return esc(text).replace(/\[(图片|文件)：([^\]]+)\]/g, (_, kind, p) => {
+    const u = fileUrl('/game/', p);
+    return kind === '图片'
+      ? `<img src="${u}" alt="">`
+      : `<a class="filechip" href="${u}" target="_blank">📄 ${esc(p.split('/').pop())}</a>`;
+  });
+}
+function addMe(text) {
+  const d = document.createElement('div');
+  d.className = 'msg me';
+  d.innerHTML = `<div class="bubble">${renderMine(text)}</div>`;
+  list.appendChild(d);
+}
+function addAi(text) {
+  const d = document.createElement('div');
+  d.className = 'msg ai';
+  d.innerHTML = text ? render(text) : '<div class="typing">兽夫们听到了你的声音</div>';
+  list.appendChild(d);
+  return d;
+}
+// 一条聊天记录：整点小字动态 / 我说的 / 兽夫们的回复
+function addMsg(m) {
+  if (m.tick) {
+    const d = document.createElement('div');
+    d.className = 'tick';
+    d.textContent = m.text;
+    list.appendChild(d);
+    return d;
+  }
+  return m.role === 'user' ? addMe(m.text) : addAi(m.text);
+}
+function scroll() { log.scrollTop = log.scrollHeight; }
+function showIntro() {
+  list.innerHTML = `<div class="intro">
+    苍莽大陆 · 你的小院<br><br>
+    院子里只有<b>玄烬</b>一个兽夫，其他人还不知道在哪。<br>
+    接下来发生什么，由你来决定。<br><br>
+    说点什么吧。
+  </div>`;
+}
+async function loadHistory() {
+  const h = await fetch('/api/history').then(r => r.json()).catch(() => []);
+  histLen = h.length;
+  await loadCast();
+  if (h.length) {
+    list.innerHTML = '';
+    for (const m of h) addMsg(m);
+    markSpeakers([...h].reverse().find(m => m.role === 'ai' && !m.tick)?.text);
+  } else showIntro();
+  scroll();
+  // 刷新页面时如果兽夫们还在回复，就等他们回完再显示
+  const s = await fetch('/api/status').then(r => r.json()).catch(() => ({}));
+  if (s.busy) waitForReply(addAi(''));
+}
+// 上一句还在回复中：等回复完成后重新载入聊天记录
+async function waitForReply(box) {
+  sendBtn.disabled = true;
+  const s0 = await fetch('/api/status').then(r => r.json()).catch(() => ({}));
+  box.innerHTML = s0.simming
+    ? '<div class="typing">整点到了，兽夫们正在过这一个小时，过完就能接着聊</div>'
+    : '<div class="typing">兽夫们还在回你上一句话</div>';
+  scroll();
+  while (true) {
+    await new Promise(r => setTimeout(r, 3000));
+    const s = await fetch('/api/status').then(r => r.json()).catch(() => ({ busy: true }));
+    if (!s.busy) break;
+  }
+  sendBtn.disabled = false;
+  await loadHistory();
+}
+
+async function send(preset) {
+  let text = (preset ?? input.value).trim();
+  const files = preset ? [] : chatAttach.take();
+  if ((!text && !files.length) || sendBtn.disabled) return;
+  if (list.querySelector('.intro')) list.innerHTML = '';
+  input.value = '';
+  sendBtn.disabled = true;
+  if (files.length) {
+    try {
+      const saved = await fetch('/api/upload', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: await toPayload(files) }),
+      }).then(r => r.json());
+      const marks = saved.map(s => `[${s.isImage ? '图片' : '文件'}：${s.path}]`).join('\n');
+      text = text ? `${text}\n${marks}` : marks;
+    } catch (e) {
+      alert('文件发送失败：' + e.message);
+      sendBtn.disabled = false;
+      return;
+    }
+  }
+  addMe(text);
+  const box = addAi('');
+  scroll();
+  let reply = '';
+  let wasBusy = false;
+  try {
+    const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
+        if (!line.trim()) continue;
+        const ev = JSON.parse(line);
+        if (ev.type === 'delta') {
+          reply += ev.text;
+          box.innerHTML = render(reply);
+          markSpeakers(reply);
+          scroll();
+        } else if (ev.type === 'reset' || ev.type === 'final') {
+          reply = ev.text || '';
+          box.innerHTML = reply ? render(reply) : '<div class="typing">兽夫们听到了你的声音</div>';
+          markSpeakers(reply);
+        } else if (ev.type === 'busy') {
+          wasBusy = true;
+        } else if (ev.type === 'error') {
+          box.innerHTML = (reply ? render(reply) : '') + `<div class="para err">${esc(ev.text)}</div>`;
+        }
+      }
+    }
+  } catch (e) {
+    box.innerHTML = `<div class="para err">连接断开了：${esc(e.message)}。请确认黑色的服务窗口还开着。</div>`;
+  }
+  if (wasBusy) {
+    // 这句没发出去：放回输入框，先等上一句回完
+    list.removeChild(box.previousElementSibling);
+    input.value = text;
+    return waitForReply(box);
+  }
+  if (!reply && box.querySelector('.typing')) box.innerHTML = '<div class="para err">没有收到回复。</div>';
+  // 回复后好感、心情可能变了，刷新兽夫栏
+  loadCast().then(() => markSpeakers(reply));
+  histLen = (await fetch('/api/history').then(r => r.json()).catch(() => [])).length || histLen;
+  sendBtn.disabled = false;
+  input.focus();
+  scroll();
+}
+sendBtn.onclick = () => send();
+input.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
+});
+document.querySelectorAll('[data-cmd]').forEach(b => b.onclick = () => send(b.dataset.cmd));
+$('reset').onclick = async () => {
+  if (!confirm('开一段新对话？\n聊天窗口会清空，但游戏存档（好感、剧情、回忆）都会保留。')) return;
+  await fetch('/api/reset', { method: 'POST' });
+  showIntro();
+};
+
+/* ---------------- 日记 ---------------- */
+// 日记页顶部：每位兽夫的日记本
+let diaryWho = '';
+function drawDtabs() {
+  const tabs = [].concat(castOrder.map(n => {
+      const c = COLORS[n] || 'var(--c-other)';
+      return `<button class="dtab ${diaryWho === n ? 'on' : ''}" data-who="${esc(n)}" style="--c:${c}">
+        <span class="mini" style="${faceStyle(n, 26, 9)}"></span>${esc(n)}的日记</button>`;
+    }));
+  $('dtabs').innerHTML = tabs.join('');
+}
+$('dtabs').addEventListener('click', e => {
+  const b = e.target.closest('[data-who]');
+  if (!b) return;
+  diaryWho = b.dataset.who;
+  loadDiary();
+});
+function renderHusbandDiary(d) {
+  const c = COLORS[d.name] || 'var(--c-other)';
+  const sections = d.text.split(/^## /m).slice(1).map(s => {
+    const [title, ...body] = s.split(/\r?\n/);
+    const paras = body.join('\n').split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+    return `<div class="day hday" style="--c:${c}"><h3>${esc(title.trim())}</h3>${paras.map(p => `<div class="entry">${inline(p)}</div>`).join('')}</div>`;
+  }).reverse();
+  const head = `<div class="hdhead" style="--c:${c}">${avatar(d.name)}<div><div class="nm">${esc(d.name)}的日记</div><div class="sub">只写给自己看的心里话</div></div></div>`;
+  return head + (sections.join('') || `<div class="empty">他还没写过日记。<br>游戏里的一天结束时（或点聊天页的「✍️ 写日记」），他会写下今天的心事。</div>`);
+}
+async function loadDiary() {
+  if (!castOrder.length) await loadCast();
+  if (!diaryWho || !castOrder.includes(diaryWho)) diaryWho = castOrder[0] || '';
+  drawDtabs();
+  const all = await fetch('/api/husband-diary').then(r => r.json()).catch(() => []);
+  const d = all.find(x => x.name === diaryWho) || { name: diaryWho, text: '' };
+  $('days').innerHTML = diaryWho ? renderHusbandDiary(d) : '<div class="empty">还没有兽夫登场。</div>';
+}
+// 「我的一天」：## 第X天（现实 日期） 下面是 "1. 时间｜做了什么｜具体经过"
+const CN_NUM = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+function cnNum(n) {
+  if (n <= 10) return CN_NUM[n];
+  if (n < 20) return '十' + CN_NUM[n - 10];
+  return CN_NUM[Math.floor(n / 10)] + '十' + (n % 10 ? CN_NUM[n % 10] : '');
+}
+function parseMyDay(text) {
+  const days = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    const h = line.match(/^##\s+(.*)/);
+    if (h) { days.push({ title: h[1], items: [] }); continue; }
+    const it = line.match(/^\d+[.、]\s*(.*)/);
+    if (it && days.length) {
+      const [time = '', what = '', ...how] = it[1].split('｜');
+      days[days.length - 1].items.push({ time: time.trim(), what: what.trim(), how: how.join('｜').trim() });
+    }
+  }
+  return days;
+}
+async function loadMyDay() {
+  const d = await fetch('/api/myday').then(r => r.json()).catch(() => ({}));
+  const days = parseMyDay(d.text || '');
+  if (!days.length) { $('mydays').innerHTML = '<div class="empty">还没有记录。你在游戏里做的每件事都会按顺序记在这里。</div>'; return; }
+  $('mydays').innerHTML = days.map((day, i) => {
+    const [, name, rest] = day.title.match(/^(第\S+?天)\s*(.*)$/) || [, day.title, ''];
+    const items = day.items.map((x, k) => `<li><span class="no">第${cnNum(k + 1)}件</span><span class="tm">${esc(x.time)}</span><span class="what">${esc(x.what)}</span>${x.how ? `<span class="how">${inline(x.how)}</span>` : ''}</li>`).join('');
+    return `<div class="day mday ${i === days.length - 1 ? 'today' : ''}"><h3>${esc(name)}<small>${esc(rest.replace(/[（）()]/g, ''))} · 共 ${day.items.length} 件</small></h3>
+      ${items ? `<ol>${items}</ol>` : '<div class="empty">今天还没做什么。</div>'}</div>`;
+  }).reverse().join('');
+}
+// 「物品与等级」：直接读 物品与等级.md，按「## 名字」分成卡片
+async function loadItems() {
+  if (!castOrder.length) await loadCast();
+  const text = await fetch(fileUrl('/game/', '物品与等级.md') + '?t=' + Date.now()).then(r => r.ok ? r.text() : '').catch(() => '');
+  const parts = text.split(/^## /m);
+  if (parts.length < 2) { $('itemsBox').innerHTML = '<div class="empty">还没有记录。</div>'; return; }
+  const cards = parts.slice(1).map(p => {
+    const [title, ...body] = p.split(/\r?\n/);
+    const name = title.trim();
+    let rest = body.join('\n');
+    const away = /【尚未登场】/.test(rest);
+    rest = rest.replace(/^-\s*\*\*【尚未登场】\*\*\s*$/m, '');
+    const isHusband = !!cast[name];
+    const c = COLORS[name] || (name === '我' ? 'var(--me)' : 'var(--c-other)');
+    const icon = isHusband ? `<div class="av" style="${faceStyle(name, 56)}"></div>` : `<div class="av" style="display:flex;align-items:center;justify-content:center;font-size:26px">${name === '我' ? '🌸' : '🏡'}</div>`;
+    return { name, order: isHusband ? castOrder.indexOf(name) : 100 + (name === '我' ? 0 : 1),
+      html: `<div class="day icard ${away ? 'away' : ''}" style="--c:${c}"><div class="ihead">${icon}<h3>${esc(name === '我' ? '我的东西' : name === '家里' ? '家里的东西' : name)}</h3>${away ? '<span class="tag">尚未登场</span>' : ''}</div>${md(rest)}</div>` };
+  });
+  // 已登场的兽夫排前面，按小图的顺序；然后是我、家里
+  cards.sort((a, b) => a.order - b.order);
+  $('itemsBox').innerHTML = cards.map(c => c.html).join('');
+}
+// 极简 Markdown：### 标题、- 列表、**粗体**
+function md(text) {
+  const out = [];
+  let inList = false;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    const li = line.match(/^[-*]\s+(.*)/) || line.match(/^\d+[.、]\s*(.*)/);
+    if (li) { if (!inList) { out.push('<ul>'); inList = true; } out.push(`<li>${inline(li[1])}</li>`); continue; }
+    if (inList) { out.push('</ul>'); inList = false; }
+    if (!line) continue;
+    const h = line.match(/^#{1,6}\s+(.*)/);
+    out.push(h ? `<h4>${inline(h[1])}</h4>` : `<p>${inline(line)}</p>`);
+  }
+  if (inList) out.push('</ul>');
+  return out.join('');
+}
+/* ---------------- 切换页面 / 看大图 ---------------- */
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === t));
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'view-' + t.dataset.view));
+  $('reset').style.visibility = t.dataset.view === 'chat' ? 'visible' : 'hidden';
+  if (t.dataset.view === 'diary') loadDiary();
+  else if (t.dataset.view === 'myday') loadMyDay();
+  else if (t.dataset.view === 'items') loadItems();
+  else input.focus();
+});
+document.addEventListener('click', e => {
+  const go = e.target.closest('[data-goto]');
+  if (go) { document.querySelector(`.tab[data-view="${go.dataset.goto}"]`).click(); return; }
+  if (e.target.tagName === 'IMG' && e.target.closest('.bubble, .entry')) {
+    $('viewer').querySelector('img').src = e.target.src;
+    $('viewer').style.display = 'flex';
+  }
+});
+$('viewer').onclick = () => { $('viewer').style.display = 'none'; };
+
+loadHistory();
+input.focus();
+// 地址后面加 #myday / #diary 可以直接打开对应页面
+if (location.hash) document.querySelector(`.tab[data-view="${location.hash.slice(1)}"]`)?.click();
+</script>
+<script src="/vn.js"></script>
+<script src="/inv.js"></script>
+<script src="/vendor/qrcode.js"></script>
+<script src="/settings.js"></script>
+</body>
+</html>
