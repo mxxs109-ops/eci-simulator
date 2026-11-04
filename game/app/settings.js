@@ -46,7 +46,7 @@
     <label>模型名（本机模型可以留空） <input type="text" id="hModel"></label>
     <label>API key（本机模型留空） <input type="password" id="hKey"></label>
     <h3>天气</h3>
-    <label>城市（留空 = 按网络位置自动定位） <input type="text" id="sCity" placeholder="例如：上海、London"></label>
+    <label>城市（留空 = 按网络位置自动定位） <input type="text" id="sCity" placeholder="例如：上海、Tokyo"></label>
     <div class="msg" id="sWeather"></div>
     <h3>手机连接</h3>
     <label><input type="checkbox" id="sLan"> 允许同一个 Wi-Fi 下的手机连进来（要扫码，带连接码）</label>
