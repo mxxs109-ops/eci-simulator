@@ -33,9 +33,10 @@ uninstall() {
     else root=$(sed -n 's/^ *"root": *"\(.*\)",*$/\1/p' "$HOME2/state.json" | head -1); fi
   fi
   [ -z "$root" ] && root="$HOME/EciSimulator"
-  # 安装位置要像我们的（名字里有 eci），不是家目录、不是根目录，才去动
+  # 安装位置要像我们的（最后一级文件夹叫 EciSimulator，不分大小写；末尾带不带 / 都行），才去动
+  while [ "${root%/}" != "$root" ] && [ "$root" != / ]; do root="${root%/}"; done
   local okroot=0
-  case "$root" in /|"$HOME"|"$HOME/"|"$DESK"|"$HOME/Documents") ;; *[Ee][Cc][Ii]*) okroot=1 ;; esac
+  case "$root" in /|"$HOME"|"$DESK"|"$HOME/Documents") ;; */*) [ "$(basename "$root" | tr '[:upper:]' '[:lower:]')" = ecisimulator ] && okroot=1 ;; esac
 
   say '  关掉正在运行的安装器、游戏、本地模型'
   mine() { case "$1" in *"$HOME2"*) return 0 ;; esac; if [ "$okroot" = 1 ]; then case "$1" in *"$root/"*) return 0 ;; esac; fi; return 1; }

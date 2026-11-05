@@ -16,8 +16,22 @@
 
 按 `Win + R`，输入 `cmd` 回车，把下面这一行粘贴进去，回车：
 
+> **⚠️ 要在 cmd（黑底的「命令提示符」）里粘贴，不是 PowerShell。**
+
 ```cmd
 curl -fsSL -o "%TEMP%\eci-install.ps1" https://raw.githubusercontent.com/mxxs109-ops/eci-simulator/main/install.ps1 && powershell -NoProfile -ExecutionPolicy Bypass -File "%TEMP%\eci-install.ps1"
+```
+
+已经开着 PowerShell 的话，用这一行：
+
+```powershell
+curl.exe -fsSL -o "$env:TEMP\eci-install.ps1" https://raw.githubusercontent.com/mxxs109-ops/eci-simulator/main/install.ps1; powershell -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\eci-install.ps1"
+```
+
+彻底卸载（安装器打不开时也能删干净；在 cmd 里粘贴）：
+
+```cmd
+curl -fsSL -o "%TEMP%\eci-install.ps1" https://raw.githubusercontent.com/mxxs109-ops/eci-simulator/main/install.ps1 && powershell -NoProfile -ExecutionPolicy Bypass -File "%TEMP%\eci-install.ps1" -Uninstall
 ```
 
 ## 安装（Mac）
@@ -57,7 +71,7 @@ Mac 上没有配音；本地模型要苹果芯片、32GB 以上内存。
 | 只用线上 API 或 Claude Code | 任何能上网的 Windows 10/11 电脑 |
 | 本地模型（完整版） | NVIDIA 显卡 12GB 显存以上、内存 32GB 以上、硬盘 25GB |
 | 本地模型（轻量版） | NVIDIA 显卡 6GB 以上（或 AMD/Intel 显卡）、内存 24GB 以上、硬盘 17GB |
-| 配音 | NVIDIA 显卡 8GB 显存以上、驱动 570 以上、硬盘 25GB |
+| 配音 | NVIDIA 显卡 8GB 显存以上、驱动 570 以上、硬盘 25GB（要下载约 15GB） |
 
 ## 用到的开源项目
 

@@ -21,7 +21,7 @@
   [hidden] { display: none !important; }   /* 该藏的一律藏住，不被各自的 display 盖掉 */
   html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.7 "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif; }
   a { color: var(--me); }
-  .app { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+  .app { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: 100vh; }
   /* 侧边栏 */
   aside { background: var(--bg2); border-right: 1px solid var(--line); padding: 22px 14px; position: sticky; top: 0; height: 100vh; overflow: auto; }
   .brand { display: flex; gap: 12px; align-items: center; padding: 0 8px 18px; }
@@ -44,7 +44,7 @@
   .card h2 { font-size: 18px; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
   .card h3 { font-size: 15px; margin: 16px 0 6px; }
   .soft { color: var(--soft); font-size: 14px; }
-  .ok { color: var(--ok); } .bad { color: var(--bad); }
+  .ok { color: var(--ok); } .bad { color: var(--bad); } .warn { color: var(--warn); }   /* 红 = 真的出错；橙 = 还差这一步 */
   /* 按钮 */
   button { font: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 12px; padding: 9px 18px; transition: transform .12s, box-shadow .15s, background .15s, opacity .15s; }
   button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--shadow); }
@@ -80,8 +80,8 @@
   .bar i::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.35), transparent); animation: shine 1.4s infinite; }
   .bar.done i::after { display: none; } .bar.done i { background: var(--ok); } .bar.err i { background: var(--bad); }
   @keyframes shine { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
-  .job .step { margin-top: 6px; font-weight: 700; } .log { font: 12px/1.5 Consolas, monospace; color: var(--soft); max-height: 110px; overflow: auto; white-space: pre-wrap; margin-top: 4px; }
-  table.kv { border-collapse: collapse; width: 100%; } table.kv td { padding: 7px 4px; border-bottom: 1px dashed var(--line); } table.kv td:first-child { color: var(--soft); width: 34%; }
+  .job .step { margin-top: 6px; font-weight: 700; overflow-wrap: anywhere; } .log { overflow-wrap: anywhere; font: 12px/1.5 Consolas, monospace; color: var(--soft); max-height: 110px; overflow: auto; white-space: pre-wrap; margin-top: 4px; }
+  table.kv { border-collapse: collapse; width: 100%; } table.kv td { padding: 7px 4px; border-bottom: 1px dashed var(--line); word-break: break-all; } table.kv td:first-child { color: var(--soft); width: 34%; }
   /* 大脑 */
   .prov { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
   .pv { border: 2px solid var(--line); border-radius: 16px; padding: 12px; cursor: pointer; background: var(--card); transition: transform .12s, border-color .15s, box-shadow .15s; display: flex; gap: 10px; align-items: center; }
@@ -153,13 +153,13 @@
   .lockcard .needs { display: flex; flex-direction: column; gap: 8px; }
   .lockcard .need { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 12px; text-align: left; border: 1px solid var(--line); }
   .lockcard .need.ok { background: rgba(79,122,74,.09); border-color: rgba(79,122,74,.3); }
-  .lockcard .need.todo { background: rgba(192,83,61,.07); border-color: rgba(192,83,61,.35); }
+  .lockcard .need.todo { background: rgba(183,121,31,.08); border-color: rgba(183,121,31,.4); }
   .lockcard .ni { font-size: 20px; }
   .lockcard .nt { flex: 1; display: flex; flex-direction: column; line-height: 1.3; }
   .lockcard .nt small { color: var(--soft); font-size: 12px; }
   .lockcard .ns { font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 99px; white-space: nowrap; }
   .lockcard .need.ok .ns { background: var(--ok); color: #fff; }
-  .lockcard .need.todo .ns { background: #c0533d; color: #fff; }
+  .lockcard .need.todo .ns { background: var(--warn); color: #fff; }
   .lockcard > button { width: 100%; }
   .bubble { background: var(--bg); border-radius: 14px; padding: 12px 14px; margin: 8px 0; white-space: pre-wrap; }
   .bubble .who { font-size: 12px; color: var(--soft); font-weight: 700; margin-bottom: 2px; }
@@ -171,10 +171,14 @@
   #toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(30px); opacity: 0; background: var(--ink); color: var(--bg); padding: 11px 20px; border-radius: 14px; box-shadow: var(--shadow); transition: all .25s; z-index: 50; font-weight: 700; max-width: 90vw; }
   #toast.on { opacity: 1; transform: translateX(-50%); }
   #toast.ok { background: var(--ok); color: #fff; } #toast.bad { background: var(--bad); color: #fff; }
+  /* 顶上的提示条：安装信息坏了（红）、安装器在重启（灰） */
+  .topbar { margin: 0 0 14px; }
+  #provPanel .card { scroll-margin-top: 12px; }
+  .dpnote { font-size: 13px; color: var(--soft); margin-left: 24px; }
   .pop { animation: pop .45s cubic-bezier(.2,1.6,.4,1); } @keyframes pop { 0% { transform: scale(.8); } 100% { transform: scale(1); } }
   /* 手机宽度 */
   @media (max-width: 820px) {
-    .app { grid-template-columns: 1fr; }
+    .app { grid-template-columns: minmax(0, 1fr); }
     aside { position: sticky; height: auto; padding: 10px 12px; z-index: 10; border-right: 0; border-bottom: 1px solid var(--line); }
     .brand { padding-bottom: 8px; } .nav { display: flex; overflow-x: auto; gap: 4px; } .nav .grp { display: none; }
     .nav a { flex: none; padding: 6px 10px; } .nav a .t { white-space: nowrap; } .nav .st { margin-left: 4px; }
@@ -194,7 +198,7 @@
     <a data-s="tts"><span class="ic">🎙️</span><span class="t">配音</span><i class="st" id="st-tts"></i></a>
     <div class="grp">玩</div>
     <a data-s="saves"><span class="ic">💾</span><span class="t">存档</span></a>
-    <a data-s="custom"><span class="ic">✨</span><span class="t">自定义玩法</span><i class="st" id="st-custom"></i></a>
+    <a data-s="custom"><span class="ic">✨</span><span class="t">自定义玩法</span><i class="st" id="st-custom" hidden></i></a>
     <a data-s="phone"><span class="ic">📱</span><span class="t">用手机玩</span></a>
     <a data-s="board"><span class="ic">💬</span><span class="t">留言板</span></a>
     <div class="grp">管理</div>
@@ -204,6 +208,8 @@
 </aside>
 
 <main>
+<div class="note bad topbar" id="brokenBar" hidden><b>安装信息坏了，已备份；请检查安装位置。</b> <button data-go="loc" style="padding:4px 12px">去安装位置</button></div>
+<div class="note info topbar" id="reconnBar" hidden>安装器在重启…</div>
 <!-- 总览 -->
 <section id="s-home">
   <div class="card hero">
@@ -230,7 +236,8 @@
   <div class="hd"><h1>🎮 游戏本体</h1><p>游戏程序、规则和兽夫们。更新只换程序和规则，存档、设置、你起的名字都不动。</p></div>
   <div class="card">
     <table class="kv"><tr><td>已装版本</td><td id="gVer">—</td></tr><tr><td>GitHub 上的最新版</td><td id="gRemote">检查中…</td></tr><tr><td>装在</td><td id="gDir">—</td></tr></table>
-    <div class="row"><button class="p big" id="gInstall">安装</button><button id="gOpen">▶ 打开游戏</button><button class="ghost" id="gCheck">检查更新</button></div>
+    <div class="row"><button class="p big" id="gInstall">安装</button><button id="gOpen">▶ 打开游戏</button><button class="ghost" id="gCheck">检查更新</button><button id="gRepair" hidden>修复 / 重新下载</button></div>
+    <div class="soft" id="gNote"></div>
     <div class="job" id="job-game"></div>
   </div>
   <div class="card" id="cityCard"><h2>🌤️ 游戏里的天气</h2>
@@ -244,8 +251,8 @@
 
 <!-- 大脑 -->
 <section id="s-llm">
-  <div class="hd"><h1>🧠 语言模型</h1><p>游戏里每一句话都是它写的。先点「一键检查」看看你电脑上已经有什么，能用的点一下就用上；没有再选一家照步骤做。</p></div>
-  <div class="card" id="detCard"><h2>🔍 你电脑上已经有的</h2><p class="soft" style="margin:0">点一下，帮你找电脑上已经装好的 Claude Code、本地模型、Ollama、LM Studio，找到了点「一键用它」就能用。</p><div class="row"><button class="p" id="detGo">🔍 一键检查</button></div><div id="detList"></div></div>
+  <div class="hd"><h1>🧠 语言模型</h1><p>游戏里每一句话都是它写的。先看看电脑上已经有什么；没有再选一家照步骤做。</p></div>
+  <div class="card" id="detCard"><h2>🔍 你电脑上已经有的</h2><p class="soft" style="margin:0">找 Claude Code、本地模型、Ollama、LM Studio。</p><div class="row"><button class="p" id="detGo">🔍 一键检查</button></div><div id="detList"></div></div>
   <div class="card">
     <div class="grpt">在你自己电脑上跑（免费、不限尺度）</div>
     <div class="prov" id="provLocal"></div>
@@ -269,10 +276,10 @@
   <div class="hd"><h1>🎙️ 配音</h1><p>每句台词用兽夫自己的声音读出来。用开源的 IndexTTS-2.5，在你电脑上跑。</p></div>
   <div class="card">
     <h2>需要</h2>
-    <table class="kv"><tr><td>显卡</td><td>NVIDIA，8GB 以上显存</td></tr><tr><td>驱动</td><td>570 以上</td></tr><tr><td>硬盘</td><td>25GB</td></tr></table>
+    <table class="kv"><tr><td>显卡</td><td>NVIDIA，8GB 以上显存</td></tr><tr><td>驱动</td><td>570 以上</td></tr><tr><td>硬盘</td><td>25GB（要下载约 15GB）</td></tr></table>
     <p class="soft">没有也不影响玩，只是没有声音。</p>
     <div class="row"><button class="p" id="tCheck">① 检查我的电脑</button><button id="tInstall" disabled>② 安装</button></div>
-    <div id="tReport"></div>
+    <div id="tReport"></div><div id="tState"></div>
     <div class="job" id="job-tts"></div>
   </div>
 </section>
@@ -310,11 +317,11 @@
 
 <!-- 手机 -->
 <section id="s-phone">
-  <div class="hd"><h1>📱 用手机玩</h1><p id="phHd">游戏在电脑上跑，手机用浏览器打开就能玩，安卓和 iPhone 都一样，不用装 App。手机和电脑连同一个 Wi-Fi，照下面 4 步做。</p></div>
+  <div class="hd"><h1>📱 用手机玩</h1><p id="phHd">手机浏览器就能玩，不用装 App。手机和电脑连同一个 Wi-Fi。</p></div>
   <div class="card">
     <ol class="steps">
       <li id="phStep1"><b>让防火墙放行游戏</b><br><span class="soft">点按钮，Windows 会问「是否允许更改」，点「是」。</span>
-        <div class="row"><button class="p" id="fwOn">放行防火墙</button><button class="ghost" id="fwOff" hidden>取消放行</button></div></li>
+        <div class="row"><button class="p" id="fwOn">放行防火墙</button><button class="ghost" id="fwOff" hidden>取消放行</button></div><div id="fwMsg"></div></li>
       <li id="phStep2"><b>打开手机连接</b>
         <div><label class="switch"><input type="checkbox" id="lanOn"><span class="sl"></span><span id="lanTxt">允许同一个 Wi-Fi 下的手机连进来</span></label></div></li>
       <li id="phStep3"><b>手机打开相机，扫下面的二维码</b><br><span class="soft">点弹出来的链接，游戏就在手机浏览器里打开了。</span>
@@ -355,7 +362,7 @@
 
 <!-- 位置 -->
 <section id="s-loc">
-  <div class="hd"><h1>📁 安装位置</h1><p>游戏、存档、语言模型、配音都装在这个文件夹里。模型和配音加起来要 40GB 左右，建议选空间大的盘。</p></div>
+  <div class="hd"><h1>📁 安装位置</h1><p>游戏、存档、语言模型、配音都装在这个文件夹里。全装（完整版本地模型 + 配音）约 50GB，选空间大的盘。</p></div>
   <div class="card">
     <table class="kv"><tr><td>现在的位置</td><td id="locNow"></td></tr><tr><td>这个盘剩余空间</td><td id="locFree"></td></tr></table>
     <div class="row"><button class="p" id="locPick">选一个文件夹…</button><span class="soft">已经装了的东西会连同存档一起搬过去</span></div>
@@ -371,6 +378,8 @@
     <label><input type="checkbox" class="dp" value="llm" checked> 语言模型</label><br>
     <label><input type="checkbox" class="dp" value="tts" checked> 配音</label><br>
     <label><input type="checkbox" class="dp" value="installer" checked> 安装器自己（最后删，删完这个页面就打不开了）</label>
+    <div class="dpnote" id="dpNote">删安装器就要连游戏一起删</div>
+    <p class="soft" id="delOther">Tailscale、Ollama、LM Studio 是单独的软件，不会被删，要删去 Windows 设置 → 应用。</p>
     <div class="row"><button class="danger" id="dGo">卸载选中的</button></div>
     <div class="job" id="job-uninstall"></div>
   </div>
@@ -382,11 +391,32 @@
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// 所有 POST 都发 JSON（安装器只收 JSON，挡住别的网站借浏览器来点）
 const api = (u, b) => fetch(u, b === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json());
 let S = {};
 let toastT;
 function toast(t, kind = '') { const el = $('toast'); el.textContent = t; el.className = 'on ' + kind; clearTimeout(toastT); toastT = setTimeout(() => el.className = '', 3200); }
 async function busyBtn(btn, fn) { btn.classList.add('busy'); try { return await fn(); } finally { btn.classList.remove('busy'); } }
+// 任务按钮：锁住时记下原来的字，解锁时还原
+function lockBtn(btn, txt) {
+  if (!btn) return;
+  if (btn.dataset.txt == null) btn.dataset.txt = btn.textContent;
+  btn.disabled = true; btn.classList.add('busy'); if (txt) btn.textContent = txt; btn.dataset.locked = '1';
+}
+function unlockBtn(btn) {
+  if (!btn || !btn.dataset.locked) return;
+  delete btn.dataset.locked; btn.classList.remove('busy'); btn.disabled = false;
+  if (btn.dataset.txt != null) { btn.textContent = btn.dataset.txt; delete btn.dataset.txt; }
+}
+// 点了就锁按钮、叫后台开始；后台说不行（正在忙、条件不够）就解锁、说原因
+async function startJob(btn, url, body, txt, msg) {
+  lockBtn(btn, txt);
+  const r = await api(url, body).catch(e => ({ error: e.message }));
+  if (!r || r.ok === false || r.error) { unlockBtn(btn); toast((r && r.error) || '没开始', 'bad'); return false; }
+  if (msg) toast(msg);
+  return true;
+}
+const openGame = () => api('/api/game/open', {}).then(r => (r.ok === false ? toast(r.error, 'bad') : toast('正在打开游戏…'))).catch(e => toast(e.message, 'bad'));
 
 // 导航
 function go(s) {
@@ -401,8 +431,8 @@ function go(s) {
   if (s === 'phone') loadPhone();
   if (s === 'llm') loadHandoff();
   if (s === 'game') loadCity();
-
 }
+const onPage = s => $('s-' + s).classList.contains('on');
 $('nav').onclick = e => { const a = e.target.closest('a'); if (a) { e.preventDefault(); go(a.dataset.s); } };
 document.addEventListener('click', e => {
   const o = e.target.closest('[data-open]'); if (o) { e.preventDefault(); api('/api/open', { url: o.dataset.open }); }
@@ -410,139 +440,191 @@ document.addEventListener('click', e => {
 });
 
 const isLocal = () => S.brain === 'api' && /127\.0\.0\.1|localhost/.test(S.api?.base || '');
-function brainLabel() {
-  if (!S.brain) return '';   // 还没选（游戏没装时也可能已经先选好了）
-  if (S.brain === 'claude') return S.claude ? 'Claude Code' : '';
-  if (!S.api?.base || !S.api?.model) return '';
-  return isLocal() ? (/:8080/.test(S.api.base) ? '本地模型' : '本机模型（' + S.api.model + '）') : S.api.model;
-}
+// 大脑叫什么：后台算好的（和「自定义玩法」里说的是同一个说法）；空 = 还没选好
+const brainLabel = () => S.brainWhat || '';
 const MACP = () => S.platform === 'darwin';
 let macDone = false;
 function macTweaks() {
   if (macDone || !MACP()) return; macDone = true;
   $('phStep1').hidden = true; $('phFwTip').hidden = true;
-  $('phHd').textContent = $('phHd').textContent.replace('4 步', '3 步');
   $('delHd').textContent = '默认全部删干净：游戏和所有存档、语言模型、安装器自己（连同它下的 Node.js）、桌面图标。';
+  $('delOther').textContent = 'Tailscale、Ollama、LM Studio 是单独的软件，不会被删，要删就从「应用程序」拖进废纸篓。';
   $('tCheck').disabled = true; $('tCheck').classList.remove('p'); $('tInstall').disabled = true;
   $('tReport').innerHTML = '<div class="note info">Mac 不支持配音（要 NVIDIA 显卡）。不影响玩，只是没有声音。</div>';
   $('tsInstall').textContent = '去官网下载 Tailscale';
 }
 async function refresh() {
-  S = await api('/api/state');
+  const s = await api('/api/state').catch(() => null);
+  if (!s || s.ok === false) return;
+  S = s;
   macTweaks();
+  $('brokenBar').hidden = !S.stateBroken;
   $('where').textContent = S.game ? '版本 ' + S.game.version + (S.save ? ' · ' + S.save : '') : '安装器';
   $('locNow').textContent = S.root; $('locFree').textContent = S.free == null ? '—' : S.free + ' GB';
   $('gVer').innerHTML = S.game ? esc(S.game.version) + (S.running.game ? ' <span class="tag ok">● 运行中</span>' : '') : '还没装';
   $('gDir').textContent = S.dirs?.game || '—';
-  if (!S.game && !$('gInstall').dataset.locked) { $('gInstall').textContent = '安装'; $('gInstall').disabled = false; }
-  $('gOpen').disabled = !S.game;
+  renderGame();
   const b = brainLabel();
-  // 侧边栏的小圆点
-  $('st-game').className = 'st ' + (S.running.game ? 'run' : S.game ? 'ok' : 'new');
-  $('st-llm').className = 'st ' + (b ? 'ok' : S.game ? 'new' : '');
-  $('st-tts').className = 'st ' + (S.running.tts ? 'run' : S.tts ? 'ok' : '');
-  $('st-custom').className = 'st ' + (b ? '' : '');
+  // 侧边栏的小圆点：绿 = 装好了 / 正在用（外圈 = 正在运行，而且是我们装的那一份）；橙 = 该做这一步；没装就不亮绿
+  $('st-game').className = 'st ' + (!S.game || G.newer ? 'new' : S.running.game ? 'run' : 'ok');
+  $('st-llm').className = 'st ' + (b ? (b === '本地模型' && S.running.llm ? 'run' : 'ok') : S.game ? 'new' : '');
+  $('st-tts').className = 'st ' + (!S.tts ? '' : S.running.tts ? 'run' : 'ok');
+  $('st-custom').className = 'st ok'; $('st-custom').hidden = !S.custom;   // 有自定义规则才亮
   // 总览
   $('tGame').textContent = S.game ? '版本 ' + S.game.version + (S.running.game ? '，运行中' : '') : '还没装';
   $('tgGame').className = 'tag ' + (S.game ? 'ok' : 'me'); $('tgGame').textContent = S.game ? '✓ 装好了' : '第 1 步';
   $('tLlm').textContent = b || '还没选';
-  $('tgLlm').className = 'tag ' + (b ? 'ok' : S.game ? 'me' : ''); $('tgLlm').textContent = b ? '✓ ' + (S.llm ? '本地已装' : '可以用') : '第 2 步';
+  $('tgLlm').className = 'tag ' + (b ? 'ok' : S.game ? 'me' : ''); $('tgLlm').textContent = b ? '✓ ' + b : '第 2 步';
   $('tTts').textContent = S.tts ? (S.running.tts ? '运行中' : '装好了') : MACP() ? 'Mac 不支持' : '可选，有 NVIDIA 显卡才行';
   $('tgTts').className = 'tag ' + (S.tts ? 'ok' : ''); $('tgTts').textContent = S.tts ? '✓ 装好了' : MACP() ? 'Mac 不支持' : '可选';
-  const [t, p, btn, to] = !S.game ? ['欢迎来到兽世', '三步就能开始：装游戏 → 选一个大脑 → 开玩。', '开始安装', 'game']
+  const [t, p, btn, to] = !S.game ? (S.template ? ['还没有存档', '去「存档」新建一局。', '新建存档', 'saves'] : ['欢迎来到兽世', '三步就能开始：装游戏 → 选一个大脑 → 开玩。', '开始安装', 'game'])
     : !b ? ['游戏装好了', '下一步：选一个语言模型当游戏的大脑。', '选大脑', 'llm']
     : ['一切就绪', '大脑：' + b + '。双击桌面上的「恶雌模拟器」，或者点这里。', '▶ 打开游戏', 'open'];
   $('heroT').textContent = t; $('heroP').textContent = p; $('heroBtn').textContent = btn; $('heroBtn').dataset.to = to;
+  // 已经有大脑在用：「一键检查」只是参考，用白色
+  $('detGo').className = b ? '' : 'p';
+  renderTts();
   markProviders();
 }
-$('heroBtn').onclick = e => { const to = e.target.dataset.to; if (to === 'open') { api('/api/game/open', {}); toast('正在打开游戏…'); } else go(to); };
+$('heroBtn').onclick = e => { const to = e.target.dataset.to; if (to === 'open') openGame(); else go(to); };
 
 // 后台任务进度
 const jobSeen = {};
-// 哪个任务锁哪个按钮、锁住时写什么
-const JOB_BTN = { ollama: 'oc-ollama', lmstudio: 'oc-lmstudio', tailscale: 'tsInstall', game: 'gInstall', tts: 'tInstall', llm: 'lInstall', llmtest: 'lTest', location: 'locPick', uninstall: 'dGo' };
+// 哪个任务锁哪些按钮（第一个写「…中」，其余的只锁住）、锁住时写什么
+const JOB_BTN = { ollama: ['oc-ollama'], lmstudio: ['oc-lmstudio'], tailscale: ['tsInstall'], game: ['gInstall', 'gRepair'], tts: ['tInstall'], llm: ['lInstall'], llmtest: ['lTest'], location: ['locPick'], uninstall: ['dGo'] };
 const JOB_TXT = { ollama: () => '一键安装中…', lmstudio: () => '一键安装中…', tailscale: () => '安装中…', game: () => (S.game ? '更新中…' : '安装中…'), tts: () => '安装中…', llm: () => '安装中…', llmtest: () => '启动中…', location: () => '搬家中…', uninstall: () => '卸载中…' };
+const MOVERS = ['location', 'saves'];
 let firstPoll = true;   // 打开页面时已经做完的任务不再弹提示
+let lost = 0, expectRestart = false, BUSY = false;
 async function poll() {
   const jobs = await api('/api/jobs').catch(() => null);
-  if (!jobs) { if (byeAll) bye(); return; }   // 安装器自己删完退出了
+  if (!jobs) {
+    if (byeOk) return bye();   // 安装器自己删完退出了
+    lost++;
+    // 安装器更新了自己、正在重启：等它回来就重新加载页面
+    if (expectRestart || lost >= 3) { $('reconnBar').hidden = false; $('reconnBar').textContent = expectRestart ? '安装器在重启…' : '连不上安装器：重新打开桌面上的「恶雌模拟器安装器」'; }
+    return;
+  }
+  if (!$('reconnBar').hidden) { location.reload(); return; }   // 连上了：换上新页面
+  lost = 0;
   if (firstPoll) { firstPoll = false; for (const [n, j] of Object.entries(jobs)) if (j.done) jobSeen[n] = n + j.log.length + j.done; }
   for (const [name, j] of Object.entries(jobs)) {
-    const box = $('job-' + name); if (!box) continue;
-    box.innerHTML = `<div class="bar ${j.error ? 'err' : j.done ? 'done' : ''}"><i style="width:${j.error ? 100 : j.pct}%"></i></div>
-      <div class="step ${j.error ? 'bad' : j.done ? 'ok' : ''}">${j.error ? '😵 出错：' + esc(j.error) : j.done ? '🎉 ' + esc(j.step) : esc(j.step)}</div><div class="log">${esc(j.log.slice(-5).join('\n'))}</div>`;
-    // 任务还在跑：对应的按钮锁住、写「…中」，免得再点一次又从头来
-    const btn = $(JOB_BTN[name]);
-    if (btn) {
-      if (!j.done) { btn.disabled = true; btn.classList.add('busy'); btn.textContent = JOB_TXT[name] ? JOB_TXT[name]() : '进行中…'; btn.dataset.locked = '1'; }
-      else if (btn.dataset.locked) { delete btn.dataset.locked; btn.classList.remove('busy'); btn.disabled = false; }
-    }
+    if (j.restart) expectRestart = true;
+    const box = $('job-' + name);
+    if (box) box.innerHTML = `<div class="bar ${j.error ? 'err' : j.done ? 'done' : ''}"><i style="width:${j.error ? 100 : j.pct}%"></i></div>
+      <div class="step ${j.error ? 'bad' : j.done ? 'ok' : ''}">${j.error ? '😵 出错：' + esc(j.error) : j.done ? '🎉 ' + esc(j.msg || j.step) : esc(j.step)}</div><div class="log">${esc(j.log.slice(-5).join('\n'))}</div>`;
+    // 任务还在跑：对应的按钮锁住、写「…中」，免得再点一次又从头来；做完了解锁，字还原，再按结果重画
+    (JOB_BTN[name] || []).forEach((id, i) => { const btn = $(id); if (!btn) return; if (!j.done) { if (!btn.dataset.locked) lockBtn(btn, i === 0 ? (JOB_TXT[name] ? JOB_TXT[name]() : '进行中…') : ''); } else unlockBtn(btn); });
+    if (name === 'uninstall' && j.done && !j.error && byeAll) { byeOk = true; continue; }
     const key = name + j.log.length + j.done;
-    if (name === 'uninstall' && j.done && !j.error && byeAll) return bye();
-    if (j.done && jobSeen[name] !== key) {
-      jobSeen[name] = key; refresh();
-      if (name === 'game') checkUpdate();
-      if (j.error) toast('出错了：' + j.error, 'bad'); else toast(j.step, 'ok');
-      if (name === 'llm' && !j.error) $('lTest') && ($('lTest').disabled = false);
-      if (name === 'llmtest' && !j.error) $('lUse') && ($('lUse').disabled = false);
-      if (name === 'saves') loadSaves();
-      if (name === 'tailscale') tsLoad();
-      if ((name === 'ollama' || name === 'lmstudio') && !j.error) refresh().then(() => { if (currentPv() === name) showPv(name, false); });
-    }
+    if (j.done && jobSeen[name] !== key) { jobSeen[name] = key; afterJob(name, j); }
   }
+  // 有任务在跑：搬家、存档的按钮灰掉（后台也会拒绝）
+  const busy = Object.values(jobs).some(j => !j.done);
+  if (busy !== BUSY) { BUSY = busy; paintBusy(); }
+}
+function paintBusy() {
+  if (!$('locPick').dataset.locked) $('locPick').disabled = BUSY;
+  if (onPage('saves')) loadSaves();
+}
+// 任务做完：重新拿状态，相关的页面都画成完成后的样子（不用她手动刷新）
+async function afterJob(name, j) {
+  await refresh();
+  if (j.error) toast('出错了：' + j.error, 'bad'); else toast(j.msg || j.step, 'ok');
+  if (name === 'game' || name === 'uninstall' || name === 'location') { checkUpdate(); if (onPage('game')) loadCity(); }
+  if (name === 'saves' || name === 'uninstall' || name === 'game') loadSaves();
+  if (name === 'tailscale') tsLoad();
+  if (['llm', 'llmtest', 'ollama', 'lmstudio', 'uninstall'].includes(name)) { if (curPv) showPv(curPv, false); if (DET) detect(); if (onPage('llm')) loadHandoff(); }
+  if (onPage('custom')) loadCustom();
+  if (onPage('phone')) loadPhone();
 }
 setInterval(poll, 1000);
 
 // ---------- 游戏 ----------
+let G = {};   // 查更新的结果：{ remote, newer, checked, error }
+// 安装按钮：没装 = 橙「安装」；有新版 = 橙「更新到 y」；查过是最新 = 绿「✓ 已是最新」；还没查到 / 查不到 = 灰「✓ 已安装 x」
+function renderGame() {
+  const btn = $('gInstall');
+  $('gOpen').disabled = !S.game;
+  $('gRepair').hidden = !S.game;
+  $('gNote').innerHTML = !S.game && S.template ? '存档都删了：去 <a href="#" data-go="saves">存档</a> 新建一局，或者点「安装」重新装。' : '';
+  if (btn.dataset.locked) return;
+  btn.classList.remove('p', 'okbtn');
+  if (!S.game) { btn.textContent = '安装'; btn.disabled = false; btn.classList.add('p'); }
+  else if (G.newer) { btn.textContent = '更新到 ' + G.remote.version; btn.disabled = false; btn.classList.add('p'); }
+  else if (G.checked && !G.error) { btn.textContent = '✓ 已是最新'; btn.disabled = true; btn.classList.add('okbtn'); }
+  else { btn.textContent = '✓ 已安装 ' + S.game.version; btn.disabled = true; }
+}
 async function checkUpdate() {
   $('gRemote').textContent = '检查中…';
   const r = await api('/api/game/check').catch(e => ({ error: e.message }));
-  if (r.error) return $('gRemote').innerHTML = `<span class="bad">${esc(r.error)}</span>`;
-  const newer = r.local && r.remote.version !== r.local;
-  // 已经是最新：按钮变灰、写「已是最新」；有新版才亮
-  if (r.local) { $('gInstall').disabled = !newer; $('gInstall').textContent = newer ? '更新到 ' + r.remote.version : '✓ 已是最新'; $('gInstall').classList.toggle('p', !!newer); $('gInstall').classList.toggle('okbtn', !newer); }
+  if (!r || r.error || !r.remote) { G = { checked: true, error: true }; $('gRemote').innerHTML = '<span class="soft">查不到新版本（网络）</span>'; renderGame(); return; }
+  const newer = !!(r.local && r.remote.version !== r.local);
+  G = { remote: r.remote, newer, checked: true };
   $('gRemote').innerHTML = esc(r.remote.version) + (newer ? ` <span class="tag me">🔔 有新版本</span><div class="soft">${esc(r.remote.notes || '')}</div>` : r.local ? ' <span class="tag ok">已是最新</span>' : '');
+  renderGame();
   if (newer) { $('st-game').className = 'st new'; $('gInstall').classList.add('pop'); }
 }
-$('gInstall').onclick = e => { e.target.disabled = true; e.target.classList.add('busy'); e.target.textContent = S.game ? '更新中…' : '安装中…'; e.target.dataset.locked = '1'; api('/api/game/install', {}); toast(S.game ? '开始更新…' : '开始安装…'); };
-$('gOpen').onclick = () => { api('/api/game/open', {}); toast('正在打开游戏…'); };
+$('gInstall').onclick = e => startJob(e.target, '/api/game/install', {}, S.game ? '更新中…' : '安装中…', S.game ? '开始更新…' : '开始安装…');
+// 修复：已经是最新也能点，重新下载程序和规则（存档、设置不动）
+$('gRepair').onclick = e => { if (confirm('重新下载游戏程序和规则？存档、设置、你起的名字都不动。')) startJob(e.target, '/api/game/install', {}, '下载中…', '开始重新下载…'); };
+$('gOpen').onclick = openGame;
 $('gCheck').onclick = e => busyBtn(e.target, checkUpdate);
 
 // ---------- 大脑 ----------
 // 每一家的步骤、自动找、推荐模型在 llm.js
 
 // ---------- 配音 ----------
+// 装好了：两个按钮都变绿、整块绿框；没装：先装游戏本体才能装
+function renderTts() {
+  if (MACP()) return;
+  const ti = $('tInstall'), tc = $('tCheck');
+  ti.closest('.card').classList.toggle('doneCard', !!S.tts);
+  if (!ti.dataset.locked) {
+    if (S.tts) { ti.textContent = '✓ 已装好'; ti.className = 'okbtn'; ti.disabled = true; tc.textContent = '✓ 已检查'; tc.className = 'okbtn'; tc.disabled = true; }
+    else if (ti.classList.contains('okbtn')) { ti.textContent = '② 安装'; ti.className = ''; ti.disabled = true; tc.textContent = '① 检查我的电脑'; tc.className = 'p'; tc.disabled = false; }
+  }
+  $('tState').innerHTML = S.tts ? `<div class="note ok">✓ 已装好${S.running.tts ? '，正在运行' : '，玩游戏时会自动打开'}</div>`
+    : !S.game ? '<div class="note">先装游戏本体，才能装配音。<button data-go="game" style="padding:4px 12px">去装游戏本体</button></div>' : '';
+}
 $('tCheck').onclick = e => busyBtn(e.target, async () => {
-  const r = await api('/api/tts/check'), h = r.hw;
+  const r = await api('/api/tts/check').catch(err => ({ error: err.message }));
+  if (r.error || !r.hw) return toast('没查成：' + (r.error || ''), 'bad');
+  const h = r.hw, why = [...(S.game ? [] : ['先装游戏本体']), ...r.why];
   $('tReport').innerHTML = `<table class="kv" style="margin-top:12px"><tr><td>显卡</td><td>${esc(h.nvidia ? `${h.nvidia.name}，${h.nvidia.vramGB}GB，驱动 ${h.nvidia.driver}` : '没有 NVIDIA 显卡')}</td></tr><tr><td>安装盘剩余</td><td>${r.free ?? '—'} GB</td></tr></table>
-    ${r.ok ? '<div class="note ok"><b>✅ 可以装。</b>要下载十几 GB，半小时到几小时，看网速。</div>' : '<div class="note bad"><b>这台电脑装不了配音。</b>不影响玩，只是没有声音。</div>'}
-    ${r.why.map(w => `<p class="soft">· ${esc(w)}</p>`).join('')}`;
+    ${r.ok ? '<div class="note ok"><b>✅ 可以装。</b>要下载约 15GB，半小时到几小时，看网速。</div>' : '<div class="note"><b>这台电脑装不了配音。</b>不影响玩，只是没有声音。</div>'}
+    ${why.map(w => `<p class="soft">· ${esc(w)}</p>`).join('')}`;
   $('tInstall').disabled = !r.ok || !S.game; $('tInstall').classList.toggle('p', !$('tInstall').disabled);
 });
-$('tInstall').onclick = e => { e.target.disabled = true; e.target.classList.add('busy'); e.target.textContent = '安装中…'; e.target.dataset.locked = '1'; api('/api/tts/install', {}); toast('开始安装配音…'); };
+$('tInstall').onclick = e => startJob(e.target, '/api/tts/install', {}, '安装中…', '开始安装配音…');
 
 // ---------- 存档 ----------
 const ago = t => { if (!t) return '还没玩过'; const m = (Date.now() - new Date(t)) / 60000; return m < 60 ? Math.max(1, Math.round(m)) + ' 分钟前' : m < 1440 ? Math.round(m / 60) + ' 小时前' : Math.round(m / 1440) + ' 天前'; };
+let SV = {};
 async function loadSaves() {
-  if (!S.game) return $('saveList').innerHTML = '<div class="card">先去「游戏本体」装游戏，就会有第一个存档。</div>';
-  const r = await api('/api/saves');
+  if (!S.game && !S.template) return $('saveList').innerHTML = '<div class="card">先去「游戏本体」装游戏，就会有第一个存档。</div>';
+  const r = await api('/api/saves').catch(() => null); if (!r || !r.list) return;
+  SV = r;
+  const dis = BUSY ? 'disabled' : '';
   $('saveList').innerHTML = r.list.map(s => `<div class="sv ${s.active ? 'on' : ''}">
       <div class="nm">${s.active ? '🎮' : '💾'} ${esc(s.name)} ${s.active ? '<span class="tag me">正在玩</span>' : ''}</div>
       <div class="meta">${s.started ? `<span class="tag">第 ${s.day ?? 1} 天</span><span class="tag">${s.husbands} 位兽夫</span><span class="tag">聊了 ${s.turns} 轮</span>` : '<span class="tag">还没开局</span>'}${s.custom ? '<span class="tag me">✨ 自定义玩法</span>' : ''}</div>
       <div class="soft">最后玩：${ago(s.last)}</div>
-      <div class="acts">${s.active ? `<button class="p" data-sa="open">▶ 开始玩</button>` : `<button class="p" data-sa="load" data-n="${esc(s.name)}">加载</button>`}<button class="ghost" data-sa="rename" data-n="${esc(s.name)}">改名</button>${s.active ? '' : `<button class="danger" data-sa="del" data-n="${esc(s.name)}">删除</button>`}</div>
-    </div>`).join('') + `<div class="sv add" data-sa="new"><div class="plus">＋</div><b>新建存档</b><div class="soft">从头开始一局新游戏${r.template ? '' : '<br>（先在「游戏本体」点一次更新）'}</div></div>`;
+      <div class="acts">${s.active ? `<button class="p" data-sa="open">▶ 开始玩</button>` : `<button class="p" data-sa="load" data-n="${esc(s.name)}" ${dis}>加载</button>`}<button class="ghost" data-sa="rename" data-n="${esc(s.name)}" ${dis}>改名</button><button class="danger" data-sa="del" data-n="${esc(s.name)}" data-act="${s.active ? 1 : ''}" ${dis}>删除</button></div>
+    </div>`).join('') + `<div class="sv add" data-sa="new" style="${BUSY ? 'opacity:.45;pointer-events:none' : ''}"><div class="plus">＋</div><b>新建存档</b><div class="soft">从头开始一局新游戏${r.template ? '' : '<br>（会先下载游戏，约 235MB）'}</div></div>`;
 }
 $('saveList').onclick = async e => {
   const b = e.target.closest('[data-sa]'); if (!b) return;
   const n = b.dataset.n, a = b.dataset.sa;
-  try {
-    if (a === 'open') { api('/api/game/open', {}); toast('正在打开游戏…'); }
-    if (a === 'new') { const name = prompt('新存档叫什么？', '存档 ' + (document.querySelectorAll('.sv:not(.add)').length + 1)); if (name) { await api('/api/saves/new', { name }); } }
-    if (a === 'load') { if (confirm(`加载「${n}」？正在运行的游戏会先关掉，现在的存档会自动收好。`)) await api('/api/saves/load', { name: n }); }
-    if (a === 'rename') { const to = prompt('改成什么名字？', n); if (to && to !== n) { const r = await api('/api/saves/rename', { name: n, to }); r.ok === false ? toast(r.error, 'bad') : (toast('改好了', 'ok'), loadSaves(), refresh()); } }
-    if (a === 'del') { if (confirm(`删除「${n}」？这一局的进度、兽夫日记、聊天记录全都删掉，找不回来。`)) { const r = await api('/api/saves/delete', { name: n }); r.ok === false ? toast(r.error, 'bad') : (toast('删掉了', 'ok'), loadSaves()); } }
-  } catch (err) { toast(err.message, 'bad'); }
+  const go2 = async (url, body) => { const r = await api(url, body).catch(err => ({ error: err.message })); if (!r || r.ok === false || r.error) { toast((r && r.error) || '没成', 'bad'); return null; } return r; };
+  if (a === 'open') openGame();
+  if (a === 'new') { const name = prompt('新存档叫什么？', SV.next || '存档 1'); if (name) { if (await go2('/api/saves/new', { name })) { toast(SV.template ? '正在新建…' : '先下载游戏，进度在下面…'); BUSY = true; loadSaves(); } } }
+  if (a === 'load') { if (confirm(`加载「${n}」？正在运行的游戏会先关掉，现在的存档会自动收好。`) && await go2('/api/saves/load', { name: n })) { BUSY = true; loadSaves(); } }
+  if (a === 'rename') { const to = prompt('改成什么名字？', n); if (to && to !== n && await go2('/api/saves/rename', { name: n, to })) { toast('改好了', 'ok'); loadSaves(); refresh(); } }
+  if (a === 'del') {
+    const msg = b.dataset.act ? `删除正在玩的「${n}」？这一局的进度、兽夫日记、聊天记录全都删掉，找不回来。\n游戏开着的话会先关掉。` : `删除「${n}」？这一局的进度、兽夫日记、聊天记录全都删掉，找不回来。`;
+    if (confirm(msg) && await go2('/api/saves/delete', { name: n })) { BUSY = true; loadSaves(); }
+  }
 };
 
 // ---------- 自定义玩法 ----------
@@ -550,7 +632,7 @@ const CHIPS = ['兽夫好感涨得快一点', '雪季提前到第 10 天', '每�
 $('cuChips').innerHTML = CHIPS.map(c => `<span class="chip">${c}</span>`).join('');
 $('cuChips').onclick = e => { const c = e.target.closest('.chip'); if (c) { const t = $('cuAsk'); t.value = (t.value.trim() ? t.value.trim() + '；' : '') + c.textContent; t.focus(); } };
 async function loadCustom() {
-  const r = await api('/api/custom');
+  const r = await api('/api/custom').catch(() => null); if (!r || !r.ready) return;
   $('cuSave').textContent = r.save;
   $('cuWrap').classList.toggle('locked', !r.ready.ok);
   $('cuLock').hidden = r.ready.ok;
@@ -566,11 +648,20 @@ $('cuGo').onclick = e => busyBtn(e.target, async () => {
   const text = $('cuAsk').value.trim(); if (!text) return toast('先写一下想怎么改', 'bad');
   $('cuReply').innerHTML = '<div class="bubble soft">大脑正在读规则、改规则…（Claude 和线上模型几十秒，本地模型要几分钟）</div>';
   const r = await api('/api/custom', { text }).catch(err => ({ error: err.message }));
-  if (r.ok) { $('cuReply').innerHTML = `<div class="bubble pop"><div class="who">✨ 改好了</div>${esc(r.reply)}</div>`; $('cuAsk').value = ''; toast('改好了，下一轮生效', 'ok'); loadCustom(); }
+  if (r.ok) { $('cuReply').innerHTML = `<div class="bubble pop"><div class="who">✨ 改好了</div>${esc(r.reply)}</div>`; $('cuAsk').value = ''; toast('改好了，下一轮生效', 'ok'); loadCustom(); refresh(); }
   else $('cuReply').innerHTML = `<div class="note bad">${esc(r.error || '没改成')}</div>`;
 });
-$('cuSave2').onclick = async () => { await api('/api/custom/save', { rules: $('cuRules').value }); toast('保存好了', 'ok'); refresh(); };
-$('cuClear').onclick = async () => { if (!confirm('清空所有自定义规则，游戏恢复原样？')) return; await api('/api/custom/save', { rules: '' }); toast('恢复原样了', 'ok'); loadCustom(); };
+$('cuSave2').onclick = e => busyBtn(e.target, async () => {
+  const r = await api('/api/custom/save', { rules: $('cuRules').value }).catch(err => ({ error: err.message }));
+  if (!r || r.ok === false || r.error) return toast('没保存上：' + ((r && r.error) || ''), 'bad');
+  toast('保存好了', 'ok'); refresh();
+});
+$('cuClear').onclick = async () => {
+  if (!confirm('清空所有自定义规则，游戏恢复原样？')) return;
+  const r = await api('/api/custom/save', { rules: '' }).catch(err => ({ error: err.message }));
+  if (!r || r.ok === false || r.error) return toast('没清掉：' + ((r && r.error) || ''), 'bad');
+  toast('恢复原样了', 'ok'); loadCustom(); refresh();
+};
 
 // ---------- 手机 ----------
 // 手机页：防火墙放没放行、手机连接开没开，都去真的查一下再变绿（点了「放行」可能在 Windows 弹窗里点了「否」）
@@ -583,9 +674,9 @@ async function tsLoad() {
   TS = await api('/api/tailscale').catch(() => ({ error: true }));
   if (TS.error) { $('tsMsg').innerHTML = '<span class="bad">没查成，再点一次</span>'; return; }
   const ready = TS.installed && TS.running !== false;
-  $('ts1').classList.toggle('done', !!TS.installed);
+  $('ts1').classList.toggle('done', !!ready);   // 装了但没在运行不算做完
   $('tsCheck').hidden = !!TS.installed; $('tsInstall').hidden = TS.installed;
-  $('tsMsg').innerHTML = TS.installed ? (ready ? '<span class="ok">✓ 电脑上已经有了</span>' : (MACP() ? '<span class="bad">装了但没在运行：从「应用程序」打开 Tailscale</span>' : '<span class="bad">装了但没在运行：从开始菜单打开 Tailscale</span>')) : '<span class="soft">电脑上还没有</span>';
+  $('tsMsg').innerHTML = TS.installed ? (ready ? '<span class="ok">✓ 电脑上已经有了</span>' : (MACP() ? '<span class="warn">装了但没在运行：从「应用程序」打开 Tailscale</span>' : '<span class="warn">装了但没在运行：从开始菜单打开 Tailscale</span>')) : '<span class="soft">电脑上还没有</span>';
   $('ts2').classList.toggle('done', !!TS.loggedIn);
   $('tsLogin').disabled = !ready || TS.loggedIn; $('tsLogin').className = TS.loggedIn ? 'okbtn' : ready ? 'p' : '';
   $('tsLogin').textContent = TS.loggedIn ? '✓ 已登录' : '登录';
@@ -598,11 +689,11 @@ async function tsLoad() {
   else if (!S.game) qr.innerHTML = NOGAME;
   else if (!gameUp) {
     qr.innerHTML = '<div class="note">电脑上的游戏还没开，开了才能扫码：<button class="p" id="tsOpen" style="padding:4px 12px">▶ 打开游戏</button></div>';
-    $('tsOpen').onclick = e => { api('/api/game/open', {}); e.target.disabled = true; e.target.textContent = '正在打开…'; };
+    $('tsOpen').onclick = e => { openGame(); e.target.disabled = true; e.target.textContent = '正在打开…'; };
   } else { const q = qrcode(0, 'M'); q.addData(TS.url); q.make(); qr.innerHTML = `<div class="qrs"><div class="qr"><img src="${q.createDataURL(6, 0)}" alt="二维码">${esc(TS.url)}</div></div>`; }
 }
 $('tsCheck').onclick = e => busyBtn(e.target, tsLoad);
-$('tsInstall').onclick = () => { if (MACP()) { api('/api/open', { url: 'https://tailscale.com/download/mac' }); return toast('装好、打开 Tailscale 以后，点「检查电脑」'); } api('/api/tailscale/install', {}); };
+$('tsInstall').onclick = e => { if (MACP()) { api('/api/open', { url: 'https://tailscale.com/download/mac' }); return toast('装好、打开 Tailscale 以后，点「检查电脑」'); } startJob(e.target, '/api/tailscale/install', {}, '安装中…'); };
 $('tsLogin').onclick = e => busyBtn(e.target, async () => {
   const r = await api('/api/tailscale/login', {}).catch(err => ({ error: err.message }));
   if (r.error) return toast(r.error, 'bad');
@@ -619,7 +710,7 @@ $('tsOn').onchange = async e => {
 };
 // 停在手机页时每 3 秒看一眼游戏开没开：开了二维码马上出来，关了马上收起
 setInterval(async () => {
-  if (!$('s-phone').classList.contains('on') || document.hidden) return;
+  if (!onPage('phone') || document.hidden) return;
   const now = !!(await api('/api/gameup').catch(() => ({}))).up;
   if (now !== gameUp) { await loadPhone(); if (TS) tsLoad(); }
 }, 3000);
@@ -633,17 +724,19 @@ async function loadPhone() {
   const qr = $('qrBox');
   if (!S.game) { qr.innerHTML = NOGAME; $('phStep3').classList.remove('done'); }
   else if (g.none || !g.lan.enabled) { qr.innerHTML = '<p class="soft" style="margin:8px 0 0">打开上面第 ' + (MACP() ? 1 : 2) + ' 步的开关，二维码就出现在这里。</p>'; $('phStep3').classList.remove('done'); }
-  else if (!g.urls.length) qr.innerHTML = '<div class="note bad">没找到这台电脑的局域网地址：确认电脑连着 Wi-Fi 或网线。</div>';
+  else if (!g.urls.length) qr.innerHTML = '<div class="note">没找到这台电脑的局域网地址：确认电脑连着 Wi-Fi 或网线。</div>';
   else if (!gameUp) {
     qr.innerHTML = '<div class="note">电脑上的游戏还没开，开了才能扫码：<button class="p" id="qrOpen" style="padding:4px 12px">▶ 打开游戏</button></div>';
-    $('qrOpen').onclick = e => { api('/api/game/open', {}); e.target.disabled = true; e.target.textContent = '正在打开…'; };
+    $('qrOpen').onclick = e => { openGame(); e.target.disabled = true; e.target.textContent = '正在打开…'; };
   }
   else {
-    qr.innerHTML = '<div class="qrs">' + g.urls.map(u => { const q = qrcode(0, 'M'); q.addData(u); q.make(); return `<div class="qr"><img src="${q.createDataURL(6, 0)}" alt="二维码">${esc(u.replace(/\?t=.*/, ''))}</div>`; }).join('') + '</div>'
-;
+    qr.innerHTML = '<div class="qrs">' + g.urls.map(u => { const q = qrcode(0, 'M'); q.addData(u); q.make(); return `<div class="qr"><img src="${q.createDataURL(6, 0)}" alt="二维码">${esc(u.replace(/\?t=.*/, ''))}</div>`; }).join('') + '</div>';
   }
-  $('fwOn').disabled = !!r.on; $('fwOn').className = r.on ? 'okbtn' : 'p'; $('fwOn').textContent = r.on ? '✓ 已放行' : '放行防火墙';
-  $('fwOff').hidden = !r.on;
+  // 规则在，但只管专用网络（以前建的）、现在连的是公用网络：要重新放行
+  $('fwOn').disabled = !!r.on; $('fwOn').className = r.on ? 'okbtn' : 'p'; $('fwOn').textContent = r.on ? '✓ 已放行' : r.exists ? '重新放行（所有网络）' : '放行防火墙';
+  $('fwOff').hidden = !r.on && !r.exists;
+  $('fwMsg').innerHTML = (r.exists && !r.on ? '<p class="warn" style="margin:6px 0 0">现在的网络没被放行（以前只放行了专用网络），点上面重新放行。</p>' : '')
+    + (r.nodeBlocked ? '<p class="warn" style="margin:6px 0 0">防火墙里有一条拦着 node.exe 的规则，手机可能还是连不上：Windows 设置 → 防火墙 → 允许应用通过防火墙，把 Node.js 勾上。</p>' : '');
 }
 $('fwOn').onclick = e => busyBtn(e.target, async () => { await api('/api/firewall', { on: true }).catch(() => {}); await loadPhone(); toast($('phStep1').classList.contains('done') ? '放行了' : '没放行：Windows 问「是否允许更改」时要点「是」', $('phStep1').classList.contains('done') ? 'ok' : 'bad'); });
 $('fwOff').onclick = e => busyBtn(e.target, async () => { await api('/api/firewall', { on: false }).catch(() => {}); await loadPhone(); toast('取消了'); });
@@ -655,31 +748,37 @@ $('lanOn').onchange = async e => {
   await loadPhone();
 };
 
-// 亲密段落交给谁写
+// 亲密段落交给谁写：保存过、而且能用的那一项才绿；改了还没保存就不绿
+let hoSaved = null, hoDirty = false;
 async function loadHandoff() {
   const g = await api('/api/gamecfg').catch(() => ({ none: true }));
   if (g.none) { $('hoCard').hidden = true; return; }
   $('hoCard').hidden = false;
   const local = /127\.0\.0\.1:8080/.test(g.handoff.base || '') || !g.handoff.base;
-  document.querySelector(`input[name=ho][value=${local ? 'local' : 'custom'}]`).checked = true;
+  hoSaved = local ? 'local' : 'custom'; hoDirty = false;
+  document.querySelector(`input[name=ho][value=${hoSaved}]`).checked = true;
   $('hoBase').value = local ? '' : g.handoff.base; $('hoModel').value = g.handoff.model || ''; $('hoKey').value = g.handoff.key || '';
   $('hoLocalTxt').textContent = S.llm ? (S.running.llm ? '✓ 已经装好，正在运行' : '✓ 已经装好（玩游戏时会自动打开）') : '还没装：在上面「本地模型」里装（要好显卡）；没装的话这几段会跳过';
+  $('hoSave').classList.remove('p');
   paintHo(local);
 }
 function paintHo(local) {
-  const ready = local ? !!S.llm : !!$('hoBase').value.trim();
-  document.querySelectorAll('[data-ho]').forEach(x => { x.classList.toggle('on', x.dataset.ho === (local ? 'local' : 'custom')); x.classList.toggle('ready', x.dataset.ho === (local ? 'local' : 'custom') && ready); });
+  const mode = local ? 'local' : 'custom';
+  const ready = !hoDirty && mode === hoSaved && (local ? !!S.llm : !!$('hoBase').value.trim());
+  document.querySelectorAll('[data-ho]').forEach(x => { x.classList.toggle('on', x.dataset.ho === mode); x.classList.toggle('ready', x.dataset.ho === mode && ready); });
   $('hoFields').hidden = local;
   $('hoCard').classList.toggle('doneCard', ready);
 }
-document.querySelectorAll('input[name=ho]').forEach(r => r.onchange = () => { paintHo(r.value === 'local'); $('hoSave').classList.add('p'); });
-['hoBase', 'hoModel', 'hoKey'].forEach(id => $(id).addEventListener('input', () => $('hoSave').classList.add('p')));
+const hoLocal = () => document.querySelector('input[name=ho]:checked').value === 'local';
+document.querySelectorAll('input[name=ho]').forEach(r => r.onchange = () => { hoDirty = r.value !== hoSaved; paintHo(r.value === 'local'); $('hoSave').classList.toggle('p', hoDirty); });
+['hoBase', 'hoModel', 'hoKey'].forEach(id => $(id).addEventListener('input', () => { hoDirty = true; paintHo(hoLocal()); $('hoSave').classList.add('p'); }));
 $('hoSave').onclick = e => busyBtn(e.target, async () => {
-  const local = document.querySelector('input[name=ho]:checked').value === 'local';
+  const local = hoLocal();
   const handoff = local ? { base: 'http://127.0.0.1:8080/v1', model: '', key: '' } : { base: $('hoBase').value.trim(), model: $('hoModel').value.trim(), key: $('hoKey').value.trim() };
   if (!local && !handoff.base) return toast('填一下接口地址', 'bad');
   const r = await api('/api/gamecfg', { handoff }).catch(err => ({ error: err.message }));
-  r.error ? toast(r.error, 'bad') : toast('保存好了', 'ok'); $('hoSave').classList.remove('p'); loadHandoff();
+  if (!r || r.error || r.ok === false) return toast('没保存上：' + ((r && r.error) || ''), 'bad');
+  toast('保存好了', 'ok'); loadHandoff();
 });
 
 // 天气：两选一。自动 = config 里 city 空着；手动 = 填了城市
@@ -711,7 +810,9 @@ async function showGeo(where, city) {
 document.querySelectorAll('input[name=cityMode]').forEach(r => r.onchange = async () => {
   paintCity(r.value);
   if (r.value === 'auto' && cityCfg) {   // 从手动改回自动：直接保存成自动、再查一次
-    await api('/api/gamecfg', { city: '' }); cityCfg = ''; paintCity('auto'); toast('改回自动了', 'ok'); showGeo('geoMsg', '');
+    const x = await api('/api/gamecfg', { city: '' }).catch(err => ({ error: err.message }));
+    if (x.error) return toast(x.error, 'bad');
+    cityCfg = ''; paintCity('auto'); toast('改回自动了', 'ok'); showGeo('geoMsg', '');
   }
   if (r.value === 'manual') $('city').focus();
 });
@@ -733,28 +834,44 @@ async function loadBoard() {
   $('bList').innerHTML = list.length ? list.map(m => `<div class="card msg"><div class="t">${esc(m.title)}</div><div class="soft">${esc(m.user)} · ${esc(m.at.slice(0, 10))}${m.comments ? ` · ${m.comments} 条回复` : ''}</div><div class="m">${esc(m.body)}</div><a href="#" data-open="${esc(m.url)}" class="soft">在 GitHub 上看 / 回复 →</a></div>`).join('') : '<div class="card soft">还没有留言，来写第一条吧。</div>';
 }
 $('bLoad').onclick = loadBoard;
-$('bNew').onclick = () => { api('/api/board/new', { title: $('bTitle').value.trim(), body: $('bBody').value.trim() }); toast('在浏览器里点「Submit new issue」就发出去了'); };
+$('bNew').onclick = async () => {
+  const body = $('bBody').value.trim();
+  const r = await api('/api/board/new', { title: $('bTitle').value.trim(), body }).catch(err => ({ error: err.message }));
+  if (!r || r.error || r.ok === false) return toast('没打开：' + ((r && r.error) || ''), 'bad');
+  toast((body.length > 1500 ? '内容太长，只带了前 1500 字。' : '') + '在浏览器里点「Create」（中文界面叫「创建」）就发出去了');
+};
 
 // ---------- 位置 ----------
-$('locPick').onclick = async () => {
-  const r = await api('/api/pick-folder', {});
+$('locPick').onclick = async e => {
+  const r = await api('/api/pick-folder', {}).catch(err => ({ error: err.message }));
+  if (r.error) return toast(r.error, 'bad');
   if (!r.path) return;
-  const dir = /eci/i.test(r.path) ? r.path : r.path.replace(/[\\/]$/, '') + (MACP() ? '/' : '\\') + 'EciSimulator';
-  if (!confirm('装到：' + dir + '\n' + (S.game || S.llm || S.tts ? '已经装的东西会搬过去。' : ''))) return;
-  await api('/api/location', { dir });
+  // 选的就是 EciSimulator 文件夹就直接用；不然在里面建一个
+  const last = r.path.replace(/[\\/]+$/, '').split(/[\\/]/).pop();
+  const dir = /^EciSimulator$/i.test(last) ? r.path : r.path.replace(/[\\/]+$/, '') + (MACP() ? '/' : '\\') + 'EciSimulator';
+  if (!confirm((S.stateBroken ? '安装位置是：' : '装到：') + dir + '\n' + (!S.stateBroken && (S.game || S.llm || S.tts) ? '已经装的东西会搬过去。' : ''))) return;
+  await startJob(e.target, '/api/location', { dir }, S.stateBroken ? '查看中…' : '搬家中…');
 };
 
 // ---------- 卸载 ----------
-$('dGo').onclick = () => {
+// 勾了「安装器自己」：别的几项自动勾上、锁住（游戏的启动脚本要用安装器里的东西）
+function paintDel() {
+  const inst = document.querySelector('.dp[value=installer]').checked;
+  document.querySelectorAll('.dp:not([value=installer])').forEach(x => { if (inst) x.checked = true; x.disabled = inst; x.parentElement.style.opacity = inst ? 0.55 : 1; });
+  $('dpNote').hidden = !inst;
+}
+document.querySelectorAll('.dp').forEach(x => x.onchange = paintDel);
+paintDel();
+$('dGo').onclick = e => {
   const parts = [...document.querySelectorAll('.dp:checked')].map(x => x.value);
   if (!parts.length) return;
   const running = document.querySelectorAll('[data-locked]').length;
   if (!confirm('确定删除：' + parts.map(p => ({ game: '游戏和所有存档', llm: '语言模型', tts: '配音', installer: '安装器' }[p])).join('、') + '？删了找不回来。' + (running ? '\n\n正在下载 / 安装的会先停下。' : ''))) return;
   byeAll = parts.includes('installer');
-  api('/api/uninstall', { parts });
+  startJob(e.target, '/api/uninstall', { parts }, '卸载中…');
 };
-// 全删完了：安装器已经不在了，网页也不留着
-let byeAll = false, byeDone = false;
+// 全删完了（后台说卸载做完、没出错，安装器也退出了）：网页也不留着
+let byeAll = false, byeOk = false, byeDone = false;
 function bye() {
   if (byeDone) return; byeDone = true;
   document.body.innerHTML = '<div style="min-height:100vh;display:grid;place-items:center;background:var(--bg);text-align:center"><div><div style="font-size:72px">🧹</div><h1 style="margin:12px 0 6px">全部删干净了</h1><p class="soft" id="byeTxt">3 秒后关掉</p></div></div>';

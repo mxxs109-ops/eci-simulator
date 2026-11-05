@@ -29,12 +29,49 @@ const INDEX_TTS_SHA = 'd9e41aac89fd00b3d71497fddb287b7f24613712';
 const readJson = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } };
 const writeJson = (f, v) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(v, null, 2), 'utf8'); };
 const defaultRoot = () => path.join(os.homedir(), 'EciSimulator');
-function state() { return { root: defaultRoot(), game: null, llm: null, tts: null, ...readJson(STATE_FILE, {}) }; }
-function saveState(patch) { const s = { ...state(), ...patch }; writeJson(STATE_FILE, s); return s; }
+const TEST = !!process.env.ECI_HOME;   // 测试模式：不碰真桌面、真防火墙、真 Tailscale
+// state.json 坏了（读不出来）：改名备份，页面顶上报红条；在她重新选安装位置之前不往里写，免得悄悄换成默认目录
+let stateBroken = false;
+function state() {
+  let saved = {};
+  if (fs.existsSync(STATE_FILE)) {
+    try { saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); }
+    catch {
+      const t = new Date().toISOString().replace(/[:.]/g, '-');
+      try { fs.renameSync(STATE_FILE, path.join(HOME, `state.broken-${t}.json`)); } catch {}
+      stateBroken = true;
+    }
+  }
+  return { root: defaultRoot(), game: null, llm: null, tts: null, ...saved };
+}
+function saveState(patch, force) {
+  if (stateBroken && !force) throw new Error('安装信息坏了，已备份：先去「安装位置」选一下装在哪');
+  const s = { ...state(), ...patch }; writeJson(STATE_FILE, s); return s;
+}
 const dirs = (s = state()) => ({ game: path.join(s.root, 'game'), llm: path.join(s.root, 'llm'), tts: path.join(s.root, 'tts') });
 // PowerShell 的输出按 UTF-8 读：不然中文路径（选文件夹、桌面在中文用户名下）会变成乱码
 const ps = cmd => execSync(`powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncoding=[Text.Encoding]::UTF8; ${cmd.replace(/"/g, '\\"')}"`, { encoding: 'utf8', windowsHide: true }).trim();
-const desktop = () => { if (MAC) return path.join(os.homedir(), 'Desktop'); try { return ps('[Environment]::GetFolderPath(\'Desktop\')'); } catch { return path.join(os.homedir(), 'Desktop'); } };
+// 不卡住安装器的版本：命令用 -EncodedCommand 传（中文、引号都不怕），等它跑完再回来
+function psAsync(cmd) {
+  return new Promise((ok, no) => {
+    const enc = Buffer.from('[Console]::OutputEncoding=[Text.Encoding]::UTF8; ' + cmd, 'utf16le').toString('base64');
+    const p = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', enc], { windowsHide: true });
+    let out = '', err = '';
+    p.stdout.on('data', d => out += d.toString('utf8')); p.stderr.on('data', d => err += d.toString('utf8'));
+    p.on('error', no);
+    p.on('close', code => code === 0 ? ok(out.trim()) : no(new Error(err.trim().slice(0, 300) || 'PowerShell 退出码 ' + code)));
+  });
+}
+const desktop = () => {
+  if (TEST) { const d = path.join(HOME, 'Desktop-test'); fs.mkdirSync(d, { recursive: true }); return d; }   // 测试时图标放这里，不动真桌面
+  if (MAC) return path.join(os.homedir(), 'Desktop');
+  try { return ps('[Environment]::GetFolderPath(\'Desktop\')'); } catch { return path.join(os.homedir(), 'Desktop'); }
+};
+// 在浏览器里打开网址：Windows 用 rundll32（cmd 的 start 有 8191 字的长度限制，网址里的 & 也会被 cmd 吃掉）
+function openUrl(u) {
+  if (MAC) return macOpen(u);
+  try { spawn('rundll32', ['url.dll,FileProtocolHandler', u], { detached: true, stdio: 'ignore', windowsHide: true }).unref(); } catch {}
+}
 function writeBat(file, lines) { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, ['@echo off', 'chcp 65001 >nul', ...lines, ''].join('\r\n'), 'utf8'); }
 // Mac 的启动脚本：.command 双击会在终端里跑
 function writeSh(file, lines) { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, ['#!/bin/bash', ...lines, ''].join('\n'), 'utf8'); fs.chmodSync(file, 0o755); }
@@ -46,38 +83,75 @@ const MAC_ICONS = ['恶雌模拟器.command', '恶雌模拟器安装器.app', '�
 // 桌面图标：用 shortcut.ps1（IShellLinkW），中文名字、中文路径在任何语言的 Windows 上都行
 function shortcut(name, target, args, icon) {
   if (MAC) {   // Mac：桌面放一个 .command，双击就跑 target
-    const f = path.join(process.env.ECI_HOME ? HOME : desktop(), name + '.command');
+    const f = path.join(desktop(), name + '.command');
     return writeSh(f, [`exec ${shq(target)}`]);
   }
-  const lnk = path.join(process.env.ECI_HOME ? HOME : desktop(), name + '.lnk');   // 测试时图标放进测试文件夹，不动真桌面
+  const lnk = path.join(desktop(), name + '.lnk');
   const r = require('child_process').spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(HERE, 'shortcut.ps1'),
     lnk, target, args || '', path.dirname(target), icon || ''], { windowsHide: true, encoding: 'utf8' });
   if (r.status !== 0) throw new Error('建桌面图标失败：' + (r.stderr || '').slice(0, 200));
 }
-const rmrf = p => { try { fs.rmSync(p, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 }); } catch {} };
+const rmrf = p => { try { fs.rmSync(p, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 }); } catch {} return !fs.existsSync(p); };   // 返回真的删没了没有
+// 被占着删不掉：等一秒再删，最多 5 次
+async function rmrfRetry(p) { for (let i = 0; i < 5; i++) { if (rmrf(p)) return true; await new Promise(r => setTimeout(r, 1000)); } return false; }
 // 端口上的程序是不是我们装的：模型、配音看程序文件在不在安装文件夹里；游戏问它自己的文件夹
 function portPid(port) {
   if (MAC) { try { return Number(execFileSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim().split(/\s+/)[0]) || 0; } catch { return 0; } }
   try { return Number(ps(`(Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess`)) || 0; } catch { return 0; }
 }
+// 游戏端口：测试模式可以用 ECI_GAME_PORT 换一个（沙盒里的假游戏），绝不去碰 7788 上她真的游戏
+const GPORT = (TEST && Number(process.env.ECI_GAME_PORT)) || 7788;
+const PORTS = { game: GPORT, llm: 8080, tts: 9880 };
+// 游戏端口上的是不是我们装的这一份（问它自己的文件夹）
+async function ourGameUp() {
+  try {
+    const st = await (await fetch(`http://127.0.0.1:${GPORT}/api/status`, { signal: AbortSignal.timeout(1500) })).json();
+    return !!st.gameDir && path.resolve(st.gameDir).toLowerCase() === path.resolve(dirs().game).toLowerCase();
+  } catch { return false; }
+}
+// 本地模型 / 配音端口上的程序是不是我们装的：是就返回进程号，不是（或者没人在听）返回 0
+async function ourPid(w) {
+  const dir = path.resolve(dirs()[w]).toLowerCase() + path.sep;
+  if (MAC) {   // Mac：启动脚本里写的是绝对路径，看命令行里有没有安装文件夹
+    const pid = portPid(PORTS[w]); if (!pid) return 0;
+    try { return execFileSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8' }).toLowerCase().includes(dir) ? pid : 0; } catch { return 0; }
+  }
+  try {
+    const out = await psAsync(`$p=(Get-NetTCPConnection -LocalPort ${PORTS[w]} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess; if ($p) { "$p|" + (Get-Process -Id $p).Path }`);
+    const [pid, exe] = out.split('|');
+    return exe && exe.toLowerCase().startsWith(dir) ? Number(pid) : 0;
+  } catch { return 0; }
+}
+// 我们的东西现在开着没有（只看端口不够：7788 / 8080 上可能是她别的游戏、自己开的模型）
+async function ourRunning() {
+  const [game, llm, tts] = await Promise.all([ourGameUp(), up('http://127.0.0.1:8080/health').then(u => u && ourPid('llm').then(Boolean)), up('http://127.0.0.1:9880/health').then(u => u && ourPid('tts').then(Boolean))]);
+  return { game, llm: !!llm, tts: !!tts };
+}
+// 按命令行关掉我们开的黑窗口（taskkill /T 连里面跑的程序一起关）：
+// 「启动游戏.bat」停在 pause 上、占着游戏文件夹，换存档、卸载会失败；本地模型、配音的窗口；看门的 watch.js。只认我们自己文件夹里的
+const LAUNCH = { game: () => path.join(dirs().game, MAC ? '启动游戏.command' : '启动游戏.bat'), llm: () => path.join(dirs().llm, MAC ? '启动本地模型.command' : '启动本地模型.bat'),
+  tts: () => path.join(dirs().tts, '启动配音.bat'), watch: () => path.join(HERE, 'watch.js') };
+async function killWindows(which) {
+  const pats = which.map(w => LAUNCH[w] && LAUNCH[w]()).filter(Boolean);
+  if (!pats.length) return;
+  if (MAC) {   // Mac：命令行里带这些路径的都停掉（游戏窗口是终端，进程没了窗口就空了）
+    for (const p of [...pats, ...(which.includes('llm') ? [path.join(dirs().llm, 'llama.cpp', 'llama-server')] : [])]) { try { execFileSync('pkill', ['-f', p], { stdio: 'ignore' }); } catch {} }
+    return;
+  }
+  const like = pats.map(p => `$_.CommandLine -like '*${p.replace(/'/g, "''").replace(/[[\]*?`]/g, '`$&')}*'`).join(' -or ');
+  try { await psAsync(`Get-CimInstance Win32_Process -Filter "Name='cmd.exe' or Name='node.exe'" | Where-Object { $_.ProcessId -ne ${process.pid} -and (${like}) } | ForEach-Object { taskkill /PID $_.ProcessId /T /F | Out-Null }`); } catch {}
+}
+// 关掉我们的东西；which 里可以有 game / llm / tts / watch（watch = 跟着游戏开的看门程序，卸载时才一起关）
 async function stopOurs(...which) {
-  const d = dirs();
+  await killWindows(which);
   for (const w of which) {
-    const port = { game: 7788, llm: 8080, tts: 9880 }[w], pid = portPid(port);
-    if (!pid) continue;
-    let ours = false;
-    if (w === 'game') {
-      try { const st = await (await fetch('http://127.0.0.1:7788/api/status', { signal: AbortSignal.timeout(1500) })).json(); ours = !!st.gameDir && path.resolve(st.gameDir).toLowerCase() === path.resolve(d.game).toLowerCase(); } catch {}
-    } else if (MAC) {   // Mac：启动脚本里写的是绝对路径，看命令行里有没有安装文件夹
-      try { ours = execFileSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8' }).toLowerCase().includes(path.resolve(d[w]).toLowerCase() + '/'); } catch {}
-    } else {
-      try { ours = ps(`(Get-Process -Id ${pid}).Path`).toLowerCase().startsWith(path.resolve(d[w]).toLowerCase()); } catch {}
-    }
-    if (ours) { try { process.kill(pid); } catch {} }
+    if (w === 'watch') continue;
+    if (w === 'game') { if (await ourGameUp()) { const pid = portPid(GPORT); if (pid) { try { process.kill(pid); } catch {} } } continue; }
+    const pid = await ourPid(w);
+    if (pid) { try { process.kill(pid); } catch {} }
   }
   await new Promise(r => setTimeout(r, 1500));
 }
-
 // ---------- 后台任务（下载、安装）：网页每秒来问进度 ----------
 const jobs = {};   // name → { step, pct, log[], done, error }
 // 正在跑的下载 / 安装子进程（curl、uv、python…）：卸载时要全部停掉
@@ -91,8 +165,29 @@ function killKids() {
     try { execSync(`taskkill /pid ${p.pid} /T /F`, { stdio: 'ignore', windowsHide: true }); } catch {}
   }
 }
+// 任务叫什么（拒绝时告诉她在等哪个）
+const JOB_NAME = { game: '游戏下载 / 更新', llm: '本地模型安装', llmtest: '本地模型试运行', tts: '配音安装', ollama: 'Ollama 一键安装', lmstudio: 'LM Studio 一键安装',
+  tailscale: 'Tailscale 安装', uninstall: '卸载', location: '搬家', saves: '存档操作' };
+const MOVERS = ['location', 'saves'];   // 搬家、换存档：要动整个文件夹，和别的任务不能一起跑
+// 能不能开始这个任务：搬家 / 存档要等别的都做完；下载安装要等搬家 / 存档做完；卸载不等（它会先把别的停下）
+function guard(name) {
+  if (stateBroken && name !== 'location') throw new Error('安装信息坏了，已备份：先去「安装位置」选一下装在哪');
+  if (jobs[name] && !jobs[name].done) throw new Error('「' + (JOB_NAME[name] || name) + '」正在进行中');
+  if (name === 'uninstall') return;
+  const running = Object.keys(jobs).filter(n => !jobs[n].done && n !== name);
+  const block = MOVERS.includes(name) ? running[0] : running.find(n => MOVERS.includes(n) || n === 'uninstall');
+  if (block) throw new Error('等「' + (JOB_NAME[block] || block) + '」做完再来');
+}
+// 安装器自己重启（安装器文件被更新了）：等 2 秒让旧的退出、端口空出来，再开新的；页面那边会自己重新加载
+function restartSelf() {
+  const js = path.join(HERE, 'server.js'), env = { ...process.env, NO_OPEN: '1' };
+  if (MAC) spawn('/bin/sh', ['-c', 'sleep 2; exec "$0" "$1"', NODE, js], { detached: true, stdio: 'ignore', env }).unref();
+  else spawn('cmd', ['/c', `ping -n 3 127.0.0.1 >nul & "${NODE}" "${js}"`], { detached: true, stdio: 'ignore', windowsHide: true, windowsVerbatimArguments: true, env }).unref();
+  server.close();
+  process.exit(0);
+}
 function job(name, fn) {
-  if (jobs[name] && !jobs[name].done) throw new Error('正在进行中');
+  guard(name);
   const j = jobs[name] = { step: '准备中', pct: 0, log: [], done: false, error: '' };
   let lastKey = '';
   const say = (step, pct) => {
@@ -101,7 +196,13 @@ function job(name, fn) {
     if (key === lastKey && /\d+ (MB|GB)/.test(step)) j.log[j.log.length - 1] = line; else j.log.push(line);   // 下载进度只更新最后一行
     lastKey = key; if (j.log.length > 200) j.log.shift();
   };
-  fn(say).then(() => { j.done = true; j.pct = 100; say('完成'); }).catch(e => { j.done = true; j.error = e.message; say('出错：' + e.message); });
+  fn(say).then(() => { j.msg = j.step; j.done = true; j.pct = 100; say('完成'); }).catch(e => { j.done = true; j.error = e.message; say('出错：' + e.message); })
+    .finally(() => {   // 先让页面看到「完成」，等别的任务也做完，再重启
+      if (!restartAfterJob) return;
+      j.restart = true;
+      const later = () => (Object.values(jobs).some(x => !x.done) ? setTimeout(later, 3000) : restartSelf());
+      setTimeout(later, 2500);
+    });
   return j;
 }
 // 大小写成人看得懂的：1GB 以下用 MB
@@ -141,12 +242,12 @@ async function download(url, file, say, label, opt = {}) {
 }
 // 解压：用 .NET 的 ZipFile 按 UTF-8 读文件名（Windows 自带的 tar 在日文、英文系统上读不了中文文件名）
 // 先解到临时文件夹再合并进去，目标文件夹里已经有东西也不怕
-function unzip(zip, dest) {
+async function unzip(zip, dest) {
   const tmp = dest.replace(/[\\/]+$/, '') + '.unzip-tmp';
   rmrf(tmp);
   const q = s => "'" + s.replace(/'/g, "''") + "'";
-  if (MAC) execFileSync('ditto', ['-x', '-k', zip, tmp], { stdio: 'ignore' });   // Mac 自带的 ditto，中文文件名也没事
-  else ps(`Add-Type -AssemblyName System.IO.Compression.FileSystem; [IO.Compression.ZipFile]::ExtractToDirectory(${q(zip)}, ${q(tmp)}, [Text.Encoding]::UTF8)`);
+  if (MAC) await run('ditto', ['-x', '-k', zip, tmp], {});   // Mac 自带的 ditto，中文文件名也没事
+  else await psAsync(`Add-Type -AssemblyName System.IO.Compression.FileSystem; [IO.Compression.ZipFile]::ExtractToDirectory(${q(zip)}, ${q(tmp)}, [Text.Encoding]::UTF8)`);
   fs.mkdirSync(dest, { recursive: true });
   fs.cpSync(tmp, dest, { recursive: true, force: true });
   rmrf(tmp);
@@ -164,11 +265,11 @@ function run(cmd, args, opts, say) {
 }
 
 // ---------- 0. 安装位置 ----------
-function pickFolder() {
+async function pickFolder() {
   if (MAC) {   // 点「取消」时 osascript 会报错：当作没选
-    try { return execFileSync('osascript', ['-e', 'activate', '-e', 'POSIX path of (choose folder with prompt "选一个文件夹，游戏和模型都装在这里面")'], { encoding: 'utf8' }).trim().replace(/\/+$/, ''); } catch { return ''; }
+    return new Promise(ok => execFile('osascript', ['-e', 'activate', '-e', 'POSIX path of (choose folder with prompt "选一个文件夹，游戏和模型都装在这里面")'], { encoding: 'utf8' }, (e, out) => ok(e ? '' : String(out).trim().replace(/\/+$/, ''))));
   }
-  return ps("Add-Type -AssemblyName System.Windows.Forms; $f=New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description='选一个文件夹，游戏和模型都装在这里面'; $f.ShowNewFolderButton=$true; if($f.ShowDialog() -eq 'OK'){$f.SelectedPath}");
+  return psAsync("Add-Type -AssemblyName System.Windows.Forms; $f=New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description='选一个文件夹，游戏和模型都装在这里面'; $f.ShowNewFolderButton=$true; if($f.ShowDialog() -eq 'OK'){$f.SelectedPath}");
 }
 function freeGB(p) {
   if (MAC) {   // df 要一个已经有的文件夹：往上找
@@ -180,15 +281,35 @@ function freeGB(p) {
   }
   try { const drive = path.parse(path.resolve(p)).root.replace(/[\\:]/g, ''); return Math.floor(Number(ps(`(Get-PSDrive ${drive}).Free`)) / 1e9); } catch { return null; }
 }
+// 安装信息坏了之后重新选了位置：看看那里已经装了什么，照着记回去（不去下载、不搬东西）
+function rebuildState(root) {
+  const d = dirs({ root }), patch = { root, game: null, llm: null, tts: null };
+  if (isGame(d.game)) patch.game = { version: readJson(path.join(d.game, 'version.json'), {}).version || '?', at: new Date().toISOString() };
+  const llmScript = path.join(d.llm, MAC ? '启动本地模型.command' : '启动本地模型.bat');
+  if (fs.existsSync(llmScript)) {
+    const file = (() => { try { return fs.readdirSync(path.join(d.llm, 'models')).find(n => n.endsWith('.gguf')); } catch { return null; } })();
+    const tier = Object.keys(MODELS).find(k => MODELS[k].file === file) || 'lite';
+    patch.llm = { tier, build: MAC ? 'metal' : null, file, ctx: null };
+  }
+  if (fs.existsSync(path.join(d.tts, '启动配音.bat'))) patch.tts = { at: new Date().toISOString() };
+  return patch;
+}
 async function moveRoot(to, say) {
+  to = path.resolve(to);
+  if (stateBroken) {
+    say('照新位置重新记一下装了什么');
+    saveState({ ...rebuildState(to), pendingCfg: null }, true);
+    stateBroken = false;
+    if (state().game) writeLaunchers(); else if (state().tts) writeTtsBat();
+    return say('记好了：' + to);
+  }
   const s = state();
   const from = s.root;
-  to = path.resolve(to);
   if (to.toLowerCase() === path.resolve(from).toLowerCase()) return;
   if (to.toLowerCase().startsWith(path.resolve(from).toLowerCase() + path.sep)) throw new Error('不能搬到原来文件夹的里面');
   if (fs.existsSync(from) && (s.game || s.llm || s.tts)) {
     say('先关掉正在运行的游戏、模型和配音');
-    await stopOurs('game', 'llm', 'tts');
+    await stopOurs('game', 'watch', 'llm', 'tts');
     fs.mkdirSync(to, { recursive: true });
     for (const name of ['game', 'saves', 'template', 'llm', 'tts']) {
       const a = path.join(from, name), b = path.join(to, name);
@@ -202,6 +323,14 @@ async function moveRoot(to, say) {
     try { fs.rmdirSync(from); } catch {}
   }
   saveState({ root: to });
+  if (s.tts) {   // 配音：启动脚本里写着声音文件夹的绝对路径；Python 环境的 pyvenv.cfg 里写着旧位置，都换成新的
+    writeTtsBat();
+    const cfg = path.join(dirs().tts, 'index-tts', '.venv', 'pyvenv.cfg');
+    try {
+      const old = path.resolve(from).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      fs.writeFileSync(cfg, fs.readFileSync(cfg, 'utf8').replace(new RegExp(old, 'gi'), () => to), 'utf8');
+    } catch {}
+  }
   writeLaunchers();
   say('搬好了：' + to);
 }
@@ -257,7 +386,7 @@ async function fetchRepo(say) {
   await download(`https://codeload.github.com/${REPO}/zip/refs/heads/${BRANCH}`, zip, say, '下载游戏', { estimate: 235e6, from: 0, to: 70 });
   stopIfCancelled();
   say('解压（一两分钟）', 72);
-  unzip(zip, tmp);
+  await unzip(zip, tmp);
   const top = fs.readdirSync(tmp).find(n => fs.statSync(path.join(tmp, n)).isDirectory());
   return path.join(tmp, top);
 }
@@ -302,31 +431,48 @@ function updateDir(dir, say) {
   copy(src, dir);
   if (src !== tpl) rmrf(src);
 }
+// 干净的模板（新建存档用）：从下载好的仓库里拷一份
+function makeTemplate(repo, say) {
+  const s = state();
+  say('准备干净的模板（新建存档用）', 80);
+  rmrf(templateDir(s)); fs.mkdirSync(s.root, { recursive: true });
+  fs.cpSync(path.join(repo, 'game'), templateDir(s), { recursive: true });
+  fs.copyFileSync(path.join(repo, 'version.json'), path.join(templateDir(s), 'version.json'));
+}
+// 两个文件夹里的文件有没有不一样（新的比旧的多、或者内容变了）
+function dirChanged(a, b) {
+  for (const e of fs.readdirSync(a, { withFileTypes: true })) {
+    const fa = path.join(a, e.name), fb = path.join(b, e.name);
+    if (e.isDirectory()) { if (!fs.existsSync(fb) || dirChanged(fa, fb)) return true; continue; }
+    try { if (!fs.readFileSync(fa).equals(fs.readFileSync(fb))) return true; } catch { return true; }
+  }
+  return false;
+}
+let restartAfterJob = false;   // 安装器文件被更新了：这个任务做完就重启自己
 async function installGame(say) {
   const s = state(), d = dirs(s);
   const repo = await fetchRepo(say);
   const ver = readJson(path.join(repo, 'version.json'), { version: '?' });
   const fresh = !fs.existsSync(path.join(d.game, 'app', 'server.js'));
-  say('准备干净的模板（新建存档用）', 80);
-  rmrf(templateDir(s)); fs.mkdirSync(s.root, { recursive: true });
-  fs.cpSync(path.join(repo, 'game'), templateDir(s), { recursive: true });
-  fs.copyFileSync(path.join(repo, 'version.json'), path.join(templateDir(s), 'version.json'));
+  makeTemplate(repo, say);
   if (fresh) {
     say('复制游戏文件', 88);
     cloneDir(templateDir(s), d.game);
     // 装游戏之前就选好的大脑：写进游戏的设置
     const pend = state().pendingCfg;
     if (pend) { writeJson(path.join(d.game, 'app', 'config.json'), { ...readJson(path.join(d.game, 'app', 'config.json'), {}), ...pend }); saveState({ pendingCfg: null }); }
-    saveState({ save: '存档 1' });
+    saveState({ save: freeSaveName(true) });
   } else {
     say('更新游戏（存档和设置不动）', 88);
     await stopOurs('game');
     updateDir(d.game, say);
   }
   fs.copyFileSync(path.join(repo, 'version.json'), path.join(d.game, 'version.json'));
-  // 安装器自己也跟着更新
+  // 安装器自己也跟着更新：文件真变了、而且跑的就是这一份，任务结束后自己重启，换上新的 server.js
   say('更新安装器', 97);
+  const changed = dirChanged(path.join(repo, 'installer'), path.join(HOME, 'installer'));
   fs.cpSync(path.join(repo, 'installer'), path.join(HOME, 'installer'), { recursive: true });
+  if (changed && path.resolve(HERE).toLowerCase() === path.resolve(HOME, 'installer').toLowerCase()) restartAfterJob = true;
   rmrf(path.join(HOME, 'tmp'));
   saveState({ game: { version: ver.version, at: new Date().toISOString() } });
   writeLaunchers();
@@ -359,27 +505,58 @@ function saveName(n) {
   if (listSaves().some(x => x.name === n)) throw new Error('已经有叫「' + n + '」的存档了');
   return n;
 }
+// 「存档 N」里第一个没被用的名字（onlyParked：只看收起来的那些，给刚装好的游戏起名用）
+function freeSaveName(onlyParked) {
+  let used = [];
+  if (onlyParked) { try { used = fs.readdirSync(savesDir()); } catch {} } else used = listSaves().map(x => x.name);
+  for (let i = 1; ; i++) if (!used.includes('存档 ' + i)) return '存档 ' + i;
+}
 // 设置（大脑、接口、手机、城市）是全局的：换存档时带过去
+const GLOBAL_CFG = ['brain', 'api', 'handoff', 'lan', 'city'];
 function carryConfig(from, to) {
   const a = readJson(path.join(from, 'app', 'config.json'), {}), f = path.join(to, 'app', 'config.json');
   const b = readJson(f, {});
-  for (const k of ['brain', 'api', 'handoff', 'lan', 'city']) if (a[k] !== undefined) b[k] = a[k];
+  for (const k of GLOBAL_CFG) if (a[k] !== undefined) b[k] = a[k];
   writeJson(f, b);
 }
 async function newSave(name, say) {
   const s = state(), d = dirs(s);
   name = saveName(name);
-  if (!isGame(templateDir(s))) throw new Error('没有模板：先在「游戏本体」里点一次「更新」');
-  const to = path.join(savesDir(s), name);
-  say('复制一份干净的游戏');
+  if (!isGame(templateDir(s))) {   // 没有模板：自动下载一份（和装游戏下的是同一个）
+    const repo = await fetchRepo(say);
+    makeTemplate(repo, say);
+    rmrf(path.join(HOME, 'tmp'));
+  }
+  // 一个存档都没有（正在玩的那个被删了）：新建的直接当正在玩的
+  const asCurrent = !isGame(d.game);
+  const to = asCurrent ? d.game : path.join(savesDir(s), name);
+  say('复制一份干净的游戏', 85);
+  if (asCurrent) rmrf(d.game);
   cloneDir(templateDir(s), to);
+  if (!isGame(to)) throw new Error('没建成：「' + name + '」里缺文件');
+  if (asCurrent) {
+    const pend = state().pendingCfg;   // 设置（大脑、手机、城市）删存档时先收在这里
+    if (pend) { writeJson(cfgFile(), { ...readJson(cfgFile(), {}), ...pend }); saveState({ pendingCfg: null }); }
+    saveState({ save: name, game: { version: readJson(path.join(templateDir(), 'version.json'), {}).version || '?', at: new Date().toISOString() } });
+    writeLaunchers();
+    return say('建好了「' + name + '」，现在玩的就是它', 100);
+  }
   if (isGame(d.game)) carryConfig(d.game, to);
-  say('建好了「' + name + '」，点「加载」开始玩');
+  say('建好了「' + name + '」，点「加载」开始玩', 100);
+}
+// 存档的程序比现在的旧：用模板更新一下
+function updateIfOld(dir, say) {
+  const ver = state().game?.version;
+  if (ver && readJson(path.join(dir, 'version.json'), {}).version !== ver && isGame(templateDir())) {
+    say('这个存档的程序是旧版本，更新到 ' + ver);
+    updateDir(dir, say);
+    fs.copyFileSync(path.join(templateDir(), 'version.json'), path.join(dir, 'version.json'));
+  }
 }
 async function loadSave(name, say) {
   const s = state(), d = dirs(s);
   const cur = s.save || '存档 1';
-  if (name === cur) return say('正在玩的就是「' + name + '」');
+  if (name === cur && isGame(d.game)) return say('正在玩的就是「' + name + '」', 100);
   const from = path.join(savesDir(s), name);
   if (!isGame(from)) throw new Error('找不到存档「' + name + '」');
   say('关掉正在运行的游戏');
@@ -387,29 +564,51 @@ async function loadSave(name, say) {
   await new Promise(r => setTimeout(r, 800));
   fs.mkdirSync(savesDir(s), { recursive: true });
   const park = path.join(savesDir(s), cur);
-  if (fs.existsSync(park)) throw new Error('saves 文件夹里已经有「' + cur + '」，先给它改个名');
-  say('把「' + cur + '」收起来');
-  try { fs.renameSync(d.game, park); } catch (e) { throw new Error('游戏文件夹正被占用（开着的黑窗口、文件夹窗口、编辑器？）关掉再试：' + e.code); }
+  const hadGame = isGame(d.game);
+  if (hadGame) {
+    if (fs.existsSync(park)) throw new Error('saves 文件夹里已经有「' + cur + '」，先给它改个名');
+    say('把「' + cur + '」收起来');
+    try { fs.renameSync(d.game, park); } catch (e) { throw new Error('游戏文件夹正被占用（开着的黑窗口、文件夹窗口、编辑器？）关掉再试：' + e.code); }
+  } else rmrf(d.game);
   say('换上「' + name + '」');
-  try { fs.renameSync(from, d.game); } catch (e) { fs.renameSync(park, d.game); throw new Error('换不过去，已经还原：' + e.code); }
-  carryConfig(park, d.game);
-  saveState({ save: name });
-  const ver = state().game?.version;
-  if (ver && readJson(path.join(d.game, 'version.json'), {}).version !== ver && isGame(templateDir())) {
-    say('这个存档的程序是旧版本，更新到 ' + ver);
-    updateDir(d.game, say);
-    fs.copyFileSync(path.join(templateDir(), 'version.json'), path.join(d.game, 'version.json'));
-  }
+  try { fs.renameSync(from, d.game); } catch (e) { if (hadGame) fs.renameSync(park, d.game); throw new Error('换不过去，已经还原：' + e.code); }
+  if (hadGame) carryConfig(park, d.game);
+  else { const pend = state().pendingCfg; if (pend) { writeJson(cfgFile(), { ...readJson(cfgFile(), {}), ...pend }); saveState({ pendingCfg: null }); } }
+  saveState({ save: name, ...(state().game ? {} : { game: { version: readJson(path.join(d.game, 'version.json'), {}).version || '?', at: new Date().toISOString() } }) });
+  updateIfOld(d.game, say);
   writeLaunchers();
-  say('现在玩的是「' + name + '」');
+  // 真的换过去了才算好
+  if (!isGame(d.game) || fs.existsSync(from) || (hadGame && !isGame(park))) throw new Error('没换成：游戏文件夹不对，打开 ' + s.root + ' 看看');
+  say('现在玩的是「' + name + '」', 100);
 }
-function deleteSave(name) {
-  const s = state();
-  if (name === (s.save || '存档 1')) throw new Error('正在玩的存档不能删：先加载别的存档');
-  const p = path.join(savesDir(s), name);
-  if (!isGame(p)) throw new Error('找不到存档「' + name + '」');
-  rmrf(p);
-  if (fs.existsSync(p)) throw new Error('有文件被占用，没删干净：关掉打开着的文件再试');
+// 删存档：别的存档直接删；正在玩的也能删（先关游戏），删完换上最近玩过的那个，一个都不剩就回到「还没有存档」
+async function deleteSave(name, say) {
+  const s = state(), d = dirs(s), cur = s.save || '存档 1';
+  const held = '游戏窗口、这个文件夹的资源管理器窗口或编辑器可能还开着，关掉再试';
+  if (name !== cur || !isGame(d.game)) {
+    const p = path.join(savesDir(s), name);
+    if (!isGame(p)) throw new Error('找不到存档「' + name + '」');
+    say('删除「' + name + '」', 50);
+    if (!(await rmrfRetry(p))) throw new Error('「' + name + '」没删干净：' + held);
+    return say('删掉了「' + name + '」', 100);
+  }
+  say('关掉正在运行的游戏', 10);
+  await stopOurs('game');
+  // 设置（大脑、手机、城市）是所有存档通用的：先收起来，换上的存档 / 以后新建的存档接着用
+  const cfg = readJson(cfgFile(), {}), keep = {};
+  for (const k of GLOBAL_CFG) if (cfg[k] !== undefined) keep[k] = cfg[k];
+  say('删除「' + name + '」', 40);
+  if (!(await rmrfRetry(d.game))) throw new Error('「' + name + '」没删干净：' + held);
+  const rest = listSaves().filter(x => !x.active).sort((a, b) => new Date(b.last || 0) - new Date(a.last || 0));
+  if (!rest.length) {
+    try { fs.unlinkSync(path.join(desktop(), MAC ? '恶雌模拟器.command' : '恶雌模拟器.lnk')); } catch {}   // 没有游戏了，桌面图标点了也开不起来
+    saveState({ game: null, save: null, pendingCfg: Object.keys(keep).length ? keep : null });
+    return say('删掉了「' + name + '」，现在一个存档都没有了', 100);
+  }
+  saveState({ pendingCfg: Object.keys(keep).length ? keep : null, save: null });
+  say('换上最近玩的「' + rest[0].name + '」', 70);
+  await loadSave(rest[0].name, say);
+  say('删掉了「' + name + '」，现在玩的是「' + rest[0].name + '」', 100);
 }
 function renameSave(name, to) {
   const s = state();
@@ -417,13 +616,34 @@ function renameSave(name, to) {
   if (name === (s.save || '存档 1')) { saveState({ save: to }); return; }
   fs.renameSync(path.join(savesDir(s), name), path.join(savesDir(s), to));
 }
+// state.json 和磁盘对不上（文件夹被手动删了、卸载删了一半）：以磁盘为准
+function reconcile(force) {
+  if (stateBroken) return;
+  if (!force && Object.entries(jobs).some(([n, j]) => !j.done && ['game', 'saves', 'location', 'uninstall', 'llm', 'tts'].includes(n))) return;   // 正在装 / 搬 / 换，文件夹本来就不全
+  const s = state(), d = dirs(s), patch = {};
+  if (s.game && !isGame(d.game)) patch.game = null;
+  if (s.llm && !fs.existsSync(path.join(d.llm, MAC ? '启动本地模型.command' : '启动本地模型.bat'))) patch.llm = null;
+  if (s.tts && !fs.existsSync(path.join(d.tts, '启动配音.bat'))) patch.tts = null;
+  if (Object.keys(patch).length) saveState(patch);
+}
 
 // ---------- 6. 自定义游戏机制：交给游戏的大脑整理成 自定义规则.md ----------
-function brainReady() {
-  const d = dirs(), cfg = brainCfg();
+// 大脑叫什么（页面上的 brainLabel 直接用这里算好的，两边一个说法）：
+// :8080 叫「本地模型」，别的本机地址叫「本机模型（模型名）」，线上叫模型名，Claude Code 叫 Claude Code；没准备好就是空的
+const LOCAL_RE = /^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/i;
+const is8080 = base => /^https?:\/\/(127\.0\.0\.1|localhost):8080(\/|$)/i.test(base || '');
+async function brainName(cfg = brainCfg()) {
+  const brain = cfg.brain || (isGame(dirs().game) ? 'claude' : null);
+  if (brain === 'claude') return findClaude() ? 'Claude Code' : '';
+  if (brain !== 'api' || !cfg.api?.base || !cfg.api?.model) return '';
+  // 指着 8080：我们装了本地模型，或者 8080 上真有服务（她自己开的 llama.cpp）才算选好
+  if (is8080(cfg.api.base)) return state().llm || (await up('http://127.0.0.1:8080/v1/models')) ? '本地模型' : '';
+  return LOCAL_RE.test(cfg.api.base) ? '本机模型（' + cfg.api.model + '）' : cfg.api.model;
+}
+async function brainReady() {
+  const d = dirs();
   // 两样分开查：游戏没装时大脑也可能已经先选好了（pendingCfg）
-  const brain = (cfg.brain || (isGame(d.game) ? 'claude' : null)) === 'claude' ? (findClaude() ? 'Claude Code' : '')
-    : cfg.brain === 'api' && cfg.api?.base && cfg.api?.model ? (/127\.0\.0\.1|localhost/.test(cfg.api.base) ? '本地模型' : cfg.api.model) : '';
+  const brain = await brainName();
   const game = isGame(d.game);
   if (game && brain) return { ok: true, what: brain, game, brain };
   return { ok: false, game, brain, why: !game ? '先装游戏本体' : '还没选好大脑：去「语言模型」选一个' };
@@ -431,11 +651,8 @@ function brainReady() {
 // 游戏开着就直接问它；没开就临时开一个不跑整点模拟的后台，用完关掉
 async function withGame(fn) {
   const d = dirs();
-  try {
-    const st = await (await fetch('http://127.0.0.1:7788/api/status', { signal: AbortSignal.timeout(1500) })).json();
-    if (st.gameDir && path.resolve(st.gameDir).toLowerCase() === path.resolve(d.game).toLowerCase()) return await fn('http://127.0.0.1:7788');
-  } catch {}
-  if (brainReady().what === '本地模型' && !(await up('http://127.0.0.1:8080/health')) && state().llm) {
+  if (await ourGameUp()) return await fn(`http://127.0.0.1:${GPORT}`);
+  if ((await brainReady()).what === '本地模型' && !(await up('http://127.0.0.1:8080/health')) && state().llm) {
     if (MAC) startLlmMac(); else
     spawn('cmd', ['/c', 'start', '"恶雌模拟器-本地模型"', '/min', path.join(dirs().llm, '启动本地模型.bat')], { windowsHide: true, detached: true });
     for (let i = 0; i < 90 && !(await up('http://127.0.0.1:8080/health')); i++) await new Promise(r => setTimeout(r, 2000));
@@ -503,7 +720,7 @@ async function installLLM(tier, build, say) {
   for (const z of zips) {
     const f = path.join(d.llm, 'download', z);
     await download(base + z, f, say, '下载 llama.cpp', { from: 0, to: 6 });
-    say('解压 ' + z, 7); unzip(f, path.join(d.llm, 'llama.cpp'));
+    say('解压 ' + z, 7); await unzip(f, path.join(d.llm, 'llama.cpp'));
   }
   await download(`https://huggingface.co/${MODEL_REPO}/resolve/main/${m.file}`, path.join(d.llm, 'models', m.file), say, '下载模型', { estimate: m.gb * 1e9, from: 8, to: 97 });
   // 上下文：游戏规则 + 存档有三万多字，给 64k；显存小的给 48k
@@ -752,7 +969,7 @@ async function listModels(api) {
 }
 
 // ---------- 游戏设置：亲密段落交给谁写、天气城市、手机连接（游戏里不再有设置，全在这里） ----------
-const GAME_PORT = 7788;
+const GAME_PORT = GPORT;
 const cfgFile = () => path.join(dirs().game, 'app', 'config.json');
 function gameCfg() {
   const c = readJson(cfgFile(), {});
@@ -768,8 +985,7 @@ async function setGameCfg(b) {
   if (!isGame(dirs().game)) throw new Error('先装游戏本体');
   // 游戏开着（而且是我们装的这份）：交给它改，手机连接开关能马上生效
   try {
-    const st = await (await fetch(`http://127.0.0.1:${GAME_PORT}/api/status`, { signal: AbortSignal.timeout(1500) })).json();
-    if (st.gameDir && path.resolve(st.gameDir).toLowerCase() === path.resolve(dirs().game).toLowerCase()) {
+    if (await ourGameUp()) {
       await fetch(`http://127.0.0.1:${GAME_PORT}/api/config`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b), signal: AbortSignal.timeout(5000) });
       return gameCfg();
     }
@@ -819,6 +1035,12 @@ function ttsPlan() {
   const ok = !why.some(w => !w.includes('二选一'));
   return { hw: h, free, ok, why };
 }
+// 配音的启动脚本（装好、搬家以后都要重写：里面有游戏声音文件夹的绝对路径）
+function writeTtsBat() {
+  const d = dirs();
+  writeBat(path.join(d.tts, '启动配音.bat'), ['title 恶雌模拟器-配音 (端口 9880)', 'cd /d "%~dp0index-tts"',
+    `set "VOICE_DIR=${path.join(d.game, '配音', '参考')}"`, 'set PYTHONUTF8=1', '.venv\\Scripts\\python.exe tts_server.py', 'pause']);
+}
 async function installTTS(say) {
   const s = state(), d = dirs(s);
   const env = { ...process.env, UV_HTTP_TIMEOUT: '300', UV_PYTHON_INSTALL_DIR: path.join(d.tts, 'python'), UV_CACHE_DIR: path.join(d.tts, 'uv-cache') };
@@ -826,13 +1048,13 @@ async function installTTS(say) {
   if (!fs.existsSync(uv)) {
     const z = path.join(d.tts, 'download', 'uv.zip');
     await download('https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip', z, say, '下载 uv', { from: 0, to: 3 });
-    unzip(z, path.join(d.tts, 'uv'));
+    await unzip(z, path.join(d.tts, 'uv'));
   }
   const src = path.join(d.tts, 'index-tts');
   if (!fs.existsSync(path.join(src, 'pyproject.toml'))) {
     const z = path.join(d.tts, 'download', 'index-tts.zip');
     await download(`https://codeload.github.com/index-tts/index-tts/zip/${INDEX_TTS_SHA}`, z, say, '下载 IndexTTS', { estimate: 60e6, from: 3, to: 8 });
-    unzip(z, path.join(d.tts, 'download'));
+    await unzip(z, path.join(d.tts, 'download'));
     fs.renameSync(path.join(d.tts, 'download', `index-tts-${INDEX_TTS_SHA}`), src);
   }
   say('装 Python 环境和 PyTorch（几 GB，要一阵子）', 10);
@@ -842,8 +1064,7 @@ async function installTTS(say) {
   await run(path.join(src, '.venv', 'Scripts', 'python.exe'), ['-c',
     "from huggingface_hub import snapshot_download; snapshot_download('IndexTeam/IndexTTS-2.5', local_dir='checkpoints', max_workers=8)"], { cwd: src, env: { ...env, PYTHONUTF8: '1' } }, say);
   fs.copyFileSync(path.join(HERE, 'tts_server.py'), path.join(src, 'tts_server.py'));
-  writeBat(path.join(d.tts, '启动配音.bat'), ['title 恶雌模拟器-配音 (端口 9880)', 'cd /d "%~dp0index-tts"',
-    `set "VOICE_DIR=${path.join(d.game, '配音', '参考')}"`, 'set PYTHONUTF8=1', '.venv\\Scripts\\python.exe tts_server.py', 'pause']);
+  writeTtsBat();
   rmrf(path.join(d.tts, 'download'));
   saveState({ tts: { at: new Date().toISOString() } });
   writeLaunchers();
@@ -880,12 +1101,13 @@ function tsState() {
 async function installTailscale(say) {
   if (tsExe()) return say('电脑上已经有 Tailscale 了', 100);
   if (MAC) throw new Error('Mac 版要从官网或 App Store 装');
+  if (TEST) return say('测试模式：不真的装 Tailscale', 100);
   const dir = path.join(HOME, 'tmp-tailscale'); fs.mkdirSync(dir, { recursive: true });
   const msi = path.join(dir, 'tailscale-setup.msi');
   await download(`https://pkgs.tailscale.com/stable/tailscale-setup-latest-${process.arch === 'arm64' ? 'arm64' : 'amd64'}.msi`, msi, say, '下载 Tailscale', { estimate: 39e6, from: 0, to: 80 });
   stopIfCancelled();
   say('安装（Windows 问「是否允许更改」时点「是」）', 85);
-  try { ps(`Start-Process msiexec -ArgumentList '/i','"${msi}"','/quiet','/norestart' -Verb RunAs -Wait`); } catch {}
+  try { await psAsync(`Start-Process msiexec -ArgumentList '/i','"${msi.replace(/'/g, "''")}"','/quiet','/norestart' -Verb RunAs -Wait`); } catch {}
   rmrf(dir);
   if (!tsExe()) throw new Error('没装上：Windows 问「是否允许更改」时要点「是」，再点一次安装');
   say('装好了', 100);
@@ -895,18 +1117,20 @@ async function tsLogin() {
   if (!tsExe()) throw new Error('先装 Tailscale');
   const s0 = tsState();
   if (s0.loggedIn) return { ok: true, already: true };
+  if (TEST) throw new Error('测试模式：不真的登录 Tailscale');
   spawn(tsExe(), ['up'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
   for (let i = 0; i < 30; i++) {
     await new Promise(r => setTimeout(r, 500));
     const s = tsState();
     if (s.loggedIn) return { ok: true };
-    if (/^https:\/\//.test(s.authUrl)) { if (MAC) macOpen(s.authUrl); else exec(`start "" "${s.authUrl}"`); return { ok: true, url: s.authUrl }; }
+    if (/^https:\/\//.test(s.authUrl)) { openUrl(s.authUrl); return { ok: true, url: s.authUrl }; }
   }
   throw new Error(MAC ? '没拿到登录网址：点屏幕右上角菜单栏里的 Tailscale 图标登录也行' : '没拿到登录网址：点电脑右下角托盘里的 Tailscale 图标登录也行');
 }
 function tsServe(on) {
   if (!tsExe()) throw new Error('先装 Tailscale');
-  if (on) tsRun(['serve', '--bg', '--yes', '--http', String(TS_PORT), 'http://127.0.0.1:7788']);
+  if (TEST) return tsState();   // 测试模式：不动真的转发
+  if (on) tsRun(['serve', '--bg', '--yes', '--http', String(TS_PORT), `http://127.0.0.1:${GPORT}`]);
   else { try { tsRun(['serve', '--http', String(TS_PORT), 'off']); } catch {} }
   return tsState();
 }
@@ -920,59 +1144,102 @@ async function board() {
 const newIssueUrl = (title, body) => `https://github.com/${REPO}/issues/new?labels=${encodeURIComponent('留言')}&title=${encodeURIComponent(title || '留言')}&body=${encodeURIComponent(body || '')}`;
 
 // ---------- 7. 手机连接：防火墙放行 7788（要管理员，弹一次确认） ----------
-function firewall(on) {
-  if (MAC) return;   // Mac 默认不拦；开了防火墙的话第一次连会自己问
-  const cmd = on
-    ? 'netsh advfirewall firewall add rule name=EciSimulator dir=in action=allow protocol=TCP localport=7788 profile=private'
-    : 'netsh advfirewall firewall delete rule name=EciSimulator';
-  ps(`Start-Process cmd -ArgumentList '/c ${cmd}' -Verb RunAs -WindowStyle Hidden -Wait`);
+// 规则对所有网络都放行（家里的 Wi-Fi 常常被 Windows 当成「公用网络」，只放行专用网络会连不上）
+async function firewall(on) {
+  if (MAC || TEST) return;   // Mac 默认不拦；测试模式不动真的防火墙
+  const add = 'netsh advfirewall firewall add rule name=EciSimulator dir=in action=allow protocol=TCP localport=7788 profile=any';
+  const del = 'netsh advfirewall firewall delete rule name=EciSimulator';
+  const cmd = on ? `${del} >nul 2>&1 & ${add}` : del;   // 放行：先删掉旧的（以前只放行专用网络），再建新的
+  await psAsync(`Start-Process cmd -ArgumentList '/c ${cmd}' -Verb RunAs -WindowStyle Hidden -Wait`);
+}
+const hasFwRule = () => { if (MAC) return false; try { execSync('netsh advfirewall firewall show rule name=EciSimulator', { windowsHide: true, stdio: 'ignore' }); return true; } catch { return false; } };
+// 真的查：规则在不在、管不管得到现在连的网络；有没有专门拦 node.exe 的规则（以前在 Windows 弹窗里点过「取消」就会有）
+async function fwState() {
+  const lan = !!readJson(cfgFile(), {}).lan?.enabled;
+  if (MAC) return { on: true, mac: true, lan };   // Mac 不用放行
+  try {
+    const j = JSON.parse(await psAsync(`$rules = @(Get-NetFirewallRule -DisplayName 'EciSimulator' -ErrorAction SilentlyContinue | Where-Object { [string]$_.Enabled -eq 'True' -and [string]$_.Direction -eq 'Inbound' -and [string]$_.Action -eq 'Allow' } | ForEach-Object { [string]$_.Profile });
+$nets = @(Get-NetConnectionProfile -ErrorAction SilentlyContinue | ForEach-Object { [string]$_.NetworkCategory });
+$block = @(Get-NetFirewallRule -Direction Inbound -Action Block -Enabled True -ErrorAction SilentlyContinue | Where-Object { ($_ | Get-NetFirewallApplicationFilter).Program -like '*node.exe' } | ForEach-Object { $_.DisplayName });
+@{ rules = $rules; nets = $nets; block = $block } | ConvertTo-Json -Compress`));
+    const list = x => [].concat(x || []);
+    const rules = list(j.rules), nets = list(j.nets), block = list(j.block);
+    const covers = p => /any/i.test(p) || nets.every(n => p.includes(/domain/i.test(n) ? 'Domain' : n));
+    const on = rules.some(covers);
+    return { on, exists: rules.length > 0, nets, nodeBlocked: block.length > 0, lan };
+  } catch {   // PowerShell 查不了：退回只看规则在不在
+    return { on: hasFwRule(), lan };
+  }
 }
 
 // ---------- 5. 卸载 ----------
-async function uninstall(parts, say) {
+// 大脑指着 8080（本地模型）：本地模型删了，这个选择也清掉（所有存档的设置、还没装游戏时先选的）
+function clearLocalBrain() {
   const s = state(), d = dirs(s);
-  // 先停下正在进行的下载和安装，等它们真的停了再删（不然这边删完、那边又解压回来）
-  const busy = Object.entries(jobs).filter(([n, j]) => n !== 'uninstall' && !j.done);
-  if (busy.length) {
-    say('先停下正在进行的下载和安装', 5);
-    cancelling = true;
-    killKids();
-    for (let i = 0; i < 60 && Object.entries(jobs).some(([n, j]) => n !== 'uninstall' && !j.done); i++) { killKids(); await new Promise(r => setTimeout(r, 500)); }
-    rmrf(path.join(HOME, 'tmp')); rmrf(path.join(HOME, 'tmp-rename'));
-  }
-  say('关掉正在运行的游戏、模型和配音', 15);
-  await stopOurs('game', 'llm', 'tts');
-  const del = (p, name) => { say('删除 ' + name); rmrf(p); };
-  if (parts.includes('llm')) { del(d.llm, '语言模型'); saveState({ llm: null }); }
-  if (parts.includes('tts')) { del(d.tts, '配音'); saveState({ tts: null }); }
-  if (parts.includes('game')) {
-    del(d.game, '游戏本体和存档');
-    del(savesDir(s), '其他存档');
-    del(templateDir(s), '新存档用的模板');
-    try { fs.unlinkSync(path.join(desktop(), '恶雌模拟器.lnk')); } catch {}
-    if (MAC) rmrf(path.join(process.env.ECI_HOME ? HOME : desktop(), '恶雌模拟器.command'));
-    saveState({ game: null });
-  }
-  if (parts.includes('installer')) {
-    try { if (tsExe()) tsServe(false); } catch {}
-    if (MAC) {   // Mac：桌面图标都删掉；安装器文件夹（连同自己下的 Node.js）等这个程序退出后再删
-      for (const n of MAC_ICONS) rmrf(path.join(process.env.ECI_HOME ? HOME : desktop(), n));
-      try { fs.rmdirSync(s.root); } catch {}
-      say('安装器会在关掉后把自己删掉');
-      spawn('/bin/sh', ['-c', 'sleep 3; rm -rf "$0"', path.resolve(HOME)], { detached: true, stdio: 'ignore' }).unref();
-      setTimeout(() => process.exit(0), 1500);
-      cancelling = false;
-      return;
+  const fix = f => { const c = readJson(f, null); if (c && c.brain === 'api' && is8080(c.api?.base)) { delete c.brain; delete c.api; writeJson(f, c); } };
+  if (isGame(d.game)) fix(cfgFile());
+  try { for (const n of fs.readdirSync(savesDir(s))) fix(path.join(savesDir(s), n, 'app', 'config.json')); } catch {}
+  const p = s.pendingCfg;
+  if (p && p.brain === 'api' && is8080(p.api?.base)) { const { brain, api, ...rest } = p; saveState({ pendingCfg: Object.keys(rest).length ? rest : null }); }
+}
+async function uninstall(parts, say) {
+  if (parts.includes('installer')) parts = ['game', 'llm', 'tts', 'installer'];   // 游戏的启动脚本要用安装器里的东西：删安装器就要连游戏一起删
+  const s = state(), d = dirs(s);
+  try {
+    // 先停下正在进行的下载和安装，等它们真的停了再删（不然这边删完、那边又解压回来）
+    const busy = Object.entries(jobs).filter(([n, j]) => n !== 'uninstall' && !j.done);
+    if (busy.length) {
+      say('先停下正在进行的下载和安装', 5);
+      cancelling = true;
+      killKids();
+      for (let i = 0; i < 60 && Object.entries(jobs).some(([n, j]) => n !== 'uninstall' && !j.done); i++) { killKids(); await new Promise(r => setTimeout(r, 500)); }
     }
-    try { execSync('netsh advfirewall firewall show rule name=EciSimulator', { windowsHide: true, stdio: 'ignore' }); firewall(false); } catch {}   // 没有这条规则就不弹「是否允许更改」
-    try { fs.rmdirSync(s.root); } catch {}
-    try { fs.unlinkSync(path.join(desktop(), '恶雌模拟器安装器.lnk')); } catch {}
-    say('安装器会在关掉后把自己删掉');
-    // 自己删不了正在运行的自己：交给一个等 3 秒的 cmd
-    spawn('cmd', ['/c', `ping -n 4 127.0.0.1 >nul & rmdir /s /q "${path.resolve(HOME)}"`], { detached: true, stdio: 'ignore', windowsHide: true, windowsVerbatimArguments: true }).unref();
-    setTimeout(() => process.exit(0), 1500);
-  } else writeLaunchers();
-  cancelling = false;   // 只卸了一部分：之后还能接着装
+    say('关掉正在运行的游戏、模型和配音', 15);
+    await stopOurs('game', 'watch', 'llm', 'tts');
+    const left = [];
+    // 删完挨个看真的没了；被占着就等一秒再删，最多 5 次；还删不掉就记下来，最后报错（不说「删干净了」）
+    const del = async (p, name, who) => {
+      say('删除 ' + name);
+      if (await rmrfRetry(p)) return true;
+      left.push(`${name}（${p}，${who}）`); return false;
+    };
+    if (parts.includes('llm') && await del(d.llm, '语言模型', '本地模型的黑窗口可能还开着')) { saveState({ llm: null }); clearLocalBrain(); }
+    if (parts.includes('tts') && await del(d.tts, '配音', '配音的黑窗口可能还开着')) saveState({ tts: null });
+    if (parts.includes('game')) {
+      const held = '游戏窗口、这个文件夹的资源管理器窗口或编辑器可能还开着';
+      await del(d.game, '游戏本体和存档', held);
+      await del(savesDir(s), '其他存档', held);
+      await del(templateDir(s), '新存档用的模板', held);
+      try { fs.unlinkSync(path.join(desktop(), '恶雌模拟器.lnk')); } catch {}
+      if (MAC) rmrf(path.join(desktop(), '恶雌模拟器.command'));
+      // 游戏没了，放行游戏端口的防火墙规则也删掉（没有这条规则就不弹「是否允许更改」）
+      if (!MAC && !TEST && hasFwRule()) { say('删除防火墙规则（Windows 问「是否允许更改」时点「是」）'); try { await firewall(false); } catch {} }
+      if (!isGame(d.game)) saveState({ game: null, save: null });
+    }
+    if (left.length) throw new Error('没删干净：' + left.join('；') + '。关掉它再点一次卸载');
+    if (parts.includes('installer')) {
+      try { if (tsExe()) tsServe(false); } catch {}
+      if (MAC) {   // Mac：桌面图标都删掉；安装器文件夹（连同自己下的 Node.js）等这个程序退出后再删
+        for (const n of MAC_ICONS) rmrf(path.join(desktop(), n));
+        try { fs.rmdirSync(s.root); } catch {}
+        say('安装器会在关掉后把自己删掉');
+        spawn('/bin/sh', ['-c', 'sleep 3; rm -rf "$0"', path.resolve(HOME)], { detached: true, stdio: 'ignore' }).unref();
+        setTimeout(() => process.exit(0), 1500);
+        return;
+      }
+      try { fs.rmdirSync(s.root); } catch {}
+      try { fs.unlinkSync(path.join(desktop(), '恶雌模拟器安装器.lnk')); } catch {}
+      say('安装器会在关掉后把自己删掉');
+      // 自己删不了正在运行的自己：交给一个等 3 秒的 cmd
+      spawn('cmd', ['/c', `ping -n 4 127.0.0.1 >nul & rmdir /s /q "${path.resolve(HOME)}"`], { detached: true, stdio: 'ignore', windowsHide: true, windowsVerbatimArguments: true }).unref();
+      setTimeout(() => process.exit(0), 1500);
+    } else writeLaunchers();
+    say(parts.length === 1 ? '删好了' : '选中的都删好了', 100);
+  } finally {
+    try { reconcile(true); } catch {}   // 出错、删了一半：state 照磁盘上的真样子改
+    cancelling = false;   // 只卸了一部分（或者出错了）：之后还能接着装
+    for (const t of ['tmp', 'tmp-rename', 'tmp-tailscale', 'tmp-ollama', 'tmp-lmstudio']) rmrf(path.join(HOME, t));
+  }
 }
 
 // ---------- 网页 ----------
@@ -980,16 +1247,21 @@ function json(res, data, status = 200) { res.writeHead(status, { 'Content-Type':
 function body(req) { return new Promise((ok, no) => { let b = ''; req.on('data', c => b += c); req.on('end', () => { try { ok(JSON.parse(b || '{}')); } catch (e) { no(e); } }); }); }
 const routes = {
   'GET /api/state': async () => {
+    state(); try { reconcile(); } catch {}   // 先读一次（坏了就备份），再照磁盘改正
     const s = state(), d = dirs(s);
     const cfg = brainCfg();
-    return { ...s, platform: MAC ? 'darwin' : process.platform, dirs: d, home: HOME, free: freeGB(s.root), brain: cfg.brain || (isGame(d.game) ? 'claude' : null), api: { ...(cfg.api || {}), key: cfg.api?.key ? cfg.api.key.slice(0, 4) + '…' + cfg.api.key.slice(-4) : '' }, claude: findClaude(),
-      running: { game: await up('http://127.0.0.1:7788/api/status'), llm: await up('http://127.0.0.1:8080/health'), tts: await up('http://127.0.0.1:9880/health') } };
+    const [running, brainWhat] = await Promise.all([ourRunning(), brainName(cfg)]);
+    return { ...s, platform: MAC ? 'darwin' : process.platform, dirs: d, home: HOME, free: freeGB(s.root), stateBroken, test: TEST,
+      brain: cfg.brain || (isGame(d.game) ? 'claude' : null), brainWhat,
+      api: { ...(cfg.api || {}), key: cfg.api?.key ? cfg.api.key.slice(0, 4) + '…' + cfg.api.key.slice(-4) : '' }, claude: findClaude(),
+      custom: fs.existsSync(path.join(d.game, '自定义规则.md')), template: isGame(templateDir(s)), running };
   },
-  'POST /api/pick-folder': async () => ({ path: pickFolder() }),
+  'POST /api/pick-folder': async () => ({ path: await pickFolder() }),
   'POST /api/location': async b => { job('location', say => moveRoot(b.dir, say)); return { ok: true }; },
   'GET /api/game/check': async () => { const r = await remoteVersion(); return { remote: r, local: state().game?.version || null }; },
   'POST /api/game/install': async () => { job('game', installGame); return { ok: true }; },
   'POST /api/game/open': async () => {
+    if (!isGame(dirs().game)) throw new Error('还没有游戏：先装游戏本体或新建一个存档');
     if (MAC) { macOpen(path.join(dirs().game, '启动游戏.command')); return { ok: true }; }   // 在终端里打开
     spawn('cmd', ['/c', 'start', '""', path.join(dirs().game, '启动游戏.bat')], { detached: true, windowsHide: true }); return { ok: true };
   },
@@ -1003,54 +1275,65 @@ const routes = {
   'POST /api/brain': async b => ({ ok: true, config: !!setBrain(b) }),   // 游戏没装也能先选，装的时候带过去
   'POST /api/brain/test': async b => {
     const t = { ...b.api };
-    if (t.key && t.key.includes('…')) t.key = readJson(path.join(dirs().game, 'app', 'config.json'), {}).api?.key || '';
+    if (!t.base || !t.model) return { ok: false, error: '接口地址和模型名都要填' };
+    if (t.key && t.key.includes('…')) t.key = brainCfg().api?.key || '';
     // 本机模型第一次要先把模型读进内存，给 2 分钟
-    const r = await fetch(t.base.replace(/\/+$/, '') + '/chat/completions', { method: 'POST', signal: AbortSignal.timeout(/127\.0\.0\.1|localhost/.test(t.base) ? 120000 : 30000),
-      headers: { 'Content-Type': 'application/json', ...(t.key ? { Authorization: 'Bearer ' + t.key } : {}) },
-      body: JSON.stringify({ model: t.model, messages: [{ role: 'user', content: '只回复两个字：你好' }], max_tokens: 20 }) });
-    const x = await r.text();
-    if (!r.ok) return { ok: false, error: `${r.status}：${x.slice(0, 200)}` };
-    return { ok: true, reply: JSON.parse(x).choices?.[0]?.message?.content || '' };
+    try {
+      const r = await fetch(t.base.replace(/\/+$/, '') + '/chat/completions', { method: 'POST', signal: AbortSignal.timeout(LOCAL_RE.test(t.base) ? 120000 : 30000),
+        headers: { 'Content-Type': 'application/json', ...(t.key ? { Authorization: 'Bearer ' + t.key } : {}) },
+        body: JSON.stringify({ model: t.model, messages: [{ role: 'user', content: '只回复两个字：你好' }], max_tokens: 20 }) });
+      const x = await r.text();
+      if (!r.ok) return { ok: false, error: `${r.status}：${x.slice(0, 200)}` };
+      return { ok: true, reply: JSON.parse(x).choices?.[0]?.message?.content || '' };
+    } catch (e) { return { ok: false, error: '连不上：' + (e.cause?.code || e.message) }; }
   },
   'GET /api/tts/check': async () => ttsPlan(),
-  'POST /api/tts/install': async () => { if (!ttsPlan().ok) throw new Error('检查没通过'); job('tts', installTTS); return { ok: true }; },
+  'POST /api/tts/install': async () => {
+    if (!isGame(dirs().game)) throw new Error('先装游戏本体');
+    const p = ttsPlan(); if (!p.ok) throw new Error(p.why.filter(w => !w.includes('二选一')).join('；') || '检查没通过');
+    job('tts', installTTS); return { ok: true };
+  },
   'GET /api/board': async () => board(),
-  'POST /api/board/new': async b => { if (MAC) { macOpen(newIssueUrl(b.title, b.body)); return { ok: true }; } exec(`start "" "${newIssueUrl(b.title, b.body).replace(/"/g, '%22')}"`); return { ok: true }; },
-  'POST /api/open': async b => { if (/^https:\/\//.test(b.url)) MAC ? macOpen(b.url) : exec(`start "" "${b.url.replace(/"/g, '%22')}"`); return { ok: true }; },
-  'POST /api/firewall': async b => { firewall(!!b.on); return { ok: true }; },
-  // 防火墙规则在不在（查不用管理员）；游戏设置里开没开手机连接
+  // 留言正文太长网址会超长：截到 1500 字
+  'POST /api/board/new': async b => { openUrl(newIssueUrl(String(b.title || '').slice(0, 100), String(b.body || '').slice(0, 1500))); return { ok: true }; },
+  'POST /api/open': async b => { if (/^https:\/\//.test(b.url)) openUrl(b.url); return { ok: true }; },
+  'POST /api/firewall': async b => { await firewall(!!b.on); return { ok: true }; },
   'POST /api/geo': async b => { try { return { ok: true, ...(await geo(String(b.city || '').trim())) }; } catch (e) { return { ok: false, error: e.message }; } },
-  'GET /api/gameup': async () => ({ up: await up('http://127.0.0.1:7788/api/status') }),
+  'GET /api/gameup': async () => ({ up: await ourGameUp() }),   // 只认我们这一份游戏
   'GET /api/gamecfg': async () => (isGame(dirs().game) ? gameCfg() : { none: true }),
   'POST /api/gamecfg': async b => setGameCfg(b),
   'GET /api/tailscale': async () => tsState(),
   'POST /api/tailscale/install': async () => { job('tailscale', say => installTailscale(say)); return { ok: true }; },
   'POST /api/tailscale/login': async () => tsLogin(),
   'POST /api/tailscale/serve': async b => ({ ok: true, ...tsServe(!!b.on) }),
-  'GET /api/firewall': async () => {
-    if (MAC) return { on: true, mac: true, lan: !!readJson(path.join(dirs().game, 'app', 'config.json'), {}).lan?.enabled };   // Mac 不用放行
-    let on = false; try { execSync('netsh advfirewall firewall show rule name=EciSimulator', { windowsHide: true, stdio: 'ignore' }); on = true; } catch {}
-    const lan = !!readJson(path.join(dirs().game, 'app', 'config.json'), {}).lan?.enabled;
-    return { on, lan };
+  // 防火墙规则在不在、管不管得到现在的网络（查不用管理员）；游戏设置里开没开手机连接
+  'GET /api/firewall': async () => fwState(),
+  'POST /api/uninstall': async b => {
+    let parts = Array.isArray(b.parts) && b.parts.length ? b.parts.filter(p => ['game', 'llm', 'tts', 'installer'].includes(p)) : ['game', 'llm', 'tts', 'installer'];
+    if (parts.includes('installer')) parts = ['game', 'llm', 'tts', 'installer'];   // 删安装器就要连游戏一起删（游戏的启动脚本用着安装器里的东西）
+    job('uninstall', say => uninstall(parts, say)); return { ok: true, parts };
   },
-  'POST /api/uninstall': async b => { job('uninstall', say => uninstall(b.parts || ['game', 'llm', 'tts', 'installer'], say)); return { ok: true }; },
-  'GET /api/saves': async () => ({ list: listSaves(), template: isGame(templateDir()) }),
+  'GET /api/saves': async () => ({ list: listSaves(), template: isGame(templateDir()), next: freeSaveName() }),
   'POST /api/saves/new': async b => { job('saves', say => newSave(b.name, say)); return { ok: true }; },
   'POST /api/saves/load': async b => { job('saves', say => loadSave(b.name, say)); return { ok: true }; },
-  'POST /api/saves/delete': async b => { deleteSave(b.name); return { ok: true }; },
-  'POST /api/saves/rename': async b => { renameSave(b.name, b.to); return { ok: true }; },
+  'POST /api/saves/delete': async b => { job('saves', say => deleteSave(b.name, say)); return { ok: true }; },
+  'POST /api/saves/rename': async b => { guard('saves'); renameSave(b.name, b.to); return { ok: true }; },
   'GET /api/custom': async () => {
-    const ready = brainReady(), d = dirs();
+    const ready = await brainReady(), d = dirs();
     let rules = ''; try { rules = fs.readFileSync(path.join(d.game, '自定义规则.md'), 'utf8').trim(); } catch {}
     return { ready, rules, log: readJson(path.join(d.game, 'app', '自定义记录.json'), []).slice(-20).reverse(), save: state().save || '存档 1' };
   },
   'POST /api/custom': async b => {
-    const ready = brainReady(); if (!ready.ok) throw new Error(ready.why);
+    const ready = await brainReady(); if (!ready.ok) throw new Error(ready.why);
     return withGame(base => gameApi(base, '/api/custom', { text: b.text }));
   },
   'POST /api/custom/save': async b => {
+    if (!isGame(dirs().game)) throw new Error('先装游戏本体');
     const f = path.join(dirs().game, '自定义规则.md'), t = String(b.rules || '').trim();
     if (t) fs.writeFileSync(f, t + '\n', 'utf8'); else rmrf(f);
+    // 真的写进去了才算
+    const now = fs.existsSync(f) ? fs.readFileSync(f, 'utf8').trim() : '';
+    if (now !== t) throw new Error('没存上：' + f + ' 写不进去');
     return { ok: true };
   },
   'GET /api/jobs': async () => jobs,
@@ -1060,10 +1343,22 @@ async function up(u) { try { return (await fetch(u, { signal: AbortSignal.timeou
 // 安装器网页关掉 3 分钟、又没有下载 / 安装在跑：安装器自己退出（网页开着每秒都会来问一次）
 let lastHit = Date.now();
 setInterval(() => { if (Date.now() - lastHit > 180000 && Object.values(jobs).every(j => j.done)) process.exit(0); }, 30000).unref();
+// 别的网站不能借她的浏览器来点这里的按钮：Host 只认本机地址；POST 要是 JSON、来源（Origin）要是这个页面自己
+const HOSTS = [`127.0.0.1:${PORT}`, `localhost:${PORT}`];
+function allowed(req, url) {
+  if (!HOSTS.includes(String(req.headers.host || '').toLowerCase())) return false;
+  if (req.method !== 'GET' && url.startsWith('/api/')) {
+    if (!/^application\/json\b/i.test(req.headers['content-type'] || '')) return false;
+    const o = req.headers.origin;
+    if (o && !HOSTS.map(h => 'http://' + h).includes(o.toLowerCase())) return false;
+  }
+  return true;
+}
 const server = http.createServer(async (req, res) => {
   if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress)) { res.writeHead(403); return res.end(); }
-  lastHit = Date.now();
   const url = req.url.split('?')[0];
+  if (!allowed(req, url)) return json(res, { ok: false, error: '不让外面的网页调用' }, 403);
+  lastHit = Date.now();
   try {
     const fn = routes[`${req.method} ${url}`];
     if (fn) return json(res, await fn(req.method === 'POST' ? await body(req) : {}));
@@ -1074,5 +1369,5 @@ const server = http.createServer(async (req, res) => {
     fs.createReadStream(file).pipe(res);
   } catch (e) { json(res, { ok: false, error: e.message }, 500); }
 });
-server.listen(PORT, '127.0.0.1', () => { if (!process.env.NO_OPEN) MAC ? macOpen(`http://127.0.0.1:${PORT}/`) : exec(`start "" http://127.0.0.1:${PORT}/`); });
-server.on('error', e => { if (e.code === 'EADDRINUSE') { if (MAC) { macOpen(`http://127.0.0.1:${PORT}/`); return setTimeout(() => process.exit(0), 800); } exec(`start "" http://127.0.0.1:${PORT}/`); process.exit(0); } });
+server.listen(PORT, '127.0.0.1', () => { if (!process.env.NO_OPEN) openUrl(`http://127.0.0.1:${PORT}/`); });
+server.on('error', e => { if (e.code === 'EADDRINUSE') { if (!process.env.NO_OPEN) openUrl(`http://127.0.0.1:${PORT}/`); setTimeout(() => process.exit(0), 800); } });
