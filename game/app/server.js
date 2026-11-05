@@ -443,6 +443,7 @@ function chat(text, res) {
       if (!ok) send({ type: 'error', text: err || '没有收到回复' });
     }
     send({ type: 'done' });
+    localLLM.fillDiaries(GAME_DIR, readConfig().handoff, readJson(HISTORY_FILE, []));   // /写日记 时也一样
     res.end();
   });
 }
@@ -534,6 +535,7 @@ async function simTick() {
     if (who) history.push({ role: 'ai', text: `🕐 ${timeStr(now)}　${who}`, time: `${dateStr()} ${timeStr()}`, tick: true });
   }
   writeJson(HISTORY_FILE, history);
+  localLLM.fillDiaries(GAME_DIR, readConfig().handoff, history);   // 日记里亲密的那段交给本地模型
 }
 setInterval(simTick, 60 * 1000);
 setTimeout(simTick, 10 * 1000);
@@ -828,7 +830,7 @@ const server = http.createServer(async (req, res) => {
       } catch (e) { res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('voice off: ' + e.message); }
     }
     if (req.method === 'GET' && url === '/api/history') return json(res, readJson(HISTORY_FILE, []));
-    if (req.method === 'GET' && url === '/api/status') return json(res, { busy, simming, started: fs.existsSync(START_FILE), gameDir: isLoopback(req) ? GAME_DIR : undefined });
+    if (req.method === 'GET' && url === '/api/status') return json(res, { busy, simming, started: fs.existsSync(START_FILE) });
     if (req.method === 'GET' && url === '/api/map') return json(res, readMap());
     if (req.method === 'GET' && url === '/api/cast') return json(res, listCast());
     if (req.method === 'GET' && url === '/api/husband-diary') return json(res, listHusbandDiaries());
