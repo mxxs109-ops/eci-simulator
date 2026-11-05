@@ -14,7 +14,13 @@
 
 ## 安装（Windows）
 
-按 `Win + R`，输入 `powershell` 回车，把下面这一行粘贴进去，回车：
+按 `Win + R`，输入 `cmd` 回车，把下面这一行粘贴进去，回车（也可以直接粘贴进 `Win + R` 的「运行」框）：
+
+```cmd
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/mxxs109-ops/eci-simulator/main/install.ps1 | iex"
+```
+
+已经开着 PowerShell 的话，用这一行也一样：
 
 ```powershell
 irm https://raw.githubusercontent.com/mxxs109-ops/eci-simulator/main/install.ps1 | iex
