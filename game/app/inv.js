@@ -133,7 +133,7 @@
   const colorOf = n => (typeof COLORS !== 'undefined' && COLORS[n]) || (n === '我' ? 'var(--me)' : '#8a6a4a');
   function avatarStyle(n) {
     if (n === '我') return `background-image:url(${G('立绘/2D/我-小人.png')});background-size:contain;background-position:center`;
-    if (typeof faceStyle === 'function' && typeof cast !== 'undefined' && cast[n]) return faceStyle(n, 70);
+    if (typeof faceStyle === 'function' && typeof cast !== 'undefined' && cast[n]) return faceStyle(n, innerWidth <= 760 ? 48 : 70);   // 手机上头像小一圈，按实际大小裁，脸才在正中
     return '';
   }
   function draw() {

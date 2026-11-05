@@ -246,7 +246,7 @@
     name.style.setProperty('--c', p.kind === 'sum' ? '#b8893a' : p.kind === 'me' ? 'var(--me)' : (COLORS[p.who]) || '#8a5a3c');
     box.className = 'box ' + p.kind;
     // 说话的人：对话框左边一个头像框
-    const face = box.querySelector('.face'), small = innerWidth <= 900 ? 76 : 124;
+    const face = box.querySelector('.face'), small = innerWidth <= 760 ? 58 : innerWidth <= 900 ? 76 : 124;   // 手机上的方头像是 62px（去掉边框 58），按实际大小裁脸才居中
     const fs2 = p.kind === 'say' && typeof faceStyle === 'function' ? faceStyle(p.who.split(/[、,，和]/)[0].trim(), small) : '';
     const fsMe = p.kind === 'me' ? `background-image:url(${G('立绘/2D/我-小人.png')});background-size:contain;background-position:center` : '';
     face.setAttribute('style', (fs2 || fsMe) + ';--c:' + (p.kind === 'me' ? 'var(--me)' : (COLORS[p.who] || '#c9a46a')));
