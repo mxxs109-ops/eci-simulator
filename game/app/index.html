@@ -198,6 +198,7 @@
   }
   @media (max-width: 900px) { #cast { display: none; } }
   .act { color: var(--muted); font-style: italic; }
+  .think { color: #4f6a96; font-style: italic; }
   .env { color: var(--muted); font-size: 13px; text-align: center; margin: 10px 0 2px; }
   .sum { margin: 18px 0 4px; padding: 12px 18px 14px; border-radius: 14px; background: linear-gradient(135deg, #fffaf0, #fbefd6); border: 1px solid #e8c98f;
     box-shadow: 0 4px 14px rgba(160,110,40,.12), inset 0 1px 0 #fff; font-size: 14.5px; line-height: 1.8; color: #5a4632; }
@@ -736,6 +737,7 @@ hookAttach(chatAttach, $('chatClip'), input, $('view-chat'));
 function inline(s) {
   return esc(s)
     .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/\*([^*\n]+?)\*/g, '<i class="think">$1</i>')
     .replace(/(（[^（）]*）|\([^()]*\))/g, '<span class="act">$1</span>')
     .replace(/`([^`]+)`/g, '$1')
     .replace(/\n/g, '<br>');

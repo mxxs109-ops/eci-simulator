@@ -41,6 +41,10 @@
   .inv .bar .t { display: flex; justify-content: space-between; }
   .inv .bar .g { height: 8px; border-radius: 4px; background: #e6dccb; overflow: hidden; margin-top: 4px; }
   .inv .bar .g i { display: block; height: 100%; border-radius: 4px; }
+  .inv .fightrow { display: flex; }
+  .inv .fightbtn { flex: 1; border: 0; border-radius: 12px; padding: 10px 14px; font: 700 15px inherit; color: #fff; background: linear-gradient(135deg, #c0533d, #8c3b2e); box-shadow: 0 4px 12px rgba(140,59,46,.3); cursor: pointer; transition: transform .15s; }
+  .inv .fightbtn:hover:not(:disabled) { transform: translateY(-1px) scale(1.01); }
+  .inv .fightbtn:disabled { background: #b8aa98; box-shadow: none; cursor: not-allowed; }
   .inv h4 { margin: 4px 0 6px; font: 700 15px "STKaiti","KaiTi",serif; color: var(--c); letter-spacing: 2px; }
   .inv .attrs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
   .inv .attr { background: rgba(255,255,255,.75); border-radius: 12px; padding: 8px 10px; cursor: pointer; border: 1px solid transparent; transition: transform .12s; }
@@ -166,6 +170,7 @@
     box.innerHTML = `<div class="iside">${side}</div><div class="main">
       <div class="pic"><img src="${pic}" onerror="this.style.display='none'"><div class="nm"><b>${E(d.name === '家里' ? '家里' : d.name)}</b>${d.away ? '<span class="away-tag">尚未登场</span>' : ''}<small>${T(now ? now.v.split(/[；;]/)[0] : '')}</small>${was ? `<small>曾经：${T(was.v)}</small>` : ''}</div></div>
       ${stat}${bars || fight ? `<div class="bars">${bars}${fight}</div>` : ''}
+      ${bt.hp && !d.away && d.name !== '我' && d.name !== '家里' ? `<div class="fightrow"><button class="fightbtn" data-hfight="${E(d.name)}" ${bt.hp[0] > 0 ? '' : 'disabled'}>${bt.hp[0] > 0 ? '⚔️ 出战' : '💤 伤太重，打不了'}</button></div>` : ''}
       ${radarBox}
       ${attrs.length ? `<div><h4>属性</h4><div class="attrs">${attrs.map((a, i) => `<div class="attr" data-attr="${i}"><div class="k">${ATTR_ICON[a.k] || '◆'} ${E(a.k)}</div><div class="v">${T(a.v)}</div></div>`).join('')}</div></div>` : ''}
       <div><h4>背包 · ${d.items.length} 件</h4><div class="slots">${slots}</div>

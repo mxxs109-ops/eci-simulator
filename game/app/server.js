@@ -655,8 +655,29 @@ function readBabies() {
   return out;
 }
 // 打完一仗：改 崽崽.md 里这只崽的等级和经验，再在聊天里放一行小字
+function recordHusbandBattle(b) {
+  const name = String(b.husband || '').trim();
+  const file = path.join(GAME_DIR, '物品与等级.md');
+  let text = '';
+  try { text = fs.readFileSync(file, 'utf8'); } catch { return { ok: false }; }
+  const hp = Math.max(0, Math.round(Number(b.hp) || 0)), mp = Math.max(0, Math.round(Number(b.mp) || 0));
+  let inSec = false, hpTxt = '', mpTxt = '';
+  const lines = text.split(/\r?\n/).map(l => {
+    if (/^## /.test(l)) inSec = l.slice(3).trim() === name;
+    if (!inSec || !/^[-*]\s+\*\*战斗\*\*[：:]/.test(l)) return l;
+    return l.replace(/血量\s*\d+\s*\/\s*(\d+)/, (_, m) => (hpTxt = `血量 ${Math.min(hp, +m)}/${m}`))
+      .replace(/灵力\s*\d+\s*\/\s*(\d+)/, (_, m) => (mpTxt = `灵力 ${Math.min(mp, +m)}/${m}`));
+  });
+  fs.writeFileSync(file, lines.join('\n'), 'utf8');
+  const history = readJson(HISTORY_FILE, []);
+  const res = b.run ? '和' + (b.enemy || '野兽') + '交了手，撤了回来' : b.win ? '打赢了' + (b.enemy || '野兽') : '没打过' + (b.enemy || '野兽') + (hp <= 0 ? '，伤得站不起来' : '');
+  history.push({ role: 'ai', tick: true, time: `${dateStr()} ${timeStr()}`, text: `⚔️ ${timeStr(new Date())}　${name}在${b.place || '院外林子'}${res}（${[hpTxt, mpTxt].filter(Boolean).join('，')}）` });
+  writeJson(HISTORY_FILE, history);
+  return { ok: true };
+}
 function recordBattle(b) {
   const name = String(b.name || '').trim();
+  if (b.husband) return recordHusbandBattle(b);
   if (!name) return { ok: false };
   let text = '';
   try { text = fs.readFileSync(BABY_FILE, 'utf8'); } catch { return { ok: false }; }
