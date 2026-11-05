@@ -7,6 +7,7 @@ const path = require('path');
 // 交接给谁写：默认本机 llama.cpp（8080）；也可以在设置里换成任何 OpenAI 兼容接口
 const DEFAULT_TARGET = { base: process.env.LOCAL_LLM_URL || 'http://127.0.0.1:8080/v1', key: '', model: '' };
 const MARK = /〔接手：([^〕]*)〕/;
+const MIN_LEN = 1500;   // 一段至少这么多字，不够就让它接着写
 const HOLD = 160;   // 本地模型还在写时，最后这么多字先压着不显示（防抄要剪也只剪这一截）
 // Claude 没写标记、却在回复里跳出来说写不了：从那一段起自动交接，拒绝和出戏的话不给她看
 const REFUSE = /(露骨|色情|性爱|性行为|性描写|性内容|成人内容|内容政策|使用政策|安全准则|指导原则)[^\n]{0,40}(不能|无法|没法|不便|不会|不提供|就此|到此)|(不能|无法|没法|不便|不会)[^\n]{0,30}(露骨|色情|性爱|性行为|性描写|性内容|成人内容)|作为\s*(AI|Claude|语言模型)|I (can't|cannot|won't)/;
@@ -94,7 +95,7 @@ function create(gameDir, onUpdate, target, ctx) {
   // 一轮里第几个标记 → { text, done }。按顺序认，不按说明文字认：Claude 存完档重写一遍回复、标记说明换了几个字，
   // 也还是同一段，不会再开一段新的把已经写好的顶掉
   const jobs = [];
-  // 本地模型有时会把上一轮已经写过的一大段原样抄回来：一发现就停，抄的那截剪掉
+  // 本地模型有时会把上一轮已经写过的一大段原样抄回来：一发现就停，抄的那截剪掉，再从剪开处接着写
   const seen = (ctx?.history || []).filter(h => h.role !== 'user').map(h => h.text);
   function copying(job) {
     const n = job.text.length;
@@ -106,38 +107,59 @@ function create(gameDir, onUpdate, target, ctx) {
     console.log('[本地模型] 开始照抄上一轮，停在这里');
     return true;
   }
+  // 写一次：从 job.text 已有的地方接着写（有字就当成它自己写了一半，让它续下去）。照抄了返回 true
+  async function once(job, messages) {
+    const ac = new AbortController();
+    let copied = false;
+    const msgs = job.text ? [...messages, { role: 'assistant', content: job.text }] : messages;
+    const r = await fetch(T.base.replace(/\/+$/, '') + '/chat/completions', {
+      signal: ac.signal,
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...(T.key ? { Authorization: 'Bearer ' + T.key } : {}) },
+      body: JSON.stringify({ ...(T.model ? { model: T.model } : {}), messages: msgs, stream: true, max_tokens: 6000,
+        temperature: 0.95, top_p: 0.92, top_k: 50, presence_penalty: 1.0,
+        // DRY：前文里出现过的长句子越往下抄罚得越重（llama.cpp 的采样器；只发给本机，线上接口可能不认这几个参数）
+        ...(/127.0.0.1|localhost/.test(T.base) ? { dry_multiplier: 0.8, dry_base: 1.75, dry_allowed_length: 4, dry_penalty_last_n: 16384 } : {}),
+        chat_template_kwargs: { enable_thinking: false } }),
+    });
+    if (!r.ok) throw new Error('本地模型 ' + r.status);
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    let buf = '';
+    try {
+      for (;;) {
+        const { value, done } = await reader.read(); if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let nl;
+        while ((nl = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
+          if (!line.startsWith('data:') || line === 'data: [DONE]') continue;
+          let d; try { d = JSON.parse(line.slice(5)).choices?.[0]?.delta?.content; } catch {}
+          if (!d) continue;
+          job.text += d;
+          if (copying(job)) { copied = true; ac.abort(); break; }
+          onUpdate();
+        }
+        if (copied) break;
+      }
+    } catch (e) { if (!copied) throw e; }
+    return copied;
+  }
   function start(brief, before) {
     const job = { text: '', done: false };
     jobs.push(job);
-    const ac = new AbortController();
     (async () => {
       try {
         if (!(await up(T))) throw new Error('本地模型没开');
-        const r = await fetch(T.base.replace(/\/+$/, '') + '/chat/completions', {
-          signal: ac.signal,
-          method: 'POST', headers: { 'Content-Type': 'application/json', ...(T.key ? { Authorization: 'Bearer ' + T.key } : {}) },
-          body: JSON.stringify({ ...(T.model ? { model: T.model } : {}), messages: buildMessages(gameDir, brief, before, ctx), stream: true, max_tokens: 6000,
-            temperature: 0.95, top_p: 0.92, top_k: 50, presence_penalty: 1.0, chat_template_kwargs: { enable_thinking: false } }),
-        });
-        if (!r.ok) throw new Error('本地模型 ' + r.status);
-        const reader = r.body.getReader(), dec = new TextDecoder();
-        let buf = '';
-        for (;;) {
-          const { value, done } = await reader.read(); if (done) break;
-          buf += dec.decode(value, { stream: true });
-          let nl;
-          while ((nl = buf.indexOf('\n')) >= 0) {
-            const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
-            if (!line.startsWith('data:') || line === 'data: [DONE]') continue;
-            try { const d = JSON.parse(line.slice(5)).choices?.[0]?.delta?.content; if (d) { job.text += d; if (copying(job)) { ac.abort(); break; } onUpdate(); } } catch {}
-          }
+        const messages = buildMessages(gameDir, brief, before, ctx);
+        // 照抄被剪掉、或者写得不够长就停了：从停下的地方接着写新的，最多接 5 次
+        for (let k = 0; k < 6; k++) {
+          const copied = await once(job, messages);
+          if (!copied && job.text.trim().length >= MIN_LEN) break;
+          console.log(`[本地模型] ${copied ? '剪掉照抄的一截' : '才写了 ' + job.text.trim().length + ' 字'}，接着写`);
         }
         job.text = job.text.trim();
       } catch (e) {
-        if (!ac.signal.aborted) {
-          console.log('[本地模型] ' + e.message + '，这一段跳过');
-          job.text = '';
-        }
+        console.log('[本地模型] ' + e.message + (job.text ? '，写到这里为止' : '，这一段跳过'));
+        job.text = job.text.trim();
       }
       job.done = true; onUpdate();
     })();
