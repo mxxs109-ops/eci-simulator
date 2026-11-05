@@ -647,7 +647,8 @@ $('locPick').onclick = async () => {
 $('dGo').onclick = () => {
   const parts = [...document.querySelectorAll('.dp:checked')].map(x => x.value);
   if (!parts.length) return;
-  if (!confirm('确定删除：' + parts.map(p => ({ game: '游戏和所有存档', llm: '语言模型', tts: '配音', installer: '安装器' }[p])).join('、') + '？删了找不回来。')) return;
+  const running = document.querySelectorAll('[data-locked]').length;
+  if (!confirm('确定删除：' + parts.map(p => ({ game: '游戏和所有存档', llm: '语言模型', tts: '配音', installer: '安装器' }[p])).join('、') + '？删了找不回来。' + (running ? '\n\n正在下载 / 安装的会先停下。' : ''))) return;
   api('/api/uninstall', { parts });
 };
 

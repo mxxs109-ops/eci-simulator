@@ -61,6 +61,12 @@ async function stopOurs(...which) {
 
 // ---------- 后台任务（下载、安装）：网页每秒来问进度 ----------
 const jobs = {};   // name → { step, pct, log[], done, error }
+// 正在跑的下载 / 安装子进程（curl、uv、python…）：卸载时要全部停掉
+const kids = new Set();
+let cancelling = false;   // 卸载开始了：别的任务看到它就停下，不再往下装
+const track = p => { kids.add(p); p.on('close', () => kids.delete(p)); return p; };
+const stopIfCancelled = () => { if (cancelling) throw new Error('已经停下（要卸载）'); };
+function killKids() { for (const p of kids) { try { execSync(`taskkill /pid ${p.pid} /T /F`, { stdio: 'ignore', windowsHide: true }); } catch {} } }
 function job(name, fn) {
   if (jobs[name] && !jobs[name].done) throw new Error('正在进行中');
   const j = jobs[name] = { step: '准备中', pct: 0, log: [], done: false, error: '' };
@@ -88,7 +94,8 @@ async function download(url, file, say, label, opt = {}) {
   const guess = total || opt.estimate || 0;
   for (let attempt = 1; attempt <= 30; attempt++) {
     const ok = await new Promise(resolve => {
-      const p = spawn('curl.exe', ['-L', '-C', '-', '--retry', '5', '--connect-timeout', '30', '-s', '-o', file, url], { windowsHide: true });
+      stopIfCancelled();
+      const p = track(spawn('curl.exe', ['-L', '-C', '-', '--retry', '5', '--connect-timeout', '30', '-s', '-o', file, url], { windowsHide: true }));
       let last = fs.existsSync(file) ? fs.statSync(file).size : 0, speed = 0;
       const t = setInterval(() => {
         const got = fs.existsSync(file) ? fs.statSync(file).size : 0;
@@ -101,8 +108,10 @@ async function download(url, file, say, label, opt = {}) {
       p.on('close', code => { clearInterval(t); resolve(code === 0); });
     });
     if (ok && (!total || fs.statSync(file).size >= total)) return;
+    stopIfCancelled();
     say(`${label}：第 ${attempt} 次断线，10 秒后接着下`);
     await new Promise(r => setTimeout(r, 10000));
+    stopIfCancelled();
   }
   throw new Error(label + ' 下载失败，检查一下网络再试');
 }
@@ -119,7 +128,8 @@ function unzip(zip, dest) {
 }
 function run(cmd, args, opts, say) {
   return new Promise((resolve, reject) => {
-    const p = spawn(cmd, args, { windowsHide: true, ...opts });
+    stopIfCancelled();
+    const p = track(spawn(cmd, args, { windowsHide: true, ...opts }));
     let tail = '';
     const eat = d => { tail = (tail + d.toString('utf8')).slice(-3000); const l = tail.trim().split(/\r?\n/).pop(); if (l && say) say(l.slice(0, 160)); };
     p.stdout.on('data', eat); p.stderr.on('data', eat);
@@ -184,6 +194,7 @@ async function fetchRepo(say) {
   const tmp = path.join(HOME, 'tmp'); rmrf(tmp); fs.mkdirSync(tmp, { recursive: true });
   const zip = path.join(tmp, 'repo.zip');
   await download(`https://codeload.github.com/${REPO}/zip/refs/heads/${BRANCH}`, zip, say, '下载游戏', { estimate: 235e6, from: 0, to: 70 });
+  stopIfCancelled();
   say('解压（一两分钟）', 72);
   unzip(zip, tmp);
   const top = fs.readdirSync(tmp).find(n => fs.statSync(path.join(tmp, n)).isDirectory());
@@ -615,7 +626,16 @@ function firewall(on) {
 // ---------- 5. 卸载 ----------
 async function uninstall(parts, say) {
   const s = state(), d = dirs(s);
-  say('关掉正在运行的游戏、模型和配音');
+  // 先停下正在进行的下载和安装，等它们真的停了再删（不然这边删完、那边又解压回来）
+  const busy = Object.entries(jobs).filter(([n, j]) => n !== 'uninstall' && !j.done);
+  if (busy.length) {
+    say('先停下正在进行的下载和安装', 5);
+    cancelling = true;
+    killKids();
+    for (let i = 0; i < 60 && Object.entries(jobs).some(([n, j]) => n !== 'uninstall' && !j.done); i++) { killKids(); await new Promise(r => setTimeout(r, 500)); }
+    rmrf(path.join(HOME, 'tmp')); rmrf(path.join(HOME, 'tmp-rename'));
+  }
+  say('关掉正在运行的游戏、模型和配音', 15);
   await stopOurs('game', 'llm', 'tts');
   const del = (p, name) => { say('删除 ' + name); rmrf(p); };
   if (parts.includes('llm')) { del(d.llm, '语言模型'); saveState({ llm: null }); }
@@ -636,6 +656,7 @@ async function uninstall(parts, say) {
     spawn('cmd', ['/c', `timeout /t 3 /nobreak >nul & rmdir /s /q "${HOME}"`], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
     setTimeout(() => process.exit(0), 1500);
   } else writeLaunchers();
+  cancelling = false;   // 只卸了一部分：之后还能接着装
 }
 
 // ---------- 网页 ----------
