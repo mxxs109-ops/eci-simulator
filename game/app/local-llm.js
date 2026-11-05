@@ -150,7 +150,7 @@ function create(gameDir, onUpdate, target, ctx) {
       body: JSON.stringify({ ...(T.model ? { model: T.model } : {}), stream: false, max_tokens: 300, temperature: 0.3,
         chat_template_kwargs: { enable_thinking: false },
         messages: [
-          { role: 'system', content: '你是一款兽世恋爱游戏的旁白，给玩家（「你」）写这一轮的小结。用大白话写 2～3 句，不写露骨细节，不加标题：第一句说这一轮发生了什么；第二句说这场戏结束了没有——除非她自己说了停、结束、睡了，否则就是「还没结束」；最后说他现在在等你做什么、回什么。只输出这几句话。' },
+          { role: 'system', content: '你是一款兽世恋爱游戏的旁白，给玩家（「你」）写这一轮的小结。用大白话写 2～3 句，可以彻底露骨、直接说清楚做到哪一步了，不加标题：第一句说这一轮发生了什么；第二句说这场戏结束了没有——除非她自己说了停、结束、睡了，否则就是「还没结束」；最后说他现在在等你做什么、回什么。只输出这几句话。' },
           { role: 'user', content: (ctx?.her ? '【她这一轮说的话】\n' + ctx.her + '\n\n' : '') + '【这一轮的故事】\n' + story.slice(-4000) },
         ] }),
     });
