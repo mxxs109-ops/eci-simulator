@@ -406,6 +406,14 @@ function openingNote() {
 }
 
 // auto：她点的是「续写」，text 只是记录里显示的那几个字，发给大脑的是续写指令
+// 她死了以后选的路：原地复活 / 重生（重生方式是她自己写的，什么都可以）
+const REVIVE_NOTE = "[原地复活，不是她说的话：她在上一轮死了，她选了「原地复活」。从她死去的那一刻接着写她活过来——怎么活过来（兽神、兽印、她身上的力量、兽夫们拼命把她救回来、要付的代价……）按世界观和剧情自然地写，可以有代价，但不替她做决定。兽夫们以为她死了的那一刻、她醒过来的那一刻，反应都要写足。把 状态.md「我的状况」里的【死亡】去掉，写上复活后的样子。写到需要她回应的地方停下，存档照常改]";
+function rebornNote(text) {
+  const how = text.replace(/^🔄\s*重生[：:]?\s*/, '').trim() || '她没写，按剧情挑一个合适的时间点重生，带着前世的记忆';
+  return `[重生，不是她说的话：她在剧情里死了，她选择重生。她写的重生方式是：「${how}」。照她写的来，什么都可以（回到过去某一天、某件事之前、换一个身份、隔了很多年、带不带前世记忆……）；她没写到的按剧情合理地补。**把整个世界改成重生后的样子**：状态.md（天数、时间段、当前场景、「我的状况」去掉【死亡】、每个兽夫在哪 / 好感 / 心情 / 伤势——回到过去就退回当时的样子，那时还没登场的就标回【尚未登场】、死了的兽夫在那时还活着就活过来）、物品与等级.md、崽崽.md 也跟着改；回忆.md 记一条「重生」，前世发生的事留着、标明是前世；兽夫们记不记得前世照她写的，她没说就默认不记得。然后写重生后的第一段剧情，写到需要她回应的地方停下]`;
+}
+// 她死了没有：状态.md「我的状况」里写着【死亡】
+function playerDead() { try { return /^- \*\*我的状况\*\*[：:].*【死亡】/m.test(fs.readFileSync(path.join(GAME_DIR, '状态.md'), 'utf8')); } catch { return false; } }
 const CONTINUE_NOTE = "[自动续写，不是她说的话：她这一轮没有新的动作和台词，按了「续写」。接着上一轮的结尾自然往下写一段：时间往前走，兽夫们按各自的性格主动行动、把正在发生的事推进一步（没什么事就推「未完成的约定 / 待解之谜」里挂着的事，或者来一件 事件池.md 里合适的小事）。**不要重复**上一轮已经写过的情节、动作、台词、描写和比喻，不要回头重演同一刻；不替她说话、不替她做决定，写到需要她回应的地方停下。存档照常改]";
 // 开局：页面打开时还一段剧情都没有，自动发一次，让第一位兽夫登场
 const OPEN_NOTE = "[开场，不是她说的话：游戏刚开始，她还没开口。照上面的开局提示写第一段剧情：交代她在哪、天气和时辰，让开局的兽夫出场，写到需要她回应的地方停下（他在等她做什么 / 说什么）。不替她说话、不替她做决定。存档照常改]";
@@ -428,12 +436,12 @@ function chat(text, res, auto = false) {
   try { rut = /【易感期】/.test(fs.readFileSync(path.join(GAME_DIR, '状态.md'), 'utf8')); } catch {}
   const intimate = (!auto && INTIMATE.test(text)) || rut || (lastAi?.local && !SCENE_END.test(text));
   const intimateNote = intimate ? `[系统提示，不是她说的话：这一轮沾到亲密（${INTIMATE.test(text) ? '她的话里有亲密的内容' : rut ? '有兽夫正在易感期' : '上一轮的亲密戏还没结束'}）。**照原来的展示方式写完整的回复**：环境、他的台词和口吻、心理（*斜体*）、剧情推进、📌 小结都由你写，和平时一样。但**身体和性的描写你一个字都不自己写，也不准带过、不准用台词或心理代替**：每到要写身体、裸体、体液、亲吻抚摸、性的地方，单独一段写交接标记 \`〔接手：兽夫名字｜在哪｜这一刻｜约 N 字：这一小段要写什么——谁对谁做了什么、写到哪一步为止〕\`（N 一般 150～500；她要的露骨内容越多，标记越多、字数越大；她这一轮要的每一个动作都要落在某个标记里）。标记前后接着写台词和心理，和标记里的事衔接，不要在标记前后重复写同一个动作。小结写清楚这场戏还没结束、他在等她什么（她说停了才算结束）。存档照常改，写到亲密的地方也用交接标记，不要自己写、不要带过]\n\n` : '';
-  const prompt = rulesNote(session) + roomNote + diaryNote(session) + openingNote() + clock + intimateNote + (auto ? (readJson(HISTORY_FILE, []).some(m => m.role === 'ai' && !m.tick && !m.sim) ? CONTINUE_NOTE : OPEN_NOTE) : text);
+  const prompt = rulesNote(session) + roomNote + diaryNote(session) + openingNote() + clock + intimateNote + (auto === 'revive' ? REVIVE_NOTE : auto === 'reborn' ? rebornNote(text) : auto ? (readJson(HISTORY_FILE, []).some(m => m.role === 'ai' && !m.tick && !m.sim) ? CONTINUE_NOTE : OPEN_NOTE) : text);
   writeJson(SESSION_FILE, session);
 
   const send = obj => res.write(JSON.stringify(obj) + '\n');
   // 网页上显示的 = 回复里的 〔接手：…〕 换成交接模型写的那段（还在写时，后面先不显示）
-  const ho = localLLM.create(GAME_DIR, () => { if (!quiet) pushView(); }, readConfig().handoff, { her: auto ? '（她按了续写：接着上一轮往下写，时间往前走，不要重复）' : text, history: readJson(HISTORY_FILE, []).slice(-6) });
+  const ho = localLLM.create(GAME_DIR, () => { if (!quiet) pushView(); }, readConfig().handoff, { her: auto === 'revive' ? '（她选了原地复活）' : auto === 'reborn' ? text : auto ? '（她按了续写：接着上一轮往下写，时间往前走，不要重复）' : text, history: readJson(HISTORY_FILE, []).slice(-6) });
   // 边写边存：她发的话马上存，回复显示出来一点就存一点（断电、出错也不丢）
   const live = Date.now(), time0 = `${dateStr()} ${timeStr()}`;
   let liveTimer = null;
@@ -826,8 +834,14 @@ function lanToken() {
 }
 function lanUrls() {
   const ips = [];
-  for (const list of Object.values(os.networkInterfaces())) {
-    for (const a of list || []) if (a.family === 'IPv4' && !a.internal && !a.address.startsWith('169.254.')) ips.push(a.address);
+  for (const [name, list] of Object.entries(os.networkInterfaces())) {
+    if (/tailscale|zerotier|vethernet|wsl|virtualbox|vmware|hyper-v|loopback|docker|vpn|utun|bridge/i.test(name)) continue;
+    for (const a of list || []) {
+      if (a.family !== 'IPv4' || a.internal || a.address.startsWith('169.254.')) continue;
+      const [p, q] = a.address.split('.').map(Number);
+      if (p === 100 && q >= 64 && q <= 127) continue;   // Tailscale 的地址段
+      ips.push(a.address);
+    }
   }
   const t = lanToken();
   return ips.map(ip => `http://${ip}:${PORT}/?t=${t}`);
@@ -998,7 +1012,7 @@ const server = http.createServer(async (req, res) => {
       } catch (e) { res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('voice off: ' + e.message); }
     }
     if (req.method === 'GET' && url === '/api/history') return json(res, readJson(HISTORY_FILE, []));
-    if (req.method === 'GET' && url === '/api/status') return json(res, { busy, simming, started: fs.existsSync(START_FILE), gameDir: isLoopback(req) ? GAME_DIR : undefined });
+    if (req.method === 'GET' && url === '/api/status') return json(res, { busy, simming, dead: playerDead(), started: fs.existsSync(START_FILE), gameDir: isLoopback(req) ? GAME_DIR : undefined });
     if (req.method === 'GET' && url === '/api/map') return json(res, readMap());
     if (req.method === 'GET' && url === '/api/cast') return json(res, listCast());
     if (req.method === 'GET' && url === '/api/husband-diary') return json(res, listHusbandDiaries());
@@ -1029,7 +1043,7 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ type: 'done' }) + '\n');
       }
       busy = true;
-      return chat(text.trim(), res, !!auto);
+      return chat(text.trim(), res, auto === 'revive' || auto === 'reborn' ? auto : !!auto);
     }
     res.writeHead(404);
     res.end();

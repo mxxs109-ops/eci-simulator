@@ -18,7 +18,7 @@
       // 脸放在圆头像正中间：按头像实际大小重新裁（游戏原来按大卡片的尺寸裁，缩小以后脸就偏了）
       if (narrow() && typeof faceStyle === 'function' && c.dataset.name) { const fs = faceStyle(c.dataset.name, c.clientWidth || 46); if (fs) c.style.cssText += ';' + fs; }
       const doing = c.querySelector('.doing')?.textContent || '';
-      const st = /🥚/.test(doing) ? '🥚' : /💀/.test(doing) ? '💀' : /🔥/.test(doing) ? '🔥' : '';
+      const st = /🪦/.test(doing) ? '🪦' : /🥚/.test(doing) ? '🥚' : /💀/.test(doing) ? '💀' : /🔥/.test(doing) ? '🔥' : '';
       const fav = c.querySelector('.info .bar i')?.style.cssText || 'width:0';
       c.insertAdjacentHTML('beforeend', `${st ? `<span class="mstat">${st}</span>` : ''}<span class="mfav"><i style="${fav}"></i></span>`);
     });

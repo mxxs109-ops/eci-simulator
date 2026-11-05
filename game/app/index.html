@@ -498,7 +498,7 @@ function cardHtml(r, id) {
         const [icon, ...words] = v[1].split(' ');
         return `<button class="go${v[0] === mode ? ' on' : ''}" data-view="${v[0]}" data-who="${esc(r.name)}"><span class="ic">${icon}</span><span class="lb">${words.join(' ')}</span></button>`;
       }).join('')}</div>` : '';
-  return `<div class="${cls}" ${id ? `id="${id}"` : ''} data-name="${esc(r.name)}" style="--c:${c};${bg}">
+  return `<div class="${cls}${/【死亡】/.test(r.doing || '') ? ' dead' : ''}" ${id ? `id="${id}"` : ''} data-name="${esc(r.name)}" style="--c:${c};${bg}">
     ${img ? '' : esc(r.name[0])}
     ${id === 'stage' && mode === 'id' && r.idVideo ? `<video class="idvid" src="${fileUrl('/game/', r.idVideo)}" autoplay muted loop playsinline></video>` : ''}
     ${modeBar}
@@ -507,7 +507,7 @@ function cardHtml(r, id) {
       <span class="nm">${esc(r.name)}</span><span class="lv">${esc(r.level || '')}</span>
       <div class="bar fav"><i style="${favFill(r.favor)}"></i></div>
       好感 ${r.favor} · ${esc(r.mood || '')}
-      <div class="doing" title="${esc(r.doing || '')}">${esc((r.doing || '').replace('【战损】', '💀 ').replace('【易感期】', '🔥 ').replace(/【怀孕(·[^】]*)?】/, '🥚 '))}</div>
+      <div class="doing" title="${esc(r.doing || '')}">${esc((r.doing || '').replace('【死亡】', '🪦 ').replace('【战损】', '💀 ').replace('【易感期】', '🔥 ').replace(/【怀孕(·[^】]*)?】/, '🥚 '))}</div>
       ${id === 'stage' && r.food ? (() => { const hv = +((r.food.nutrition || '').match(/健康值\s*(\d+)/) || [])[1]; const tip = [r.food.nutrition, r.food.body, r.food.sleep && '睡眠：' + r.food.sleep, r.food.exercise && '运动：' + r.food.exercise].filter(Boolean).join(' / ');
         return `<div class="body" title="${esc(tip)}">${hv >= 0 ? `<span class="hv"><i style="width:${hv}%;background:${hv > 60 ? '#4caf50' : hv > 30 ? '#f0b429' : '#e53935'}"></i></span> 健康 ${hv}　` : ''}🩺 ${esc(r.food.body || '')}</div>`; })() : ''}
       ${r.food ? `<div class="doing food">🍖 ${esc(r.food.meals || '')}<br>🩺 ${esc(r.food.nutrition || '')}${r.food.body ? '；' + esc(r.food.body) : ''}${r.food.sleep && r.food.sleep !== '—' ? '<br>😴 ' + esc(r.food.sleep) : ''}${r.food.exercise && r.food.exercise !== '—' ? '<br>🏃 ' + esc(r.food.exercise) : ''}</div>` : ''}
@@ -837,6 +837,7 @@ async function waitForReply(box) {
   }
   sendBtn.disabled = false;
   await loadHistory();
+  checkDeath();
 }
 
 async function send(preset, auto = false) {
@@ -907,6 +908,7 @@ async function send(preset, auto = false) {
   if (!reply && box.querySelector('.typing')) box.innerHTML = '<div class="para err">没有收到回复。</div>';
   // 回复后好感、心情可能变了，刷新兽夫栏
   loadCast().then(() => markSpeakers(reply));
+  checkDeath();
   histLen = (await fetch('/api/history').then(r => r.json()).catch(() => [])).length || histLen;
   sendBtn.disabled = false;
   input.focus();
@@ -1061,5 +1063,60 @@ if (location.hash) document.querySelector(`.tab[data-view="${location.hash.slice
 <script src="/mobile.js"></script>
 <script src="/vendor/qrcode.js"></script>
 <script src="/settings.js"></script>
+<div id="death"><div class="dbox">
+  <div class="dsk">💀</div><h2>你死了</h2>
+  <button class="dbtn" id="dRevive">✨ 原地复活<small>从死去的那一刻接着活过来</small></button>
+  <div class="dre"><b>🔄 重生</b><small>想在什么时候、什么剧情、什么样子重生？写什么都可以</small>
+    <textarea id="dHow" rows="3" placeholder="比如：回到第 3 天早上，玄烬还没受伤的时候，我带着前世的记忆"></textarea>
+    <div class="dchips"><span>回到第 1 天，兽神刚绑定的那天</span><span>回到昨天</span><span>回到出事之前</span><span>带着前世的记忆</span><span>不带记忆，重新来过</span><span>换一个身份重生</span><span>很多年以后</span></div>
+    <button class="dbtn" id="dReborn">🔄 重生</button></div>
+  <button class="dlater" id="dLater">先看看剧情</button>
+</div></div>
+<button id="deathFab" hidden>💀 选择复活</button>
+<style>
+  #death { position: fixed; inset: 0; z-index: 90; display: none; align-items: center; justify-content: center; padding: 16px; background: radial-gradient(ellipse at center, rgba(70,8,8,.88), rgba(8,2,2,.95)); }
+  #death.on { display: flex; animation: dIn .8s ease; }
+  @keyframes dIn { from { opacity: 0; } to { opacity: 1; } }
+  #death .dbox { width: min(460px, 100%); max-height: 100%; overflow-y: auto; background: #1d1412; color: #f3e6dc; border: 1px solid #6b2a22; border-radius: 20px; padding: 26px 22px 18px; text-align: center; box-shadow: 0 0 60px rgba(160,30,20,.45); display: flex; flex-direction: column; gap: 14px; }
+  #death .dsk { font-size: 54px; line-height: 1; animation: dBeat 2.4s ease-in-out infinite; }
+  @keyframes dBeat { 50% { transform: scale(1.08); } }
+  #death h2 { margin: 0; font: 700 28px "STKaiti","KaiTi",serif; letter-spacing: 6px; color: #ffb3a6; }
+  #death .dbtn { border: 0; border-radius: 14px; padding: 12px 16px; font: 700 17px inherit; color: #fff; background: linear-gradient(135deg, #b8452f, #7d2a1e); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; transition: transform .15s; }
+  #death .dbtn:hover { transform: translateY(-1px) scale(1.01); }
+  #death .dbtn small, #death .dre small { font-weight: 400; font-size: 12px; opacity: .8; }
+  #death .dre { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 14px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,180,160,.18); text-align: left; }
+  #death .dre b { font-size: 16px; }
+  #death textarea { width: 100%; box-sizing: border-box; border-radius: 10px; border: 1px solid #5a2a22; background: #120c0a; color: #f3e6dc; padding: 8px 10px; font: 15px/1.5 inherit; resize: vertical; }
+  #death .dchips { display: flex; flex-wrap: wrap; gap: 6px; }
+  #death .dchips span { font-size: 12px; padding: 3px 10px; border-radius: 99px; background: rgba(255,180,160,.12); color: #ffd2c8; cursor: pointer; }
+  #death .dchips span:hover { background: rgba(255,180,160,.25); }
+  #death .dlater { background: none; border: 0; color: #b89a8e; font-size: 13px; cursor: pointer; text-decoration: underline; }
+  #deathFab { position: fixed; right: 16px; bottom: 96px; z-index: 80; border: 0; border-radius: 99px; padding: 10px 16px; font: 700 14px inherit; color: #fff; background: #7d2a1e; box-shadow: 0 4px 16px rgba(0,0,0,.35); cursor: pointer; }
+  .card.dead { filter: grayscale(1); opacity: .65; }
+</style>
+<script>
+// 她死了：弹出「原地复活 / 重生」（重生方式她自己写）；点「先看看剧情」就收起来，右下角留一个按钮
+let deathLater = false;
+async function checkDeath() {
+  const s = await fetch('/api/status').then(r => r.json()).catch(() => ({}));
+  document.getElementById('death').classList.toggle('on', !!s.dead && !deathLater);
+  document.getElementById('deathFab').hidden = !s.dead || !deathLater;
+  if (!s.dead) deathLater = false;
+}
+document.getElementById('dLater').onclick = () => { deathLater = true; checkDeath(); };
+document.getElementById('deathFab').onclick = () => { deathLater = false; checkDeath(); };
+document.querySelector('#death .dchips').onclick = e => {
+  const c = e.target.closest('span'); if (!c) return;
+  const t = document.getElementById('dHow'); t.value = (t.value.trim() ? t.value.trim() + '，' : '') + c.textContent; t.focus();
+};
+const leaveDeath = () => { deathLater = false; document.getElementById('death').classList.remove('on'); document.getElementById('deathFab').hidden = true; };
+document.getElementById('dRevive').onclick = () => { leaveDeath(); send('✨ 原地复活', 'revive'); };
+document.getElementById('dReborn').onclick = () => {
+  const how = document.getElementById('dHow').value.trim();
+  if (!how) { document.getElementById('dHow').focus(); return; }
+  leaveDeath(); document.getElementById('dHow').value = ''; send('🔄 重生：' + how, 'reborn');
+};
+setTimeout(checkDeath, 1500);
+</script>
 </body>
 </html>

@@ -156,7 +156,7 @@
       live && live.mood ? `<div class="bar"><div class="t"><span>💭 心情</span><b>${E(live.mood)}</b></div></div>` : ''].join('');
     // 状态：怀孕（游戏知道，头两天他自己还不知道）、战损、易感期
     const doing = (live && live.doing) || '', preg = doing.match(/【怀孕(?:·第(\d+)天)?】/);
-    const chips = [preg ? `🥚 怀孕${preg[1] ? ' 第 ' + preg[1] + ' 天' : ''}${!preg[1] || +preg[1] < 3 ? '<small>（他自己还不知道）</small>' : ''}` : '',
+    const chips = [/【死亡】/.test(doing) ? '🪦 已死亡' : '', preg ? `🥚 怀孕${preg[1] ? ' 第 ' + preg[1] + ' 天' : ''}${!preg[1] || +preg[1] < 3 ? '<small>（他自己还不知道）</small>' : ''}` : '',
       /【战损】/.test(doing) ? '💀 重伤' : '', /【易感期】/.test(doing) ? '🔥 易感期' : ''].filter(Boolean);
     const stat = chips.length ? `<div class="stchips">${chips.map(c => `<span>${c}</span>`).join('')}</div>` : '';
     const attrs = shownAttrs(d);
@@ -170,7 +170,7 @@
     box.innerHTML = `<div class="iside">${side}</div><div class="main">
       <div class="pic"><img src="${pic}" onerror="this.style.display='none'"><div class="nm"><b>${E(d.name === '家里' ? '家里' : d.name)}</b>${d.away ? '<span class="away-tag">尚未登场</span>' : ''}<small>${T(now ? now.v.split(/[；;]/)[0] : '')}</small>${was ? `<small>曾经：${T(was.v)}</small>` : ''}</div></div>
       ${stat}${bars || fight ? `<div class="bars">${bars}${fight}</div>` : ''}
-      ${bt.hp && !d.away && d.name !== '我' && d.name !== '家里' ? `<div class="fightrow"><button class="fightbtn" data-hfight="${E(d.name)}" ${bt.hp[0] > 0 ? '' : 'disabled'}>${bt.hp[0] > 0 ? '⚔️ 出战' : '💤 伤太重，打不了'}</button></div>` : ''}
+      ${bt.hp && !d.away && d.name !== '我' && d.name !== '家里' ? `<div class="fightrow"><button class="fightbtn" data-hfight="${E(d.name)}" ${bt.hp[0] > 0 && !/【死亡】/.test((live && live.doing) || '') ? '' : 'disabled'}>${/【死亡】/.test((live && live.doing) || '') ? '🪦 已经不在了' : bt.hp[0] > 0 ? '⚔️ 出战' : '💤 伤太重，打不了'}</button></div>` : ''}
       ${radarBox}
       ${attrs.length ? `<div><h4>属性</h4><div class="attrs">${attrs.map((a, i) => `<div class="attr" data-attr="${i}"><div class="k">${ATTR_ICON[a.k] || '◆'} ${E(a.k)}</div><div class="v">${T(a.v)}</div></div>`).join('')}</div></div>` : ''}
       <div><h4>背包 · ${d.items.length} 件</h4><div class="slots">${slots}</div>
