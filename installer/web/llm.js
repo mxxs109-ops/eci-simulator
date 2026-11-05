@@ -4,9 +4,9 @@
 // lg：图标底色和字；steps：手把手教程；rec：推荐的模型（点一下就填上）；pick：拿到模型列表后按顺序挑第一个对得上的
 const P = [
   { id: 'local', g: 'Local', name: '本地模型（推荐）', sub: '装在你电脑上', lg: ['#5b4636', '本'], kind: 'local' },
-  { id: 'ollama', g: 'Local', name: 'Ollama', sub: '已经装了 Ollama 的人', lg: ['#222', 'O'], base: 'http://127.0.0.1:11434/v1', model: '', auto: true,
+  { id: 'ollama', g: 'Local', name: 'Ollama', sub: '一键装好、下模型', oc: 'Ollama', lg: ['#222', 'O'], base: 'http://127.0.0.1:11434/v1', model: '', auto: true,
     steps: ['装好 <a href="#" data-open="https://ollama.com/download">Ollama</a>，打开它。', '拉一个模型：下面按你的显卡推荐了大小，点一下就复制命令，到 cmd 里粘贴回车。', '回到这里点「🔍 自动识别并填写」，再点「保存」。'] },
-  { id: 'lmstudio', g: 'Local', name: 'LM Studio', sub: '图形界面跑本地模型', lg: ['#4a3aff', 'LM'], base: 'http://127.0.0.1:1234/v1', model: '', auto: true,
+  { id: 'lmstudio', g: 'Local', name: 'LM Studio', sub: '一键装好、下模型', oc: 'LM Studio', lg: ['#4a3aff', 'LM'], base: 'http://127.0.0.1:1234/v1', model: '', auto: true,
     steps: ['装好 <a href="#" data-open="https://lmstudio.ai/">LM Studio</a>，在里面搜一个模型下载（推荐 Qwen3，选能塞进你显存的大小）。', '左边点「Developer」→ 打开「Start server」，把模型加载进去。', '回到这里点「🔍 自动识别并填写」，再点「保存」。'] },
   { id: 'claudecode', g: 'Claude', name: 'Claude Code', sub: '有 Claude 订阅的人', lg: ['#d97757', 'C'], kind: 'claude' },
   { id: 'anthropic', g: 'Claude', name: 'Claude API', sub: 'Anthropic 控制台的 key', lg: ['#c96442', 'A'], base: 'https://api.anthropic.com/v1', model: 'claude-sonnet-5-5',
@@ -130,10 +130,11 @@ function showPv(id, scroll = true) {
     <div class="row"><button id="cRecheck">重新检查</button>${using ? `<button class="okbtn" disabled>${NOW()} Claude Code</button>` : `<button class="${brainLabel() ? '' : 'p'}" id="cUse" ${S.claude ? '' : 'disabled'}>${brainLabel() ? '改用 Claude Code' : '用 Claude Code 当大脑'}</button>`}</div></div>`;
   else box.innerHTML = `<div class="card pop ${using ? 'doneCard' : ''}"><h2><span class="lg" style="background:${p.lg[0]};width:30px;height:30px;border-radius:9px;display:inline-grid;place-items:center;color:#fff;font-size:13px">${p.lg[1]}</span> ${esc(p.name)}</h2>
     ${using ? `<div class="note ok">${NOW()}它当大脑（模型 ${esc(S.api.model)}）</div>` : ''}
-    <h3>${p.auto ? '怎么用' : '怎么拿到 key'}</h3><ol class="steps ${using ? 'done' : brainLabel() ? 'idle' : ''}">${p.steps.map(x => `<li>${T(x)}</li>`).join('')}</ol>
+    ${p.oc ? `<div class="oneclick"><button class="${using ? '' : 'p'} big" id="oc-${p.id}">⚡ ${using ? '重新一键装' : '一键装好并用它'}</button><div class="soft">没装就自动装 → 按你的显卡下一个 Qwen3 → 设成大脑${S.platform === 'darwin' ? '（Mac 上 ' + p.oc + ' 要自己从官网装）' : ''}</div></div><div class="job" id="job-${p.id}"></div>` : ''}
+    <h3>${p.oc ? '自己装（会用的人）' : p.auto ? '怎么用' : '怎么拿到 key'}</h3><ol class="steps ${using ? 'done' : brainLabel() || p.oc ? 'idle' : ''}">${p.steps.map(x => `<li>${T(x)}</li>`).join('')}</ol>
     ${p.shot ? `<img class="shot" src="guide/${p.shot}.svg" alt="示意图">` : ''}
     ${p.id === 'ollama' ? '<div id="olRec"></div>' : ''}
-    ${p.auto ? '<div class="row"><button class="p" id="aAuto">🔍 自动识别并填写</button><span class="soft" id="aAutoMsg"></span></div>' : ''}
+    ${p.auto ? `<div class="row"><button class="${p.oc ? '' : 'p'}" id="aAuto">🔍 自动识别并填写</button><span class="soft" id="aAutoMsg"></span></div>` : ''}
     <label class="f">接口地址 <input type="text" id="aBase" value="${esc(p.base)}"></label>
     ${p.auto ? '' : '<label class="f">API key <input type="password" id="aKey" placeholder="把复制的 key 粘贴到这里"></label>'}
     <label class="f">模型名 <input type="text" id="aModel" list="mlist" value="${esc(p.model)}" placeholder="${p.auto ? '点上面「自动识别并填写」' : '粘贴 key 以后会自动挑一个推荐的'}"><datalist id="mlist"></datalist></label>
@@ -176,6 +177,7 @@ function wirePanel(p) {
     if ($('cUse')) $('cUse').onclick = async () => { const r = await api('/api/brain', { brain: 'claude' }).catch(e => ({ error: e.message })); r.ok ? toast('大脑换成 Claude Code 了', 'ok') : toast(r.error, 'bad'); await refresh(); showPv('claudecode', false); if (DET) detect(); };
     return;
   }
+  if ($('oc-' + p.id)) $('oc-' + p.id).onclick = async () => { const r = await api(`/api/${p.id}/oneclick`, {}).catch(err => ({ error: err.message })); r.error ? toast(r.error, 'bad') : toast('开始了，进度在下面，几 GB，慢慢来…'); };
   const body = () => ({ base: $('aBase').value.trim(), model: $('aModel').value.trim(), key: $('aKey') ? $('aKey').value.trim() : '' });
   $('aRec').onclick = e => { const r = e.target.closest('[data-rec]'); if (r) { $('aModel').value = r.dataset.rec; toast('填上了：' + r.dataset.rec, 'ok'); } };
   const fetchList = async (force, quiet) => {

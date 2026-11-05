@@ -615,8 +615,130 @@ async function detectLLM() {
   if (cc) found.push({ id: 'claudecode', name: 'Claude Code（' + cc + '）', running: true });
   // 推荐给 Ollama 拉的模型：按显存
   const ollamaRec = vram >= 22 ? 'qwen3:32b' : vram >= 12 ? 'qwen3:14b' : vram >= 7 ? 'qwen3:8b' : 'qwen3:4b';
-  return { found, vram, ramGB: hw.ramGB, ollamaRec };
+  const sz = recSize(vram);
+  return { found, vram, ramGB: hw.ramGB, ollamaRec, olRec: 'qwen3:' + sz + 'b', lmRec: 'Qwen3-' + sz + 'B', olExe: !!ollamaExe(), lmExe: !!LMS_EXE() };
 }
+// ---------- 2c. Ollama / LM Studio 一键 ----------
+// 推荐模型按显存挑（和 detectLLM 里的一样）：Ollama 用官方库名，LM Studio 用 lmstudio-community 的 Qwen3 GGUF（Q4_K_M）
+const recSize = vram => (vram >= 22 ? '32' : vram >= 12 ? '14' : vram >= 7 ? '8' : '4');
+function vramNow() { const hw = hardware(); return MAC ? (hw.apple ? Math.floor(hw.ramGB * 0.65) : 0) : hw.nvidia ? hw.nvidia.vramGB : 0; }
+const gb = n => (n / 1e9).toFixed(n >= 1e10 ? 0 : 1) + ' GB';
+async function waitUp(u, sec, say, msg) { for (let i = 0; i < sec; i++) { stopIfCancelled(); if (await up(u)) return true; if (msg && i % 5 === 0) say(msg); await new Promise(r => setTimeout(r, 1000)); } return false; }
+
+const ollamaExe = () => MAC ? (fs.existsSync('/Applications/Ollama.app') ? '/Applications/Ollama.app' : null)
+  : [path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Ollama', 'ollama.exe')].find(p => fs.existsSync(p)) || null;
+async function oneClickOllama(say, want) {
+  const model = want || 'qwen3:' + recSize(vramNow()) + 'b';
+  let base = 0;
+  if (!(await up('http://127.0.0.1:11434/api/version')) && !ollamaExe()) {
+    if (MAC) { macOpen('https://ollama.com/download/mac'); throw new Error('Mac 上要自己装 Ollama：官网已经打开，装好、打开它，再点一次'); }
+    const dir = path.join(HOME, 'tmp-ollama'); fs.mkdirSync(dir, { recursive: true });
+    const exe = path.join(dir, 'OllamaSetup.exe');
+    await download('https://ollama.com/download/OllamaSetup.exe', exe, say, '下载 Ollama', { estimate: 1.7e9, from: 0, to: 30 });
+    stopIfCancelled();
+    say('安装 Ollama（一两分钟，不用点任何东西）', 32);
+    await run(exe, ['/VERYSILENT', '/NORESTART', '/SUPPRESSMSGBOXES'], {}, say);
+    rmrf(dir);
+    if (!ollamaExe()) throw new Error('Ollama 没装上，再点一次试试');
+    base = 35;
+  }
+  // 开起来：没在跑就在后台起 ollama serve
+  if (!(await up('http://127.0.0.1:11434/api/version'))) {
+    say('打开 Ollama', base + 1);
+    if (MAC) macOpen('-a', 'Ollama'); else spawn(ollamaExe(), ['serve'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+    if (!(await waitUp('http://127.0.0.1:11434/api/version', 60, say, '等 Ollama 开起来…'))) throw new Error('Ollama 没开起来：从开始菜单打开 Ollama，再点一次');
+  }
+  // 下模型：/api/pull 一行一行回进度
+  say(`下载模型 ${model}`, base + 2);
+  const r = await fetch('http://127.0.0.1:11434/api/pull', { method: 'POST', body: JSON.stringify({ model, stream: true }) });
+  if (!r.ok || !r.body) throw new Error('Ollama 不肯下这个模型（' + r.status + '）');
+  const dec = new TextDecoder(); let buf = '', biggest = 0, t0 = Date.now(), last = 0;
+  for await (const chunk of r.body) {
+    stopIfCancelled();
+    buf += dec.decode(chunk, { stream: true });
+    let i; while ((i = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1); if (!line) continue;
+      let j; try { j = JSON.parse(line); } catch { continue; }
+      if (j.error) throw new Error('下载出错：' + j.error);
+      // 只跟最大的那一层（模型本体）报进度，小文件一闪而过
+      if (j.total && j.total >= biggest) {
+        biggest = j.total;
+        const done = j.completed || 0, now = Date.now();
+        if (now - last > 900) {
+          last = now;
+          const sp = done / Math.max(1, (now - t0) / 1000), left = sp > 0 ? Math.round((j.total - done) / sp) : 0;
+          say(`下载模型 ${model}：${gb(done)} / ${gb(j.total)}${sp > 0 ? '，' + (sp / 1e6).toFixed(1) + ' MB/秒' : ''}${left > 0 ? '，还要约 ' + (left > 90 ? Math.round(left / 60) + ' 分钟' : left + ' 秒') : ''}`, base + 2 + Math.floor((97 - base - 2) * done / j.total));
+        }
+      } else if (j.status && !j.total) say(j.status === 'success' ? '模型下好了' : 'Ollama：' + j.status);
+    }
+  }
+  setBrain({ brain: 'api', api: { base: 'http://127.0.0.1:11434/v1', model, key: '' } });
+  say(`装好了，大脑换成 Ollama（${model}）`, 100);
+}
+
+const LMS_EXE = () => MAC ? (fs.existsSync('/Applications/LM Studio.app') ? '/Applications/LM Studio.app' : null)
+  : [path.join(process.env.LOCALAPPDATA || '', 'Programs', 'LM Studio', 'LM Studio.exe'), path.join(process.env.LOCALAPPDATA || '', 'Programs', 'lm-studio', 'LM Studio.exe')].find(p => fs.existsSync(p)) || null;
+// lms 命令行：第一次打开 LM Studio 后会放到 ~/.lmstudio/bin；安装包里也带了一份
+function lmsCli() {
+  const c = [path.join(os.homedir(), '.lmstudio', 'bin', MAC ? 'lms' : 'lms.exe')];
+  const app = LMS_EXE();
+  if (app && !MAC) c.push(path.join(path.dirname(app), 'resources', 'app', '.webpack', 'lms.exe'));
+  if (app && MAC) c.push(path.join(app, 'Contents', 'Resources', 'app', '.webpack', 'lms'));
+  return c.find(p => fs.existsSync(p)) || null;
+}
+async function oneClickLMStudio(say) {
+  const size = recSize(vramNow());
+  let base = 0;
+  if (!(await up('http://127.0.0.1:1234/v1/models')) && !LMS_EXE()) {
+    if (MAC) { macOpen('https://lmstudio.ai/download'); throw new Error('Mac 上要自己装 LM Studio：官网已经打开，装好、打开一次，再点一次'); }
+    const dir = path.join(HOME, 'tmp-lmstudio'); fs.mkdirSync(dir, { recursive: true });
+    const exe = path.join(dir, 'LM-Studio-Setup.exe');
+    await download('https://lmstudio.ai/download/latest/win32/x64', exe, say, '下载 LM Studio', { estimate: 6.3e8, from: 0, to: 25 });
+    stopIfCancelled();
+    say('安装 LM Studio（一两分钟，不用点任何东西）', 27);
+    await run(exe, ['/S'], {}, say);
+    rmrf(dir);
+    if (!LMS_EXE()) throw new Error('LM Studio 没装上，再点一次试试');
+    base = 30;
+  }
+  // 开服务：用 lms server start；还没有 lms 就先在后台打开一次 LM Studio，等它把 lms 放好
+  if (!(await up('http://127.0.0.1:1234/v1/models'))) {
+    say('打开 LM Studio 的服务', base + 1);
+    if (!lmsCli()) {
+      if (MAC) macOpen('-a', 'LM Studio'); else spawn(LMS_EXE(), ['--run-as-service'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+      for (let i = 0; i < 90 && !lmsCli(); i++) { stopIfCancelled(); await new Promise(r => setTimeout(r, 1000)); }
+    }
+    if (!lmsCli()) throw new Error('没找到 LM Studio 的 lms：打开一次 LM Studio，再点一次');
+    await run(lmsCli(), ['server', 'start'], {}, say).catch(() => {});
+    if (!(await waitUp('http://127.0.0.1:1234/v1/models', 90, say, '等 LM Studio 的服务开起来…'))) throw new Error('LM Studio 的服务没开起来：打开 LM Studio，左边「Developer」里打开「Start server」，再点一次');
+  }
+  // 下模型：官方接口 /api/v1/models/download，再按 job_id 查进度
+  const name = `Qwen3-${size}B`;
+  say(`下载模型 ${name}`, base + 2);
+  const r = await fetch('http://127.0.0.1:1234/api/v1/models/download', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: `https://huggingface.co/lmstudio-community/${name}-GGUF`, quantization: 'Q4_K_M' }) });
+  const j0 = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error('LM Studio 不肯下这个模型：' + (j0.error && (j0.error.message || j0.error) || r.status));
+  if (j0.status !== 'already_downloaded') {
+    for (;;) {
+      stopIfCancelled();
+      await new Promise(r => setTimeout(r, 1000));
+      const st = await getJson(`http://127.0.0.1:1234/api/v1/models/download/status/${j0.job_id}`, 5000);
+      if (!st) continue;
+      if (st.status === 'failed') throw new Error('模型下载失败，检查网络再点一次');
+      if (st.status === 'completed') break;
+      const tot = st.total_size_bytes || j0.total_size_bytes || 0, done = st.downloaded_bytes || 0, sp = st.bytes_per_second || 0;
+      const left = sp > 0 && tot ? Math.round((tot - done) / sp) : 0;
+      say(`下载模型 ${name}：${gb(done)}${tot ? ' / ' + gb(tot) : ''}${sp ? '，' + (sp / 1e6).toFixed(1) + ' MB/秒' : ''}${left > 0 ? '，还要约 ' + (left > 90 ? Math.round(left / 60) + ' 分钟' : left + ' 秒') : ''}${st.status === 'paused' ? '（暂停了）' : ''}`, tot ? base + 2 + Math.floor((97 - base - 2) * done / tot) : null);
+    }
+  }
+  // 模型名：去 /v1/models 里找刚下的那个
+  const list = ((await getJson('http://127.0.0.1:1234/v1/models', 5000)) || {}).data || [];
+  const id = (list.find(m => new RegExp('qwen3-' + size + 'b', 'i').test(m.id)) || list.find(m => !/embed/i.test(m.id)) || {}).id;
+  if (!id) throw new Error('模型下好了，但 LM Studio 没列出来：打开 LM Studio 看看');
+  setBrain({ brain: 'api', api: { base: 'http://127.0.0.1:1234/v1', model: id, key: '' } });
+  say(`装好了，大脑换成 LM Studio（${id}）`, 100);
+}
+
 // 去接口拿这家能用的模型列表（OpenAI 兼容的 /models）
 async function listModels(api) {
   const t = { ...api };
@@ -873,6 +995,8 @@ const routes = {
   },
   'GET /api/llm/check': async () => llmPlan(),
   'GET /api/llm/detect': async () => detectLLM(),
+  'POST /api/ollama/oneclick': async b => { job('ollama', say => oneClickOllama(say, String(b.model || '').trim())); return { ok: true }; },
+  'POST /api/lmstudio/oneclick': async () => { job('lmstudio', say => oneClickLMStudio(say)); return { ok: true }; },
   'POST /api/brain/models': async b => listModels(b.api || {}),
   'POST /api/llm/install': async b => { job('llm', say => installLLM(b.tier, b.build, say)); return { ok: true }; },
   'POST /api/llm/test': async () => { job('llmtest', testLLM); return { ok: true }; },
