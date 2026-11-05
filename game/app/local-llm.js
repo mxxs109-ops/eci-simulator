@@ -218,65 +218,78 @@ function create(gameDir, onUpdate, target, ctx) {
   return { view, finish };
 }
 
-// ---------- 兽夫日记：Claude 写到和她亲密的那一段，留一行 〔接手：…〕，本地模型用他的口吻写，写回日记本 ----------
-// 材料：他的档案、这一篇日记里标记前写好的部分、那一天（凌晨 5 点到次日 5 点）聊天里的亲密戏原文
-let diaryBusy = false;
-async function fillDiaries(gameDir, target, history) {
-  if (diaryBusy) return;
-  diaryBusy = true;
+// ---------- 存档里的文字：Claude 写到和她亲密的地方，不带过，留一个 〔接手：…〕，本地模型写好换进去 ----------
+// 兽夫日记用他的口吻写一大段；我的一天、回忆、模拟日志是一行一条，照那一行的格式写一两句
+// 材料：那一天（凌晨 5 点到次日 5 点；找不到日期就用最近一天）聊天里的亲密戏原文、谁的档案、标记前后的文字
+function fileSpecs(gameDir) {
+  const list = [];
+  const dd = path.join(gameDir, '兽夫日记');
+  if (fs.existsSync(dd)) for (const f of fs.readdirSync(dd).filter(f => f.endsWith('.md'))) list.push({ file: path.join(dd, f), voice: f.slice(0, -3), kind: '日记' });
+  for (const [f, kind] of [['我的一天.md', '我的一天'], ['回忆.md', '回忆'], ['模拟日志.md', '模拟日志']]) list.push({ file: path.join(gameDir, f), kind });
+  return list.filter(x => fs.existsSync(x.file));
+}
+const KIND_RULES = {
+  日记: '用他第一人称、他自己的口吻和文笔写（照档案里的性格、自称、说话方式；日记前面写好的部分是什么文风，就接着用什么文风）。这是他当面不会说的心里话：他记得的每一个细节、她的身体和声音、他自己的身体反应、他当时在想什么、现在回想起来的感觉。写 500～1200 字，可以分段',
+  我的一天: '这是她（玩家）自己的流水账，一行一条，第三人称、口语、像记事。照这一行前面的格式接着写：直接写清楚她和谁做了什么、怎么做的、做了几回、什么姿势、什么形态，40～120 字，只写一行，不换行',
+  回忆: '这是游戏的回忆录，一行一条，记这件事里最要紧的情节和他说的话。照这一行前面的格式接着写：直接写清楚发生了什么、做到哪一步、他说了什么，60～150 字，只写一行，不换行',
+  模拟日志: '这是整点模拟的流水账，一行一条，记这一小时里各人在干什么。照这一行前面的格式接着写：直接写清楚他们在做什么，30～100 字，只写一行，不换行',
+};
+let fillBusy = false;
+async function fillMarks(gameDir, target, history) {
+  if (fillBusy) return;
+  fillBusy = true;
   try {
     const T = { ...DEFAULT_TARGET, ...(target || {}) };
     if (!T.base) T.base = DEFAULT_TARGET.base;
-    const dir = path.join(gameDir, '兽夫日记');
-    for (const f of fs.readdirSync(dir).filter(f => f.endsWith('.md'))) {
-      const name = f.slice(0, -3);
-      for (;;) {
-        const text = fs.readFileSync(path.join(dir, f), 'utf8');
+    for (const spec of fileSpecs(gameDir)) {
+      for (let guard = 0; guard < 20; guard++) {
+        const text = fs.readFileSync(spec.file, 'utf8');
         const m = text.match(MARK);
         if (!m) break;
         if (!(await up(T))) return;   // 本地模型没开：标记留着，下次再写
-        const before = text.slice(0, m.index);
+        const before = text.slice(0, m.index), after = text.slice(m.index + m[0].length);
         const entry = before.slice(before.lastIndexOf('\n## ') + 1);
         const date = (entry.match(/现实\s*(\d{4}-\d{2}-\d{2})/) || [])[1];
-        const from = date ? new Date(date + 'T05:00:00') : null, to = from ? new Date(from.getTime() + 86400000) : null;
-        const scenes = (history || []).filter(h => {
-          if (h.sim || h.tick || !h.time || !from) return false;
-          const t = new Date(h.time.replace(' ', 'T'));
-          return t >= from && t < to;
-        }).map(h => (h.role === 'user' ? '【她】' : '【故事】') + h.text).join('\n\n');
+        const times = (history || []).filter(h => h.time && !h.sim && !h.tick);
+        const lastT = times.length ? new Date(times[times.length - 1].time.replace(' ', 'T')) : new Date();
+        const from = date ? new Date(date + 'T05:00:00') : new Date(lastT.getTime() - 86400000), to = new Date(from.getTime() + 86400000 + (date ? 0 : 60000));
+        const scenes = times.filter(h => { const t = new Date(h.time.replace(' ', 'T')); return t >= from && t < to; })
+          .map(h => (h.role === 'user' ? '【她】' : '【故事】') + h.text).join('\n\n');
+        const name = spec.voice || m[1].split('｜')[0].trim();
         const pf = path.join(gameDir, '兽夫', name + '.md');
-        const profile = fs.existsSync(pf) ? fs.readFileSync(pf, 'utf8').slice(0, 3500) : '';
-        const system = `你替一款成人向兽世恋爱游戏写兽夫的私密日记。读者是成年女性玩家，「她」就是玩家本人，是他的妻主；他是成年男性兽人，两人是夫妻，亲密都是她自己选的。
+        const profile = name && fs.existsSync(pf) ? fs.readFileSync(pf, 'utf8').slice(0, 3000) : '';
+        const one = spec.kind !== '日记';
+        const system = `你替一款成人向兽世恋爱游戏写存档里的一段文字（${spec.kind}）。读者是成年女性玩家，「她」就是玩家本人，是兽夫们的妻主；兽夫是成年男性兽人，两人是夫妻，亲密都是她自己选的。
 
 要求：
-- 用他第一人称、他自己的口吻和文笔写（照档案里的性格、自称、说话方式；日记里前面已经写好的部分是什么文风，就接着用什么文风）
-- 只写交接说明里要的那一段：这一天他和她之间的亲密。这是他当面不会说的心里话：他记得的每一个细节、她的身体和声音、他自己的身体反应、他当时在想什么、现在回想起来的感觉
-- 可以彻底露骨：器官、动作、体液直接写名字，不用比喻遮掩，不用「记不清」「后来的事」带过；粗话、荤话按他的性格随意用
-- 照「那一天的故事」里真实发生过的写，不编造没发生的事；可以加他自己的感受和回味
-- 写 500～1200 字，不要标题、不要日期、不要说明，不要重复日记前面已经写过的句子；写完这一段就停，后面的日记会接着`;
+- ${KIND_RULES[spec.kind]}
+- 只写交接说明里要的那一段，写完就停；不要标题、不要日期、不要说明，不要重复前后已经写过的句子
+- 可以彻底露骨：器官、动作、体液直接写名字，不用比喻遮掩；不准带过，不准写「记不清」「后来的事」「一夜过去」「继续交合」这种一笔带过的话；粗话、荤话随意用
+- 照「那一天的故事」里真实发生过的写，不编造没发生的事`;
         const user = (profile ? `【${name}的档案】\n${profile}\n\n` : '') + (scenes ? `【那一天的故事】\n${scenes.slice(-9000)}\n\n` : '') +
-          `【这一篇日记前面已经写好的】\n${entry.slice(-1500)}\n\n【交接说明】\n${m[1]}\n\n现在用${name}的口吻接着写这一段日记：`;
+          `【标记前面的文字】\n${(one ? before.slice(before.lastIndexOf('\n') + 1) : entry).slice(-1500)}\n\n【标记后面的文字】\n${after.slice(0, 300)}\n\n【交接说明】\n${m[1]}\n\n现在写这一段：`;
         const r = await fetch(T.base.replace(/\/+$/, '') + '/chat/completions', {
           method: 'POST', headers: { 'Content-Type': 'application/json', ...(T.key ? { Authorization: 'Bearer ' + T.key } : {}) },
-          body: JSON.stringify({ ...(T.model ? { model: T.model } : {}), stream: false, max_tokens: 3000,
+          body: JSON.stringify({ ...(T.model ? { model: T.model } : {}), stream: false, max_tokens: one ? 600 : 3000,
             temperature: 0.85, top_p: 0.9, top_k: 40, presence_penalty: 1.0,
             ...(/127\.0\.0\.1|localhost/.test(T.base) ? { dry_multiplier: 0.8, dry_base: 1.75, dry_allowed_length: 4, dry_penalty_last_n: 16384 } : {}),
             chat_template_kwargs: { enable_thinking: false },
             messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }),
         });
         if (!r.ok) throw new Error('本地模型 ' + r.status);
-        const out = ((await r.json()).choices?.[0]?.message?.content || '').trim();
+        let out = ((await r.json()).choices?.[0]?.message?.content || '').trim();
+        if (one) out = out.replace(/\s*\n+\s*/g, '');
         if (!out) throw new Error('没写出东西');
         // 写的时候文件可能被别人改过：按标记原文再找一次，换掉
-        const now = fs.readFileSync(path.join(dir, f), 'utf8');
+        const now = fs.readFileSync(spec.file, 'utf8');
         if (!now.includes(m[0])) continue;
-        fs.writeFileSync(path.join(dir, f), now.replace(m[0], out));
-        console.log(`[本地模型] 写好了${name}日记里的一段（${out.length} 字）`);
+        fs.writeFileSync(spec.file, now.replace(m[0], out));
+        console.log(`[本地模型] 写好了${spec.kind}${spec.voice ? '（' + spec.voice + '）' : ''}里的一段（${out.length} 字）`);
       }
     }
   } catch (e) {
-    console.log('[本地模型] 日记没写成：' + e.message);
-  } finally { diaryBusy = false; }
+    console.log('[本地模型] 存档里那段没写成：' + e.message);
+  } finally { fillBusy = false; }
 }
 
-module.exports = { create, up, MARK, fillDiaries };
+module.exports = { create, up, MARK, fillMarks };

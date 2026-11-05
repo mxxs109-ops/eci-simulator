@@ -443,7 +443,7 @@ function chat(text, res) {
       if (!ok) send({ type: 'error', text: err || '没有收到回复' });
     }
     send({ type: 'done' });
-    localLLM.fillDiaries(GAME_DIR, readConfig().handoff, readJson(HISTORY_FILE, []));   // /写日记 时也一样
+    localLLM.fillMarks(GAME_DIR, readConfig().handoff, readJson(HISTORY_FILE, []));   // /写日记 时也一样
     res.end();
   });
 }
@@ -521,7 +521,9 @@ async function simTick() {
   busy = simming = false;
   if (!ok) return console.log(`整点模拟失败（${to}）：${(err || out).slice(0, 300)}`);
   // 只剩「（无）」（有的模型还会多带几个字、换行）就当没有她能察觉的事
-  const say = /^[（(]\s*无\s*[)）]/.test(out.trim()) ? '' : out.trim();
+  let say = /^[（(]\s*无\s*[)）]/.test(out.trim()) ? '' : out.trim();
+  // 旁白里写到亲密的地方留了 〔接手：…〕：交给本地模型写好换进去
+  if (localLLM.MARK.test(say)) say = await localLLM.create(GAME_DIR, () => {}, readConfig().handoff, { history: readJson(HISTORY_FILE, []).slice(-6) }).finish(say);
   if (newDay) { try { rotateSimLog(); } catch (e) { console.log('模拟日志归档失败：' + e.message); } }
   writeJson(SIM_FILE, { last: now.toISOString(), summary: say.slice(0, 300) });
   // 她能察觉到的事，作为一条旁白放进聊天记录，网页会自动显示出来
@@ -535,7 +537,7 @@ async function simTick() {
     if (who) history.push({ role: 'ai', text: `🕐 ${timeStr(now)}　${who}`, time: `${dateStr()} ${timeStr()}`, tick: true });
   }
   writeJson(HISTORY_FILE, history);
-  localLLM.fillDiaries(GAME_DIR, readConfig().handoff, history);   // 日记里亲密的那段交给本地模型
+  localLLM.fillMarks(GAME_DIR, readConfig().handoff, history);   // 存档里亲密的那段交给本地模型
 }
 setInterval(simTick, 60 * 1000);
 setTimeout(simTick, 10 * 1000);
@@ -830,7 +832,7 @@ const server = http.createServer(async (req, res) => {
       } catch (e) { res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('voice off: ' + e.message); }
     }
     if (req.method === 'GET' && url === '/api/history') return json(res, readJson(HISTORY_FILE, []));
-    if (req.method === 'GET' && url === '/api/status') return json(res, { busy, simming, started: fs.existsSync(START_FILE) });
+    if (req.method === 'GET' && url === '/api/status') return json(res, { busy, simming, started: fs.existsSync(START_FILE), gameDir: isLoopback(req) ? GAME_DIR : undefined });
     if (req.method === 'GET' && url === '/api/map') return json(res, readMap());
     if (req.method === 'GET' && url === '/api/cast') return json(res, listCast());
     if (req.method === 'GET' && url === '/api/husband-diary') return json(res, listHusbandDiaries());
