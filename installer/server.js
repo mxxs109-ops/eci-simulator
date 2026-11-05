@@ -64,22 +64,39 @@ const jobs = {};   // name → { step, pct, log[], done, error }
 function job(name, fn) {
   if (jobs[name] && !jobs[name].done) throw new Error('正在进行中');
   const j = jobs[name] = { step: '准备中', pct: 0, log: [], done: false, error: '' };
-  const say = (step, pct) => { j.step = step; if (pct != null) j.pct = pct; j.log.push(`${new Date().toLocaleTimeString()} ${step}`); if (j.log.length > 200) j.log.shift(); };
+  let lastKey = '';
+  const say = (step, pct) => {
+    j.step = step; if (pct != null) j.pct = pct;
+    const line = `${new Date().toLocaleTimeString()} ${step}`, key = step.split('：')[0];
+    if (key === lastKey && /\d+ (MB|GB)/.test(step)) j.log[j.log.length - 1] = line; else j.log.push(line);   // 下载进度只更新最后一行
+    lastKey = key; if (j.log.length > 200) j.log.shift();
+  };
   fn(say).then(() => { j.done = true; j.pct = 100; say('完成'); }).catch(e => { j.done = true; j.error = e.message; say('出错：' + e.message); });
   return j;
 }
-// 断线续传下载：用 Windows 自带的 curl.exe，按文件大小算进度
-async function download(url, file, say, label) {
+// 大小写成人看得懂的：1GB 以下用 MB
+const size = b => b >= 1e9 ? (b / 1e9).toFixed(2) + ' GB' : Math.round(b / 1e6) + ' MB';
+const dur = sec => sec >= 3600 ? Math.floor(sec / 3600) + ' 小时 ' + Math.round(sec % 3600 / 60) + ' 分' : sec >= 60 ? Math.round(sec / 60) + ' 分钟' : Math.max(1, Math.round(sec)) + ' 秒';
+// 断线续传下载：用 Windows 自带的 curl.exe，按文件大小算进度。
+// opt.from / opt.to：这次下载占整个进度条的哪一段；opt.estimate：服务器不告诉总大小时（GitHub 打包下载）按这个估
+async function download(url, file, say, label, opt = {}) {
+  const from = opt.from ?? 0, to = opt.to ?? 100;
   fs.mkdirSync(path.dirname(file), { recursive: true });
   let total = 0;
   try { const h = await fetch(url, { method: 'HEAD', redirect: 'follow' }); total = Number(h.headers.get('content-length')) || 0; } catch {}
-  if (total && fs.existsSync(file) && fs.statSync(file).size === total) return;
+  if (total && fs.existsSync(file) && fs.statSync(file).size === total) return say(`${label}：已经下好了`, to);
+  const guess = total || opt.estimate || 0;
   for (let attempt = 1; attempt <= 30; attempt++) {
     const ok = await new Promise(resolve => {
       const p = spawn('curl.exe', ['-L', '-C', '-', '--retry', '5', '--connect-timeout', '30', '-s', '-o', file, url], { windowsHide: true });
+      let last = fs.existsSync(file) ? fs.statSync(file).size : 0, speed = 0;
       const t = setInterval(() => {
         const got = fs.existsSync(file) ? fs.statSync(file).size : 0;
-        say(`${label}：${(got / 1e9).toFixed(2)}${total ? ' / ' + (total / 1e9).toFixed(2) : ''} GB`, total ? Math.floor(got / total * 100) : null);
+        speed = speed ? speed * 0.7 + (got - last) * 0.3 : got - last; last = got;   // 每秒多少字节，平滑一下
+        const part = guess ? Math.min(0.99, got / guess) : 0;
+        const left = total && speed > 0 ? '，还要约 ' + dur((total - got) / speed) : '';
+        say(`${label}：${size(got)}${total ? ' / ' + size(total) : guess ? ' / 约 ' + size(guess) : ''}${speed > 0 ? '，' + size(speed) + '/秒' : ''}${left}`,
+          guess ? Math.floor(from + (to - from) * part) : null);
       }, 1000);
       p.on('close', code => { clearInterval(t); resolve(code === 0); });
     });
@@ -166,8 +183,8 @@ async function remoteVersion() {
 async function fetchRepo(say) {
   const tmp = path.join(HOME, 'tmp'); rmrf(tmp); fs.mkdirSync(tmp, { recursive: true });
   const zip = path.join(tmp, 'repo.zip');
-  await download(`https://codeload.github.com/${REPO}/zip/refs/heads/${BRANCH}`, zip, say, '下载游戏');
-  say('解压');
+  await download(`https://codeload.github.com/${REPO}/zip/refs/heads/${BRANCH}`, zip, say, '下载游戏', { estimate: 235e6, from: 0, to: 70 });
+  say('解压（一两分钟）', 72);
   unzip(zip, tmp);
   const top = fs.readdirSync(tmp).find(n => fs.statSync(path.join(tmp, n)).isDirectory());
   return path.join(tmp, top);
@@ -218,22 +235,22 @@ async function installGame(say) {
   const repo = await fetchRepo(say);
   const ver = readJson(path.join(repo, 'version.json'), { version: '?' });
   const fresh = !fs.existsSync(path.join(d.game, 'app', 'server.js'));
-  say('准备干净的模板（新建存档用）');
+  say('准备干净的模板（新建存档用）', 80);
   rmrf(templateDir(s)); fs.mkdirSync(s.root, { recursive: true });
   fs.cpSync(path.join(repo, 'game'), templateDir(s), { recursive: true });
   fs.copyFileSync(path.join(repo, 'version.json'), path.join(templateDir(s), 'version.json'));
   if (fresh) {
-    say('复制游戏文件');
+    say('复制游戏文件', 88);
     cloneDir(templateDir(s), d.game);
     saveState({ save: '存档 1' });
   } else {
-    say('更新游戏（存档和设置不动）');
+    say('更新游戏（存档和设置不动）', 88);
     await stopOurs('game');
     updateDir(d.game, say);
   }
   fs.copyFileSync(path.join(repo, 'version.json'), path.join(d.game, 'version.json'));
   // 安装器自己也跟着更新
-  say('更新安装器');
+  say('更新安装器', 97);
   fs.cpSync(path.join(repo, 'installer'), path.join(HOME, 'installer'), { recursive: true });
   rmrf(path.join(HOME, 'tmp'));
   saveState({ game: { version: ver.version, at: new Date().toISOString() } });
@@ -389,10 +406,10 @@ async function installLLM(tier, build, say) {
     : build === 'vulkan' ? [`llama-${LLAMA_TAG}-bin-win-vulkan-x64.zip`] : [`llama-${LLAMA_TAG}-bin-win-cpu-x64.zip`];
   for (const z of zips) {
     const f = path.join(d.llm, 'download', z);
-    await download(base + z, f, say, '下载 llama.cpp');
-    say('解压 ' + z); unzip(f, path.join(d.llm, 'llama.cpp'));
+    await download(base + z, f, say, '下载 llama.cpp', { from: 0, to: 6 });
+    say('解压 ' + z, 7); unzip(f, path.join(d.llm, 'llama.cpp'));
   }
-  await download(`https://huggingface.co/${MODEL_REPO}/resolve/main/${m.file}`, path.join(d.llm, 'models', m.file), say, '下载模型');
+  await download(`https://huggingface.co/${MODEL_REPO}/resolve/main/${m.file}`, path.join(d.llm, 'models', m.file), say, '下载模型', { estimate: m.gb * 1e9, from: 8, to: 97 });
   // 上下文：游戏规则 + 存档有三万多字，给 64k；显存小的给 48k
   const hw = hardware();
   const ctx = hw.nvidia && hw.nvidia.vramGB >= 12 ? 65536 : 49152;
@@ -456,20 +473,20 @@ async function installTTS(say) {
   const uv = path.join(d.tts, 'uv', 'uv.exe');
   if (!fs.existsSync(uv)) {
     const z = path.join(d.tts, 'download', 'uv.zip');
-    await download('https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip', z, say, '下载 uv');
+    await download('https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip', z, say, '下载 uv', { from: 0, to: 3 });
     unzip(z, path.join(d.tts, 'uv'));
   }
   const src = path.join(d.tts, 'index-tts');
   if (!fs.existsSync(path.join(src, 'pyproject.toml'))) {
     const z = path.join(d.tts, 'download', 'index-tts.zip');
-    await download(`https://codeload.github.com/index-tts/index-tts/zip/${INDEX_TTS_SHA}`, z, say, '下载 IndexTTS');
+    await download(`https://codeload.github.com/index-tts/index-tts/zip/${INDEX_TTS_SHA}`, z, say, '下载 IndexTTS', { estimate: 60e6, from: 3, to: 8 });
     unzip(z, path.join(d.tts, 'download'));
     fs.renameSync(path.join(d.tts, 'download', `index-tts-${INDEX_TTS_SHA}`), src);
   }
-  say('装 Python 环境和 PyTorch（几 GB，要一阵子）');
+  say('装 Python 环境和 PyTorch（几 GB，要一阵子）', 10);
   await run(uv, ['sync'], { cwd: src, env }, say);
   await run(uv, ['pip', 'install', '-p', path.join(src, '.venv', 'Scripts', 'python.exe'), 'fastapi', 'uvicorn', 'huggingface_hub'], { cwd: src, env }, say);
-  say('下载配音模型（约 5GB）');
+  say('下载配音模型（约 5GB）', 55);
   await run(path.join(src, '.venv', 'Scripts', 'python.exe'), ['-c',
     "from huggingface_hub import snapshot_download; snapshot_download('IndexTeam/IndexTTS-2.5', local_dir='checkpoints', max_workers=8)"], { cwd: src, env: { ...env, PYTHONUTF8: '1' } }, say);
   fs.copyFileSync(path.join(HERE, 'tts_server.py'), path.join(src, 'tts_server.py'));
