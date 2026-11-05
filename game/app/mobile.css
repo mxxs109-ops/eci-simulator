@@ -63,7 +63,9 @@
   #vn .box, #vn .box.hasface { left: 0 !important; right: 0 !important; bottom: 0 !important; height: var(--boxh) !important; min-height: 0 !important; max-height: none !important;
     border-radius: 20px 20px 0 0 !important; border-left: 0 !important; border-right: 0 !important; border-bottom: 0 !important;
     padding: 20px 18px 30px !important; font-size: 16px !important; line-height: 1.8 !important; }
-  #vn .face { display: none !important; }
+  /* 说话人的方头像：手机上缩小一点放在框左上 */
+  #vn .box.hasface { padding-left: 90px !important; }
+  #vn .face { width: 62px !important; height: 62px !important; margin-left: -74px !important; border-radius: 12px !important; border-width: 2px !important; }
   #vn .name { left: 14px !important; bottom: auto !important; font-size: 16px !important; padding: 3px 18px !important; }
   #vn .hud { display: none !important; }
   #vn .count { top: 8px !important; left: 8px !important; }
@@ -86,4 +88,10 @@
 @media (max-width: 760px) {
   #vn .name .nst { display: inline-flex; gap: 6px; margin-left: 10px; vertical-align: 2px; font: 600 12px "PingFang SC","Microsoft YaHei",sans-serif; letter-spacing: 0; }
   #vn .name .nst span { background: rgba(0,0,0,.22); border-radius: 999px; padding: 0 7px; line-height: 1.6; }
+}
+
+/* 手机记录模式：每条消息旁边已经有兽夫头像，上面那排头像不要了，只留日期天气 */
+@media (max-width: 760px) {
+  body:not(.vnmode) #thumbs { display: none !important; }
+  header #vnToggle span { padding: 3px 12px; font-size: 13px; }
 }

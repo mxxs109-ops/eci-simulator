@@ -45,7 +45,9 @@
   #vn .bar button { background: rgba(255,250,240,.88); font-size: 13px; padding: 3px 10px; }
   #vn .bar button.on { background: #8a5a3c; color: #fff; }
   #vn .count { position: absolute; top: 12px; left: 14px; z-index: 7; color: #fff; font-size: 12px; background: rgba(0,0,0,.35); padding: 2px 8px; border-radius: 8px; }
-  #vnToggle.on { background: var(--me); color: #fff; }
+  #vnToggle { display: inline-flex; padding: 3px !important; gap: 2px; border-radius: 999px; background: var(--bg); }
+  #vnToggle span { padding: 3px 12px; border-radius: 999px; color: var(--muted); transition: background .2s, color .2s; white-space: nowrap; }
+  #vnToggle.on .a, #vnToggle:not(.on) .b { background: var(--me); color: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
   #vn .hud { position: absolute; top: 40px; left: 12px; z-index: 7; display: flex; flex-direction: column; gap: 6px; }
   #vn .hud .h { background: rgba(30,22,16,.72); color: #fbf3e6; border-radius: 10px; padding: 6px 10px; font-size: 12px; line-height: 1.6; min-width: 190px; max-width: 260px; border-left: 3px solid var(--c); }
   #vn .hud .h b { font: 700 15px "STKaiti","KaiTi",serif; color: #fff; }
@@ -64,10 +66,11 @@
   $('#log').before(vn);
   // 页头的开关：剧情模式 / 记录模式
   const tg = document.createElement('button');
-  tg.id = 'vnToggle'; tg.title = '剧情模式：像 galgame 一样一段一段看';
+  tg.id = 'vnToggle'; tg.title = '切换：剧情（立绘一段一段看）/ 记录（整段聊天记录）';
+  tg.innerHTML = '<span class="a">🎬 剧情</span><span class="b">📜 记录</span>';   // 两格开关，当前模式那格亮
   $('#reset').before(tg);
   let on = (() => { try { return localStorage.getItem('vnMode') !== 'off'; } catch { return true; } })();
-  const setMode = v => { on = v; document.body.classList.toggle('vnmode', on); tg.classList.toggle('on', on); tg.textContent = on ? '🎬 剧情' : '📜 记录'; try { localStorage.setItem('vnMode', on ? 'on' : 'off'); } catch {} if (on) paint(); };
+  const setMode = v => { on = v; document.body.classList.toggle('vnmode', on); tg.classList.toggle('on', on); try { localStorage.setItem('vnMode', on ? 'on' : 'off'); } catch {} if (on) paint(); };
 
   // 队列：pages = [{who, text, kind}]，idx = 正在看的那一段
   let waiting = false, roundKey = '', pages = [], idx = -1, streamText = '', streamFed = 0, typing = null, shown = '';
