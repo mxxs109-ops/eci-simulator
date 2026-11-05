@@ -75,7 +75,7 @@ function job(name, fn) {
   return j;
 }
 // 大小写成人看得懂的：1GB 以下用 MB
-const size = b => b >= 1e9 ? (b / 1e9).toFixed(2) + ' GB' : Math.round(b / 1e6) + ' MB';
+const size = b => b >= 1e9 ? (b / 1e9).toFixed(2) + ' GB' : b >= 1e6 ? Math.round(b / 1e6) + ' MB' : Math.max(1, Math.round(b / 1e3)) + ' KB';   // 网慢时速度不到 1MB，写 KB，别显示成 0
 const dur = sec => sec >= 3600 ? Math.floor(sec / 3600) + ' 小时 ' + Math.round(sec % 3600 / 60) + ' 分' : sec >= 60 ? Math.round(sec / 60) + ' 分钟' : Math.max(1, Math.round(sec)) + ' 秒';
 // 断线续传下载：用 Windows 自带的 curl.exe，按文件大小算进度。
 // opt.from / opt.to：这次下载占整个进度条的哪一段；opt.estimate：服务器不告诉总大小时（GitHub 打包下载）按这个估

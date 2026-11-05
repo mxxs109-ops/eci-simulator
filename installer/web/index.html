@@ -357,7 +357,7 @@ async function refresh() {
   $('locNow').textContent = S.root; $('locFree').textContent = S.free == null ? '—' : S.free + ' GB';
   $('gVer').innerHTML = S.game ? esc(S.game.version) + (S.running.game ? ' <span class="tag ok">● 运行中</span>' : '') : '还没装';
   $('gDir').textContent = S.dirs?.game || '—';
-  if (!S.game) { $('gInstall').textContent = '安装'; $('gInstall').disabled = false; }
+  if (!S.game && !$('gInstall').dataset.locked) { $('gInstall').textContent = '安装'; $('gInstall').disabled = false; }
   $('gOpen').disabled = !S.game;
   const b = brainLabel();
   // 侧边栏的小圆点
@@ -382,6 +382,9 @@ $('heroBtn').onclick = e => { const to = e.target.dataset.to; if (to === 'open')
 
 // 后台任务进度
 const jobSeen = {};
+// 哪个任务锁哪个按钮、锁住时写什么
+const JOB_BTN = { game: 'gInstall', tts: 'tInstall', llm: 'lInstall', llmtest: 'lTest', location: 'locPick', uninstall: 'dGo' };
+const JOB_TXT = { game: () => (S.game ? '更新中…' : '安装中…'), tts: () => '安装中…', llm: () => '安装中…', llmtest: () => '启动中…', location: () => '搬家中…', uninstall: () => '卸载中…' };
 let firstPoll = true;   // 打开页面时已经做完的任务不再弹提示
 async function poll() {
   const jobs = await api('/api/jobs').catch(() => ({}));
@@ -390,9 +393,16 @@ async function poll() {
     const box = $('job-' + name); if (!box) continue;
     box.innerHTML = `<div class="bar ${j.error ? 'err' : j.done ? 'done' : ''}"><i style="width:${j.error ? 100 : j.pct}%"></i></div>
       <div class="step ${j.error ? 'bad' : j.done ? 'ok' : ''}">${j.error ? '😵 出错：' + esc(j.error) : j.done ? '🎉 ' + esc(j.step) : esc(j.step)}</div><div class="log">${esc(j.log.slice(-5).join('\n'))}</div>`;
+    // 任务还在跑：对应的按钮锁住、写「…中」，免得再点一次又从头来
+    const btn = $(JOB_BTN[name]);
+    if (btn) {
+      if (!j.done) { btn.disabled = true; btn.classList.add('busy'); btn.textContent = JOB_TXT[name] ? JOB_TXT[name]() : '进行中…'; btn.dataset.locked = '1'; }
+      else if (btn.dataset.locked) { delete btn.dataset.locked; btn.classList.remove('busy'); btn.disabled = false; }
+    }
     const key = name + j.log.length + j.done;
     if (j.done && jobSeen[name] !== key) {
       jobSeen[name] = key; refresh();
+      if (name === 'game') checkUpdate();
       if (j.error) toast('出错了：' + j.error, 'bad'); else toast(j.step, 'ok');
       if (name === 'llm' && !j.error) $('lTest') && ($('lTest').disabled = false);
       if (name === 'llmtest' && !j.error) $('lUse') && ($('lUse').disabled = false);
@@ -413,7 +423,7 @@ async function checkUpdate() {
   $('gRemote').innerHTML = esc(r.remote.version) + (newer ? ` <span class="tag me">🔔 有新版本</span><div class="soft">${esc(r.remote.notes || '')}</div>` : r.local ? ' <span class="tag ok">已是最新</span>' : '');
   if (newer) { $('st-game').className = 'st new'; $('gInstall').classList.add('pop'); }
 }
-$('gInstall').onclick = () => { api('/api/game/install', {}); toast(S.game ? '开始更新…' : '开始安装…'); };
+$('gInstall').onclick = e => { e.target.disabled = true; e.target.classList.add('busy'); e.target.textContent = S.game ? '更新中…' : '安装中…'; e.target.dataset.locked = '1'; api('/api/game/install', {}); toast(S.game ? '开始更新…' : '开始安装…'); };
 $('gOpen').onclick = () => { api('/api/game/open', {}); toast('正在打开游戏…'); };
 $('gCheck').onclick = e => busyBtn(e.target, checkUpdate);
 
@@ -428,7 +438,7 @@ $('tCheck').onclick = e => busyBtn(e.target, async () => {
     ${r.why.map(w => `<p class="soft">· ${esc(w)}</p>`).join('')}`;
   $('tInstall').disabled = !r.ok || !S.game; $('tInstall').classList.toggle('p', !$('tInstall').disabled);
 });
-$('tInstall').onclick = () => { api('/api/tts/install', {}); toast('开始安装配音…'); };
+$('tInstall').onclick = e => { e.target.disabled = true; e.target.classList.add('busy'); e.target.textContent = '安装中…'; e.target.dataset.locked = '1'; api('/api/tts/install', {}); toast('开始安装配音…'); };
 
 // ---------- 存档 ----------
 const ago = t => { if (!t) return '还没玩过'; const m = (Date.now() - new Date(t)) / 60000; return m < 60 ? Math.max(1, Math.round(m)) + ' 分钟前' : m < 1440 ? Math.round(m / 60) + ' 小时前' : Math.round(m / 1440) + ' 天前'; };
