@@ -148,7 +148,7 @@
     const now = d.attrs.find(a => a.k === '现在'), was = d.attrs.find(a => a.k === '曾经');
     const hv = live && +(((live.food && live.food.nutrition) || '').match(/健康值\s*(\d+)/) || [])[1];
     const bar = (label, v, col, txt) => `<div class="bar"><div class="t"><span>${label}</span><b>${txt ?? v}</b></div><div class="g"><i style="width:${Math.max(0, Math.min(100, v))}%;background:${col}"></i></div></div>`;
-    const bars = [live ? bar('❤ 好感', live.favor || 0, '#e57399') : '', hv >= 0 ? bar('🩺 健康', hv, hv > 60 ? '#4caf50' : hv > 30 ? '#f0b429' : '#e53935') : '',
+    const bars = [live ? `<div class="bar"><div class="t"><span>❤ 好感</span><b>${live.favor || 0}</b></div><div class="g" style="background-image:linear-gradient(90deg,transparent calc(50% - 1px),rgba(0,0,0,.28) calc(50% - 1px),rgba(0,0,0,.28) calc(50% + 1px),transparent calc(50% + 1px))"><i style="${favFill(live.favor, '#e57399')}"></i></div></div>` : '', hv >= 0 ? bar('🩺 健康', hv, hv > 60 ? '#4caf50' : hv > 30 ? '#f0b429' : '#e53935') : '',
       live && live.mood ? `<div class="bar"><div class="t"><span>💭 心情</span><b>${E(live.mood)}</b></div></div>` : ''].join('');
     // 状态：怀孕（游戏知道，头两天他自己还不知道）、战损、易感期
     const doing = (live && live.doing) || '', preg = doing.match(/【怀孕(?:·第(\d+)天)?】/);

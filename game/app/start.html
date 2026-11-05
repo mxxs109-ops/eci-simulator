@@ -34,6 +34,24 @@
   .foot { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--line); padding: 12px 16px; }
   .foot .in { max-width: 980px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
   .err { color: #c0392b; }
+  h2 { font-size: 17px; margin: 22px 0 10px; }
+  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .mode { text-align: left; border: 2px solid var(--line); border-radius: 16px; padding: 14px 16px; background: var(--card); transition: transform .15s, border-color .15s, box-shadow .15s; }
+  .mode b { display: block; font-size: 18px; margin-bottom: 4px; }
+  .mode span { color: var(--soft); font-size: 14px; }
+  .mode .fv { display: inline-block; margin-top: 8px; font-size: 13px; font-weight: 700; padding: 2px 10px; border-radius: 99px; background: #f6dbe4; color: #b4466d; }
+  .mode[data-m=old] .fv { background: #e6defa; color: #6a4bb8; }
+  .mode.on { border-color: var(--me); box-shadow: 0 6px 18px rgba(138,90,60,.18); transform: translateY(-2px); }
+  .mode.on b::after { content: ' ✓'; color: var(--me); }
+  .cnt { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; }
+  .cnt b#nTog { font-size: 22px; min-width: 2.2em; text-align: center; color: var(--me); }
+  .cnt button { width: 38px; height: 38px; padding: 0; font-size: 20px; border-radius: 50%; }
+  .cnt button#nAll { width: auto; border-radius: 10px; padding: 0 12px; font-size: 14px; }
+  .cnt button#nAll.on { background: var(--me); color: #fff; border-color: var(--me); }
+  .row.here { border-color: var(--me); box-shadow: inset 4px 0 0 var(--me); }
+  .tag { font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 99px; margin-left: 6px; background: var(--me); color: #fff; vertical-align: 2px; }
+  .tag.later { background: var(--line); color: var(--soft); }
+  @media (max-width: 600px) { .modes { grid-template-columns: 1fr; } }
   @media (max-width: 600px) {
     .row { grid-template-columns: 26px 52px 1fr; }
     .pic { width: 52px; height: 52px; }
@@ -44,7 +62,14 @@
 <body>
 <div class="wrap">
   <h1>恶雌模拟器</h1>
-  <p class="sub">选兽夫、排登场顺序、给他们起名字。第 1 位第一天就在你的小院里，后面的人会一个一个出现。</p>
+  <h2>开局</h2>
+  <div class="modes">
+    <button class="mode on" data-m="new"><b>🌱 新绑定</b><span>兽神刚把他们配给你，第一次见面，谁也不认识谁</span><br><i class="fv">好感 0 ～ 30</i></button>
+    <button class="mode" data-m="old"><b>🥀 早已绑定</b><span>绑定很久了，以前的你对他们又打又骂，他们都讨厌你</span><br><i class="fv">好感 -100 ～ -20</i></button>
+  </div>
+  <h2>开局就在身边的兽夫</h2>
+  <div class="cnt"><button id="nMinus">−</button><b id="nTog">1</b><button id="nPlus">+</button><button id="nAll">全部</button><span class="sub" style="margin:0" id="nTxt"></span></div>
+  <h2>兽夫</h2>
   <div class="bar">
     <button id="shuffle">🎲 随机顺序</button>
     <button id="allOn">全选</button>
@@ -63,6 +88,7 @@
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 let items = [];   // { name, race, brief, img, on, nick }
+let mode = 'new', together = 1;   // 开局方式；排在前面的几位开局就在
 
 // 随机起名：姓 + 一两个字，偏古风
 const SUR = '墨苍玄夜沈顾楚萧谢陆裴江白温慕容南宫司马上官独孤长孙凌云月星霜寒澜烬'.match(/慕容|南宫|司马|上官|独孤|长孙|./g);
@@ -82,12 +108,16 @@ function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.fl
 
 function draw() {
   let k = 0;
-  $('list').innerHTML = items.map((it, i) => `
-    <div class="row ${it.on ? '' : 'off'}" draggable="true" data-i="${i}">
+  const on = items.filter(x => x.on).length; together = Math.max(1, Math.min(together, on || 1));
+  $('nTog').textContent = together; $('nAll').classList.toggle('on', on > 0 && together === on);
+  $('nTxt').textContent = on ? (together === on ? '所有兽夫开局就都在' : `其余 ${on - together} 位之后一个一个遇到`) : '';
+  let j = 0;
+  $('list').innerHTML = items.map((it, i) => { const here = it.on && j++ < together; return `
+    <div class="row ${it.on ? '' : 'off'} ${here ? 'here' : ''}" draggable="true" data-i="${i}">
       <div class="no handle" title="拖动排序">${it.on ? ++k : '—'}</div>
       <div class="pic" style="${it.img ? `background-image:url('/game/${encodeURI(it.img)}')` : ''}"></div>
       <div class="who">
-        <input value="${esc(finalName(it))}" data-nick="${i}" maxlength="6" title="点这里改名">${it.nick && it.nick !== it.name ? `<span class="orig">原名 ${esc(it.name)}</span>` : ''}
+        <input value="${esc(finalName(it))}" data-nick="${i}" maxlength="6" title="点这里改名">${it.on ? `<span class="tag ${here ? '' : 'later'}">${here ? '开局' : '之后遇到'}</span>` : ''}${it.nick && it.nick !== it.name ? `<span class="orig">原名 ${esc(it.name)}</span>` : ''}
         <div class="brief">${esc([it.race, it.brief].filter(Boolean).join(' · '))}</div>
       </div>
       <div class="ops">
@@ -96,7 +126,7 @@ function draw() {
         <button data-act="rand" data-i="${i}" title="随机起个名字">🎲 名字</button>
         <button data-act="toggle" data-i="${i}">${it.on ? '不要他' : '要他'}</button>
       </div>
-    </div>`).join('');
+    </div>`; }).join('');
 }
 
 $('list').addEventListener('click', e => {
@@ -129,6 +159,10 @@ $('allOn').onclick = () => { items.forEach(x => x.on = true); draw(); };
 $('allOff').onclick = () => { items.forEach(x => x.on = false); draw(); };
 $('nameAll').onclick = () => { const taken = new Set(); items.forEach(x => { x.nick = randomName(taken); taken.add(x.nick); }); draw(); };
 $('nameReset').onclick = () => { items.forEach(x => x.nick = ''); draw(); };
+document.querySelectorAll('.mode').forEach(b => b.onclick = () => { mode = b.dataset.m; document.querySelectorAll('.mode').forEach(x => x.classList.toggle('on', x === b)); });
+$('nMinus').onclick = () => { together = Math.max(1, together - 1); draw(); };
+$('nPlus').onclick = () => { together++; draw(); };
+$('nAll').onclick = () => { together = items.filter(x => x.on).length; draw(); };
 $('adult').onchange = e => { $('go').disabled = !e.target.checked; };
 
 $('go').onclick = async () => {
@@ -139,7 +173,7 @@ $('go').onclick = async () => {
   if (!order.length) return $('err').textContent = '至少选一位兽夫';
   if (new Set(names).size !== names.length) return $('err').textContent = '有两个兽夫重名了';
   $('go').disabled = true; $('go').textContent = '正在准备……';
-  const r = await fetch('/api/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ order, rename }) }).then(r => r.json()).catch(e => ({ error: e.message }));
+  const r = await fetch('/api/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ order, rename, mode, together }) }).then(r => r.json()).catch(e => ({ error: e.message }));
   if (!r.ok) { $('err').textContent = r.error || '出错了'; $('go').disabled = false; $('go').textContent = '开始游戏'; return; }
   location.href = '/';
 };

@@ -191,6 +191,7 @@
   @media (max-width: 1100px) { #cast { width: 300px; } }
   .card .bar { height: 4px; background: rgba(255,255,255,.25); border-radius: 2px; margin: 4px 0 3px; }
   .card .bar i { display: block; height: 100%; border-radius: 2px; background: var(--c); }
+  .card .bar.fav { background-image:linear-gradient(90deg,transparent calc(50% - 1px),rgba(0,0,0,.28) calc(50% - 1px),rgba(0,0,0,.28) calc(50% + 1px),transparent calc(50% + 1px)); }
   .card .go {
     position: absolute; top: 8px; right: 8px; font-size: 12px; padding: 1px 10px;
     background: rgba(255,255,255,.85); color: #3b2f25; border: none;
@@ -382,6 +383,8 @@
 
 <script src="/play.js"></script>
 <script>
+// 好感 -100～100 的条：中间是 0，正的往右，负的往左（紫色）
+window.favFill = (v, pos) => { v = Math.max(-100, Math.min(100, Number(v) || 0)); return v >= 0 ? `margin-left:50%;width:${v / 2}%${pos ? ';background:' + pos : ''}` : `margin-left:${50 + v / 2}%;width:${-v / 2}%;background:#7d63c8`; };
 const $ = id => document.getElementById(id);
 const COLORS = { '苍冽': 'var(--c-cl)', '玄烬': 'var(--c-xj)', '墨清寒': 'var(--c-mq)', '楚月白': 'var(--c-cy)', '栖朔': 'var(--c-qs)', '焚寂': 'var(--c-fj)', '顾宴礼': 'var(--c-gy)', '南黎辰': 'var(--c-nl)', '夜墨渊': 'var(--c-ym)', '蓝槿初': 'var(--c-lj)', '容听澜': 'var(--c-rt)', '鳞峦': 'var(--c-lr)', '君玄': 'var(--c-jx)', '长珏': 'var(--c-cj)', '无咎': 'var(--c-wj)', '明镜': 'var(--c-mj)', '方清然': 'var(--c-fq)', '灿星': 'var(--c-cx)' };
 
@@ -501,7 +504,7 @@ function cardHtml(r, id) {
     ${id === 'stage' ? `<button class="dtl" data-inv-open="${esc(r.name)}" title="详情">📜</button>` : ''}
     <div class="info">
       <span class="nm">${esc(r.name)}</span><span class="lv">${esc(r.level || '')}</span>
-      <div class="bar"><i style="width:${Math.max(0, Math.min(100, r.favor))}%"></i></div>
+      <div class="bar fav"><i style="${favFill(r.favor)}"></i></div>
       好感 ${r.favor} · ${esc(r.mood || '')}
       <div class="doing" title="${esc(r.doing || '')}">${esc((r.doing || '').replace('【战损】', '💀 ').replace('【易感期】', '🔥 ').replace(/【怀孕(·[^】]*)?】/, '🥚 '))}</div>
       ${id === 'stage' && r.food ? (() => { const hv = +((r.food.nutrition || '').match(/健康值\s*(\d+)/) || [])[1]; const tip = [r.food.nutrition, r.food.body, r.food.sleep && '睡眠：' + r.food.sleep, r.food.exercise && '运动：' + r.food.exercise].filter(Boolean).join(' / ');

@@ -19,8 +19,8 @@
       if (narrow() && typeof faceStyle === 'function' && c.dataset.name) { const fs = faceStyle(c.dataset.name, c.clientWidth || 46); if (fs) c.style.cssText += ';' + fs; }
       const doing = c.querySelector('.doing')?.textContent || '';
       const st = /🥚/.test(doing) ? '🥚' : /💀/.test(doing) ? '💀' : /🔥/.test(doing) ? '🔥' : '';
-      const fav = c.querySelector('.info .bar i')?.style.width || '0%';
-      c.insertAdjacentHTML('beforeend', `${st ? `<span class="mstat">${st}</span>` : ''}<span class="mfav"><i style="width:${fav}"></i></span>`);
+      const fav = c.querySelector('.info .bar i')?.style.cssText || 'width:0';
+      c.insertAdjacentHTML('beforeend', `${st ? `<span class="mstat">${st}</span>` : ''}<span class="mfav"><i style="${fav}"></i></span>`);
     });
   }
   const tidy = () => { tabs(); thumbs(); };

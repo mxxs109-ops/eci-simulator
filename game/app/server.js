@@ -200,7 +200,7 @@ function listCast() {
     // 动态证件照：立绘/动画素材/编号_名字.mp4（或 .webm）
     const vid = animFiles.find(f => /\.(mp4|webm)$/i.test(f) && path.parse(f).name.replace(/^\d+_/, '') === name);
     return {
-      name, level, favor: Number(favor) || 0, mood, doing, where: where || '', img: img ? `立绘/${img}` : null,
+      name, level, favor: Number((String(favor).replace(/[−－–]/g, '-').match(/-?\d+/) || [])[0]) || 0, mood, doing, where: where || '', img: img ? `立绘/${img}` : null,
       beastImg: beast ? `立绘/${beast}` : null,
       halfImg: half ? `立绘/${half}` : null,
       idImg: idPhoto ? `立绘/${idPhoto}` : null,
@@ -387,17 +387,28 @@ async function runApiBrain(cfg, { prompt, resume, on, ephemeral }) {
   return { ok: true };
 }
 
-// 新游戏的第一条消息：照 开局.json 让第一位兽夫登场
+// 新游戏的第一条消息：照 开局.json 的开局方式，让开局的兽夫出场
 function openingNote() {
   const start = readJson(START_FILE, null);
   if (!start || readJson(HISTORY_FILE, []).some(m => m.role === 'ai' && !m.tick)) return '';
-  return `[系统提示，不是她说的话：这是新游戏的第一轮。她在开局界面定的兽夫登场顺序是：${start.order.join('、')}。按 状态.md「兽夫登场」一节，让第一位（${start.order[0]}）照他档案里的「登场」场面登场，写开场；她自己是什么人、有什么本事，一概不替她设定，等她说。]\n\n`;
+  const first = start.order.slice(0, start.together || 1), later = start.order.slice(first.length);
+  const next = later.length ? `之后的兽夫按顺序（${later.join('、')}）照 状态.md「兽夫登场」一个一个来，和她都是第一次见面，好感按表里的数。` : '这一局所有兽夫开局就都在了，之后不再有新兽夫登场。';
+  if (start.mode === 'old') return `[系统提示，不是她说的话：这是新游戏的第一轮，开局方式是「早已绑定」。开局就在家里的兽夫：${first.join('、')}。他们和她绑定很久了（几个月到几年，按各自档案定），以前的她对他们又打又骂，他们都讨厌她、恨她。写剧情之前先做完这几件事：
+① 在 回忆.md 开头写「前情」：每人一段——什么时候、怎么被兽神配给她的；以前的她怎么对他（打骂、鞭打、饿着、当众羞辱、拿他最在意的东西作践……按他的性格、逆鳞和档案挑，每个人都不一样）；身上因此留下了什么伤；他现在怎么看她、心里打着什么主意
+② 状态.md「兽夫一览」里他们的好感已经按各自的种子给了初值（负数），照你写的前情在 ±15 以内调一调（范围 -100～-20，越恨越低）；去掉【尚未登场】，按前情写心情、此刻在做什么、在哪；「饮食与健康」写伤势（档案里原本的伤 + 她打出来的伤）；「心伤」表也照前情填
+③ 他们不是被捡回来的，**不用**他们档案里的「登场」场面
+她现在为什么和以前不一样，一概不替她设定，等她自己说；兽夫们只看得见她变了，第一反应是怀疑她又在耍什么花样。${next}]
+
+`;
+  return `[系统提示，不是她说的话：这是新游戏的第一轮，开局方式是「新绑定」。第 1 天是兽神强行绑定的日子：${first.join('、')}今天**第一次见到她**，谁也不认识谁，好感就是 状态.md 表里的数。${first.length > 1 ? '他们都照各自档案里的「登场」场面在这一天出现（一个接一个、前后脚到，场面可以按同一天的时间和地点改细节）' : '他照档案里的「登场」场面登场'}，写开场；登场后去掉他们的【尚未登场】、在 回忆.md 记下相遇。${next}她自己是什么人、有什么本事，一概不替她设定，等她说。]
+
+`;
 }
 
 // auto：她点的是「续写」，text 只是记录里显示的那几个字，发给大脑的是续写指令
 const CONTINUE_NOTE = "[自动续写，不是她说的话：她这一轮没有新的动作和台词，按了「续写」。接着上一轮的结尾自然往下写一段：时间往前走，兽夫们按各自的性格主动行动、把正在发生的事推进一步（没什么事就推「未完成的约定 / 待解之谜」里挂着的事，或者来一件 事件池.md 里合适的小事）。**不要重复**上一轮已经写过的情节、动作、台词、描写和比喻，不要回头重演同一刻；不替她说话、不替她做决定，写到需要她回应的地方停下。存档照常改]";
 // 开局：页面打开时还一段剧情都没有，自动发一次，让第一位兽夫登场
-const OPEN_NOTE = "[开场，不是她说的话：游戏刚开始，她还没开口。照上面的开局提示写第一段剧情：交代她在哪、天气和时辰，让第一位兽夫照 状态.md「兽夫登场」登场，写到需要她回应的地方停下（他在等她做什么 / 说什么）。不替她说话、不替她做决定。存档照常改]";
+const OPEN_NOTE = "[开场，不是她说的话：游戏刚开始，她还没开口。照上面的开局提示写第一段剧情：交代她在哪、天气和时辰，让开局的兽夫出场，写到需要她回应的地方停下（他在等她做什么 / 说什么）。不替她说话、不替她做决定。存档照常改]";
 function chat(text, res, auto = false) {
   const session = readJson(SESSION_FILE, {});
   // 每个游戏日（凌晨 5 点换天）开一段新会话，剧情都在存档里，不会越聊越慢
@@ -758,7 +769,27 @@ function startGame(body) {
   const finalOrder = order.map(n => rename[n] || n);
   // 没选的兽夫：这一局不登场（档案留着，状态表里标出来）
   const skipped = names.map(n => rename[n] || n).filter(n => !finalOrder.includes(n));
-  writeJson(START_FILE, { order: finalOrder, skipped, started: `${dateStr()} ${timeStr()}`, renamed: rename });
+  const mode = body.mode === 'old' ? 'old' : 'new';
+  const together = Math.max(1, Math.min(finalOrder.length, Math.floor(Number(body.together)) || 1));
+  const first = finalOrder.slice(0, together);
+  try {
+    const sf = path.join(GAME_DIR, '状态.md');
+    let st = fs.readFileSync(sf, 'utf8');
+    st = st.replace(/^- \*\*当前场景\*\*：.*$/m, mode === 'old'
+      ? `- **当前场景**：早已绑定开局：${first.join('、')}和她绑在一起很久了，以前的她对他们又打又骂，他们都讨厌她。${together < finalOrder.length ? '后面的兽夫照「兽夫登场」一个一个来，和她第一次见面' : ''}`
+      : `- **当前场景**：第 1 天是兽神强行绑定的日子：兽印落在她和${first.join('、')}身上，素不相识的人被硬生生配在了一起，谁也不认识谁。${together < finalOrder.length ? '后面的兽夫照「兽夫登场」一个一个来' : ''}`);
+    if (mode === 'old') {
+      // 种子好感（0～30）往下压：-80 上下，再随机差一点，-95～-25
+      st = st.split('\n').map(line => {
+        const c = line.split('|');
+        if (c.length < 5 || !first.includes(c[1].trim()) || !/^\s*-?\d+\s*$/.test(c[3])) return line;
+        const v = Math.max(-95, Math.min(-25, Math.round(Number(c[3]) - 80 + (Math.random() * 16 - 8))));
+        c[3] = ` ${v} `; return c.join('|');
+      }).join('\n');
+    }
+    fs.writeFileSync(sf, st, 'utf8');
+  } catch {}
+  writeJson(START_FILE, { order: finalOrder, skipped, mode, together, started: `${dateStr()} ${timeStr()}`, renamed: rename });
   writeJson(SIM_FILE, { last: hourStart(new Date()).toISOString() });
   return { ok: true, order: finalOrder };
 }

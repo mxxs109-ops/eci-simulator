@@ -217,7 +217,7 @@
     vn.querySelector('.hud').innerHTML = here.map(n => {
       const c = cast[n], hv = +(((c.food && c.food.nutrition) || '').match(/健康值\s*(\d+)/) || [])[1];
       const bar = (v, col) => `<span class="bar2"><i style="width:${v}%;background:${col}"></i></span>`;
-      return `<div class="h" style="--c:${COLORS[n] || '#8a5a3c'}"><b>${escH(n)}</b>　❤ ${bar(Math.max(0, Math.min(100, c.favor || 0)), '#e57399')}${c.favor || 0}${hv >= 0 ? `　🩺 ${bar(hv, hv > 60 ? '#4caf50' : hv > 30 ? '#f0b429' : '#e53935')}${hv}` : ''}
+      return `<div class="h" style="--c:${COLORS[n] || '#8a5a3c'}"><b>${escH(n)}</b>　❤ <span class="bar2" style="background-image:linear-gradient(90deg,transparent calc(50% - 1px),rgba(0,0,0,.28) calc(50% - 1px),rgba(0,0,0,.28) calc(50% + 1px),transparent calc(50% + 1px))"><i style="${favFill(c.favor, '#e57399')}"></i></span>${c.favor || 0}${hv >= 0 ? `　🩺 ${bar(hv, hv > 60 ? '#4caf50' : hv > 30 ? '#f0b429' : '#e53935')}${hv}` : ''}
         <div class="d" title="${escH(c.doing || '')}">${escH((c.doing || '').replace('【战损】', '💀 ').replace('【易感期】', '🔥 '))}</div><div class="d">${escH(c.mood || '')}${c.food && c.food.body ? '｜' + escH(c.food.body) : ''}</div></div>`;
     }).join('');
   }
