@@ -23,6 +23,9 @@
   .inv .pic .nm { position: absolute; left: 0; right: 0; bottom: 0; padding: 30px 14px 12px; background: linear-gradient(transparent, rgba(20,12,8,.8)); color: #fff; }
   .inv .pic .nm b { font: 700 26px "STKaiti","KaiTi",serif; letter-spacing: 3px; }
   .inv .pic .nm small { display: block; opacity: .85; font-size: 12px; line-height: 1.5; }
+  .inv .stchips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .inv .stchips span { background: #fff3e0; border: 1px solid #f0c58a; color: #8a4b12; border-radius: 999px; padding: 4px 12px; font-size: 14px; font-weight: 700; }
+  .inv .stchips small { font-weight: 400; opacity: .8; margin-left: 2px; }
   .inv .bars { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
   .inv .bar { background: rgba(255,255,255,.7); border-radius: 12px; padding: 8px 12px; font-size: 13px; }
   .inv .bar .t { display: flex; justify-content: space-between; }
@@ -112,6 +115,11 @@
     const bar = (label, v, col, txt) => `<div class="bar"><div class="t"><span>${label}</span><b>${txt ?? v}</b></div><div class="g"><i style="width:${Math.max(0, Math.min(100, v))}%;background:${col}"></i></div></div>`;
     const bars = [live ? bar('❤ 好感', live.favor || 0, '#e57399') : '', hv >= 0 ? bar('🩺 健康', hv, hv > 60 ? '#4caf50' : hv > 30 ? '#f0b429' : '#e53935') : '',
       live && live.mood ? `<div class="bar"><div class="t"><span>💭 心情</span><b>${E(live.mood)}</b></div></div>` : ''].join('');
+    // 状态：怀孕（游戏知道，头两天他自己还不知道）、战损、易感期
+    const doing = (live && live.doing) || '', preg = doing.match(/【怀孕(?:·第(\d+)天)?】/);
+    const chips = [preg ? `🥚 怀孕${preg[1] ? ' 第 ' + preg[1] + ' 天' : ''}${!preg[1] || +preg[1] < 3 ? '<small>（他自己还不知道）</small>' : ''}` : '',
+      /【战损】/.test(doing) ? '💀 重伤' : '', /【易感期】/.test(doing) ? '🔥 易感期' : ''].filter(Boolean);
+    const stat = chips.length ? `<div class="stchips">${chips.map(c => `<span>${c}</span>`).join('')}</div>` : '';
     const attrs = d.attrs.filter(a => a.k !== '现在' && a.k !== '曾经');
     const slotsN = Math.max(12, Math.ceil(d.items.length / 6) * 6);
     const slots = Array.from({ length: slotsN }, (_, i) => { const it = d.items[i];
@@ -119,7 +127,7 @@
     const it = d.items[selItem];
     box.innerHTML = `<div class="iside">${side}</div><div class="main">
       <div class="pic"><img src="${pic}" onerror="this.style.display='none'"><div class="nm"><b>${E(d.name === '家里' ? '家里' : d.name)}</b>${d.away ? '<span class="away-tag">尚未登场</span>' : ''}<small>${T(now ? now.v.split(/[；;]/)[0] : '')}</small>${was ? `<small>曾经：${T(was.v)}</small>` : ''}</div></div>
-      ${bars ? `<div class="bars">${bars}</div>` : ''}
+      ${stat}${bars ? `<div class="bars">${bars}</div>` : ''}
       ${attrs.length ? `<div><h4>属性</h4><div class="attrs">${attrs.map((a, i) => `<div class="attr" data-attr="${i}"><div class="k">${ATTR_ICON[a.k] || '◆'} ${E(a.k)}</div><div class="v">${T(a.v)}</div></div>`).join('')}</div></div>` : ''}
       <div><h4>背包 · ${d.items.length} 件</h4><div class="slots">${slots}</div>
         <div class="detail" style="margin-top:10px">${it ? `<div class="h">${iconOf(it.n)} ${T(it.n)}</div>${it.src ? `<div class="src">来历：${T(it.src)}</div>` : ''}<div>${T(it.d)}</div>` : ''}</div></div>

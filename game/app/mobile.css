@@ -1,0 +1,82 @@
+/* 恶雌模拟器 · 手机布局（竖屏窄屏才生效，电脑上不影响）
+   手机的用法：中间整块是剧情，底部是标签栏，兽夫是一排头像，点头像弹出他的详情；
+   剧情模式里立绘站在对话框上面，不被字挡住。
+   剧情模式的样式是 vn.js 运行时塞进来的、排在这个文件后面，所以和它冲突的地方都加 !important。 */
+@media (max-width: 760px) {
+  :root { --navh: 58px; --boxh: 38%; }
+  html, body { height: 100dvh; overflow: hidden; }
+  body { padding-bottom: calc(var(--navh) + env(safe-area-inset-bottom)); }
+
+  /* 页头：左边剧情 / 记录切换，右边设置 */
+  header { padding: 6px 56px 6px 10px; gap: 6px; min-height: 48px; justify-content: flex-start; }
+  header h1 { display: none; }
+  header #vnToggle { padding: 5px 14px; font-size: 13px; flex: none; }
+  #eciSetBtn { top: 6px !important; bottom: auto !important; right: 10px !important; width: 36px !important; height: 36px !important; font-size: 18px !important; }
+  #eciUpd { top: 52px !important; bottom: auto !important; left: 10px !important; right: 10px !important; font-size: 12px !important; box-shadow: 0 6px 18px rgba(0,0,0,.15); }
+
+  /* 底部标签栏 */
+  .tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; height: calc(var(--navh) + env(safe-area-inset-bottom));
+    padding: 4px 4px env(safe-area-inset-bottom); gap: 0; display: flex; flex-wrap: nowrap; overflow: hidden;
+    background: var(--paper); border-top: 1px solid var(--line); box-shadow: 0 -4px 16px rgba(60,40,20,.08); }
+  .tabs .tab { flex: 1 1 0; min-width: 0; border: none; background: transparent; border-radius: 12px; padding: 4px 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; line-height: 1.2; white-space: nowrap; color: var(--muted); }
+  .tabs .tab .ti { font-size: 21px; line-height: 1; transition: transform .2s; }
+  .tabs .tab .tl { overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .tabs .tab.on { background: transparent; color: var(--me); font-weight: 700; }
+  .tabs .tab.on .ti { transform: translateY(-2px) scale(1.15); }
+
+  /* 聊天页：上面一排兽夫头像 + 日期天气，中间剧情，下面输入框 */
+  #view-chat.on { flex-direction: column; }
+  #cast { display: flex; flex-direction: column; flex: none; order: -1; width: auto; padding: 6px 10px 2px; gap: 2px; border: none; border-bottom: 1px solid var(--line); background: var(--paper); }
+  #stage { display: none !important; }
+  #thumbs { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 12px; min-height: 0; padding: 3px 3px 6px; scrollbar-width: none; }
+  #thumbs::-webkit-scrollbar { display: none; }
+  #thumbs .card { flex: 0 0 50px; width: 50px; height: 50px; border-radius: 50%; border-width: 2px; opacity: 1 !important; cursor: pointer; background-size: 150% auto; background-position: 50% 8%; overflow: visible; }
+  #thumbs .card.idpic { background-size: 110% auto; background-position: 50% 30%; }
+  #thumbs .card .info { display: none; }
+  #thumbs .card .mstat { position: absolute; right: -5px; bottom: -3px; font-size: 13px; line-height: 1; background: var(--paper); border-radius: 50%; padding: 2px; box-shadow: 0 1px 4px rgba(0,0,0,.25); }
+  #thumbs .card .mfav { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); width: 32px; height: 4px; border-radius: 2px; background: rgba(0,0,0,.12); overflow: hidden; }
+  #thumbs .card .mfav i { display: block; height: 100%; background: var(--c); }
+  #thumbs .card.speaking { box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--c); }
+  #minimap { padding: 0 2px; border: none; background: transparent; }
+  #minimap .mapbox, #minimap .mlog, #minimap .mbody, #mefood { display: none; }
+  #minimap .mhead { margin: 0; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .chatcol { min-height: 0; flex: 1; }
+  .scroll { padding: 10px 10px 6px; }
+  .who { width: 50px; } .av { width: 46px; height: 46px; border-width: 2px; font-size: 20px; }
+  .speaker { gap: 8px; } .speaker .name { font-size: 14px; }
+  .ai { padding: 10px 12px; }
+  .sum { padding: 10px 14px 12px; font-size: 14px; }
+
+  /* 输入框：圆角一行，📎 / ⏩ 续写 / 发送 */
+  footer { padding: 6px 8px 8px !important; }
+  footer .row { gap: 6px; align-items: flex-end; }
+  footer textarea { height: 44px; min-height: 44px; max-height: 120px; font-size: 16px; padding: 10px 14px; border-radius: 22px; }
+  footer .clip, footer .cont { height: 44px; min-width: 44px; padding: 0 8px; border-radius: 22px; }
+  footer .primary { height: 44px; padding: 0 18px; border-radius: 22px; }
+  footer .hint { display: none; }
+
+  /* 剧情模式：对话框固定在下面，立绘站在它上面，整个人都看得见 */
+  #vn .sprites { top: 36px !important; bottom: var(--boxh) !important; }
+  #vn .spr { bottom: 0 !important; height: 100% !important; }
+  #vn .box, #vn .box.hasface { left: 0 !important; right: 0 !important; bottom: 0 !important; height: var(--boxh) !important; min-height: 0 !important; max-height: none !important;
+    border-radius: 20px 20px 0 0 !important; border-left: 0 !important; border-right: 0 !important; border-bottom: 0 !important;
+    padding: 20px 18px 30px !important; font-size: 16px !important; line-height: 1.8 !important; }
+  #vn .face { display: none !important; }
+  #vn .name { left: 14px !important; bottom: auto !important; font-size: 16px !important; padding: 3px 18px !important; }
+  #vn .hud { display: none !important; }
+  #vn .count { top: 8px !important; left: 8px !important; }
+  #vn .bar { top: 4px !important; right: 6px !important; gap: 4px !important; }
+  #vn .bar button { padding: 3px 9px !important; font-size: 12px !important; }
+  #vn .next { right: 16px !important; bottom: 8px !important; font-size: 12px !important; }
+
+  /* 兽夫详情（点头像弹出来的那个）：从下面升起来，占满屏幕；左边一列头像改成上面一排 */
+  #invPop { align-items: flex-end; }
+  #invPop .win { width: 100vw; height: 92dvh; border-radius: 22px 22px 0 0; border-width: 2px 0 0; flex-direction: column; }
+  #invPop .inv { flex-direction: column; }
+  #invPop .inv .iside { width: auto; flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: 10px 52px 8px 10px; border-right: none; border-bottom: 1px solid var(--line); }
+  #invPop .inv .iwho { flex: none; width: 50px; height: 50px; }
+  #invPop .inv .main { padding: 12px 12px 30px; }
+  #invPop .inv .pic { min-height: 340px; }
+}

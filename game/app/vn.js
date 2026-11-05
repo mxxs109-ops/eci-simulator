@@ -31,7 +31,10 @@
   #vn .box.hasface .face { display: block; }
   #vn .box.env { text-align: center; color: #d8cbb8; font-size: 15px; }
   #vn .box.me { display: block; border-color: rgba(255,180,160,.6); }
-  #vn .box.sum { background: rgba(70,52,26,.9); border-color: rgba(255,214,140,.7); font-size: 16px; }
+  #vn .box.sum { background: linear-gradient(160deg, rgba(78,55,24,.95), rgba(44,31,16,.95)); border: 1px solid rgba(255,214,140,.6);
+    box-shadow: 0 0 0 4px rgba(255,214,140,.08), 0 10px 30px rgba(0,0,0,.5); font-size: 16px; color: #f6ead2; }
+  #vn .box.sum::before { content: "本轮小结"; display: flex; align-items: center; gap: 12px; font: 700 15px "STKaiti","KaiTi",serif; letter-spacing: 6px; color: #ffd98a; margin: -4px 0 8px;
+    background: linear-gradient(90deg, transparent, rgba(255,217,138,.7) 30%, transparent 30%, transparent 70%, rgba(255,217,138,.7) 70%, transparent) center / 100% 1px no-repeat; justify-content: center; }
   #vn .vact { color: #c9b79f; font-size: .92em; }
   #vn .vthink { color: #b9d4ff; font-style: italic; }
   #vn .next { position: absolute; right: 22px; bottom: 10px; font-size: 14px; color: #ffe2a8; animation: vblink 1s infinite; }
@@ -229,7 +232,7 @@
       txt.innerHTML = sendBtn.disabled ? '<span class="wait"></span>' : '';
       nx.style.display = 'none'; return;
     }
-    name.textContent = p.kind === 'say' || p.kind === 'me' || p.kind === 'sum' ? (p.kind === 'sum' ? '📌 小结' : p.who) : '';
+    name.textContent = p.kind === 'say' || p.kind === 'me' ? p.who : '';   // 小结不挂名字牌，框里自己有标题
     name.style.setProperty('--c', p.kind === 'sum' ? '#b8893a' : p.kind === 'me' ? 'var(--me)' : (COLORS[p.who]) || '#8a5a3c');
     box.className = 'box ' + p.kind;
     // 说话的人：对话框左边一个头像框
@@ -276,7 +279,7 @@
   const lead = w => (w || '').split(/[、,，和]/)[0].trim();
   const cleanV = t => t.replace(/\*+/g, '').replace(/[`#>]/g, '').replace(/\p{Extended_Pictographic}/gu, '').replace(/\s+/g, ' ').trim();
   function voiceOf(i) {
-    const p = pages[i]; if (!p) return [];
+    const p = pages[i]; if (!p || p.kind === 'me') return [];   // 她自己打的字不读，只读兽夫和旁白
     let j = i; while (j >= 0 && !(pages[j] && pages[j].kind === 'say')) j--;
     const self = p.kind === 'say' ? lead(p.who) : p.kind === 'me' ? '我' : '旁白';
     const thinker = self !== '旁白' ? self : j >= 0 ? lead(pages[j].who) : '旁白';

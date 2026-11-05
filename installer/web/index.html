@@ -365,8 +365,10 @@ $('heroBtn').onclick = e => { const to = e.target.dataset.to; if (to === 'open')
 
 // 后台任务进度
 const jobSeen = {};
+let firstPoll = true;   // 打开页面时已经做完的任务不再弹提示
 async function poll() {
   const jobs = await api('/api/jobs').catch(() => ({}));
+  if (firstPoll) { firstPoll = false; for (const [n, j] of Object.entries(jobs)) if (j.done) jobSeen[n] = n + j.log.length + j.done; }
   for (const [name, j] of Object.entries(jobs)) {
     const box = $('job-' + name); if (!box) continue;
     box.innerHTML = `<div class="bar ${j.error ? 'err' : j.done ? 'done' : ''}"><i style="width:${j.error ? 100 : j.pct}%"></i></div>

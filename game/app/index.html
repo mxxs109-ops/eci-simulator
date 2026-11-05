@@ -163,8 +163,8 @@
   /* 动态证件照：盖在大立绘上循环播放（静音） */
   #stage .idvid { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: 50% 50%; background: #fff; border-radius: inherit; pointer-events: none; }
   #stage .info, #stage .go, #stage .modes { z-index: 2; }
-  #stage .dtl { position: absolute; left: 12px; top: 12px; z-index: 3; width: 46px; height: 46px; border-radius: 50%; border: 2px solid var(--c); background: rgba(255,255,255,.9); font-size: 22px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.25); transition: transform .15s; }
-  #stage .dtl:hover { transform: scale(1.1) rotate(-6deg); }
+  #stage .dtl { position: absolute; left: 12px; top: 12px; z-index: 3; width: 46px; height: 46px; padding: 0; display: grid; place-items: center; line-height: 1; border-radius: 50%; border: 2px solid var(--c); background: rgba(255,255,255,.9); font-size: 22px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.25); transition: transform .15s; }
+  @media (hover: hover) { #stage .dtl:hover { transform: scale(1.1); } }
   /* 战损、易感期半身像：铺满整个框，下面不留白边 */
   #stage.covermode, #stage.covermode.tall { background-color: #fff; background-size: cover; background-position: 50% 0; }
   #stage.threemode, #stage.threemode.tall { background-color: #fff; background-size: contain; background-position: 50% 45%; }
@@ -198,7 +198,11 @@
   @media (max-width: 900px) { #cast { display: none; } }
   .act { color: var(--muted); font-style: italic; }
   .env { color: var(--muted); font-size: 13px; text-align: center; margin: 10px 0 2px; }
-  .sum { margin: 14px 0 2px; padding: 10px 14px; border-radius: 10px; background: #fff6e2; border: 1px dashed #d9b77a; font-size: 14px; line-height: 1.7; color: #5a4632; }
+  .sum { margin: 18px 0 4px; padding: 12px 18px 14px; border-radius: 14px; background: linear-gradient(135deg, #fffaf0, #fbefd6); border: 1px solid #e8c98f;
+    box-shadow: 0 4px 14px rgba(160,110,40,.12), inset 0 1px 0 #fff; font-size: 14.5px; line-height: 1.8; color: #5a4632; }
+  .sumh { display: flex; align-items: center; gap: 10px; font: 700 13px "STKaiti","KaiTi",serif; letter-spacing: 5px; color: #b07a2a; margin-bottom: 4px; }
+  .sumh::before, .sumh::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, #e0b46a); }
+  .sumh::after { background: linear-gradient(90deg, #e0b46a, transparent); }
   .narr { opacity: .85; }
   .err { color: #c0392b; }
   .typing { color: var(--muted); font-size: 14px; }
@@ -258,6 +262,8 @@
   .primary { background: var(--me); color: var(--me-ink); border: none; border-radius: 10px; padding: 0 20px; font-size: 16px; }
   .primary:disabled { opacity: .5; cursor: default; }
   .clip { border-radius: 10px; padding: 0 12px; font-size: 18px; }
+  .cont { border-radius: 10px; padding: 0 12px; font-size: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.2; gap: 1px; }
+  .cont span { font-size: 11px; color: var(--muted); }
   .hint { color: var(--muted); font-size: 12px; margin-top: 6px; display: flex; gap: 16px; flex-wrap: wrap; }
   .hint label { cursor: pointer; }
   .pending { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
@@ -309,6 +315,8 @@
   #viewer { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: none; align-items: center; justify-content: center; z-index: 9; cursor: zoom-out; }
   #viewer img { max-width: 95vw; max-height: 95vh; }
 </style>
+<link rel="stylesheet" href="/mobile.css">
+<style>#reset { display: none !important; }  /* 新开一局在安装器「存档」里，游戏里不再放「新对话」 */</style>
 </head>
 <body>
 <header>
@@ -332,6 +340,7 @@
       <div class="row">
         <button class="clip" id="chatClip" title="发送图片或文件">📎</button>
         <textarea id="input" placeholder="说点什么……动作写在括号里，例如：（递给他一碗汤）趁热喝。"></textarea>
+        <button class="cont" id="cont" title="续写：不用打字，剧情接着往下走">⏩<span>续写</span></button>
         <button class="primary" id="send">发送</button>
       </div>
       <div class="hint">
@@ -729,7 +738,7 @@ function render(text) {
       const c = COLORS[m[1]] || 'var(--c-other)';
       out.push(`<div class="speaker" style="--c:${c}"><div class="who">${avatar(m[1])}<div class="name">${esc(m[1])}</div></div><div class="text">${inline(m[2])}</div></div>`);
     } else if (/^📌/.test(p)) {
-      out.push(`<div class="sum">${inline(p)}</div>`);
+      out.push(`<div class="sum"><div class="sumh">本轮小结</div>${inline(p.replace(/^📌\s*(小结[：:])?\s*/, ''))}</div>`);
     } else if (/^`?——/.test(p)) {
       out.push(`<div class="env">${inline(p.replace(/`/g, ''))}</div>`);
     } else {
@@ -771,7 +780,10 @@ function addMsg(m) {
   }
   return m.role === 'user' ? addMe(m.text) : addAi(m.text);
 }
-function scroll() { log.scrollTop = log.scrollHeight; }
+// 她停在最底下（差不到 80px）才跟着新字往下滚；往上翻着看的时候不打扰。她自己发消息时一定滚到底
+let stickBottom = true;
+log.addEventListener('scroll', () => { stickBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80; });
+function scroll(force) { if (force || stickBottom) { log.scrollTop = log.scrollHeight; stickBottom = true; } }
 function showIntro() {
   list.innerHTML = `<div class="intro">
     苍莽大陆 · 你的小院<br><br>
@@ -811,7 +823,7 @@ async function waitForReply(box) {
   await loadHistory();
 }
 
-async function send(preset) {
+async function send(preset, auto = false) {
   let text = (preset ?? input.value).trim();
   const files = preset ? [] : chatAttach.take();
   if ((!text && !files.length) || sendBtn.disabled) return;
@@ -834,11 +846,11 @@ async function send(preset) {
   }
   addMe(text);
   const box = addAi('');
-  scroll();
+  scroll(true);
   let reply = '';
   let wasBusy = false;
   try {
-    const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+    const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, auto }) });
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     let buf = '';
@@ -873,7 +885,7 @@ async function send(preset) {
   if (wasBusy) {
     // 这句没发出去：放回输入框，先等上一句回完
     list.removeChild(box.previousElementSibling);
-    input.value = text;
+    input.value = auto ? '' : text;
     return waitForReply(box);
   }
   if (!reply && box.querySelector('.typing')) box.innerHTML = '<div class="para err">没有收到回复。</div>';
@@ -885,6 +897,8 @@ async function send(preset) {
   scroll();
 }
 sendBtn.onclick = () => send();
+// 续写：当作她发了一句「接着往下」，服务器换成续写指令（剧情往前走、不重复）
+$('cont').onclick = () => send('⏩ 续写', true);
 input.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
 });
@@ -1027,6 +1041,7 @@ if (location.hash) document.querySelector(`.tab[data-view="${location.hash.slice
 </script>
 <script src="/vn.js"></script>
 <script src="/inv.js"></script>
+<script src="/mobile.js"></script>
 <script src="/vendor/qrcode.js"></script>
 <script src="/settings.js"></script>
 </body>

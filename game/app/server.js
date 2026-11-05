@@ -366,7 +366,9 @@ function openingNote() {
   return `[系统提示，不是她说的话：这是新游戏的第一轮。她在开局界面定的兽夫登场顺序是：${start.order.join('、')}。按 状态.md「兽夫登场」一节，让第一位（${start.order[0]}）照他档案里的「登场」场面登场，写开场；她自己是什么人、有什么本事，一概不替她设定，等她说。]\n\n`;
 }
 
-function chat(text, res) {
+// auto：她点的是「续写」，text 只是记录里显示的那几个字，发给大脑的是续写指令
+const CONTINUE_NOTE = "[自动续写，不是她说的话：她这一轮没有新的动作和台词，按了「续写」。接着上一轮的结尾自然往下写一段：时间往前走，兽夫们按各自的性格主动行动、把正在发生的事推进一步（没什么事就推「未完成的约定 / 待解之谜」里挂着的事，或者来一件 事件池.md 里合适的小事）。**不要重复**上一轮已经写过的情节、动作、台词、描写和比喻，不要回头重演同一刻；不替她说话、不替她做决定，写到需要她回应的地方停下。存档照常改]";
+function chat(text, res, auto = false) {
   const session = readJson(SESSION_FILE, {});
   // 每个游戏日（凌晨 5 点换天）开一段新会话，剧情都在存档里，不会越聊越慢
   if (session.id && session.day !== dayKey()) { delete session.id; delete session.rulesMtime; }
@@ -383,14 +385,14 @@ function chat(text, res) {
   // 有兽夫正在易感期 / 发情期（状态.md 里写着【易感期】）：随时可能擦枪走火，也按亲密分工写
   let rut = false;
   try { rut = /【易感期】/.test(fs.readFileSync(path.join(GAME_DIR, '状态.md'), 'utf8')); } catch {}
-  const intimate = INTIMATE.test(text) || rut || (lastAi?.local && !SCENE_END.test(text));
+  const intimate = (!auto && INTIMATE.test(text)) || rut || (lastAi?.local && !SCENE_END.test(text));
   const intimateNote = intimate ? `[系统提示，不是她说的话：这一轮沾到亲密（${INTIMATE.test(text) ? '她的话里有亲密的内容' : rut ? '有兽夫正在易感期' : '上一轮的亲密戏还没结束'}）。**照原来的展示方式写完整的回复**：环境、他的台词和口吻、心理（*斜体*）、剧情推进、📌 小结都由你写，和平时一样。但**身体和性的描写你一个字都不自己写，也不准带过、不准用台词或心理代替**：每到要写身体、裸体、体液、亲吻抚摸、性的地方，单独一段写交接标记 \`〔接手：兽夫名字｜在哪｜这一刻｜约 N 字：这一小段要写什么——谁对谁做了什么、写到哪一步为止〕\`（N 一般 150～500；她要的露骨内容越多，标记越多、字数越大；她这一轮要的每一个动作都要落在某个标记里）。标记前后接着写台词和心理，和标记里的事衔接，不要在标记前后重复写同一个动作。小结写清楚这场戏还没结束、他在等她什么（她说停了才算结束）。存档照常改，写到亲密的地方也用交接标记，不要自己写、不要带过]\n\n` : '';
-  const prompt = rulesNote(session) + roomNote + openingNote() + clock + intimateNote + text;
+  const prompt = rulesNote(session) + roomNote + openingNote() + clock + intimateNote + (auto ? CONTINUE_NOTE : text);
   writeJson(SESSION_FILE, session);
 
   const send = obj => res.write(JSON.stringify(obj) + '\n');
   // 网页上显示的 = 回复里的 〔接手：…〕 换成交接模型写的那段（还在写时，后面先不显示）
-  const ho = localLLM.create(GAME_DIR, () => { if (!quiet) pushView(); }, readConfig().handoff, { her: text, history: readJson(HISTORY_FILE, []).slice(-6) });
+  const ho = localLLM.create(GAME_DIR, () => { if (!quiet) pushView(); }, readConfig().handoff, { her: auto ? '（她按了续写：接着上一轮往下写，时间往前走，不要重复）' : text, history: readJson(HISTORY_FILE, []).slice(-6) });
   // 边写边存：她发的话马上存，回复显示出来一点就存一点（断电、出错也不丢）
   const live = Date.now(), time0 = `${dateStr()} ${timeStr()}`;
   let liveTimer = null;
@@ -774,7 +776,11 @@ const server = http.createServer(async (req, res) => {
       return fs.createReadStream(path.join(APP_DIR, page)).pipe(res);
     }
     if (req.method === 'GET' && url.startsWith('/game/')) return serveFile(res, GAME_DIR, url.slice(6));
-    if (req.method === 'GET' && /^\/(inv|vn|play|settings|vendor\/qrcode)\.js$/.test(url)) {
+    if (req.method === 'GET' && url === '/mobile.css') {   // 手机布局
+      res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'no-cache' });
+      return fs.createReadStream(path.join(APP_DIR, 'mobile.css')).pipe(res);
+    }
+    if (req.method === 'GET' && /^\/(inv|vn|play|settings|vendor\/qrcode|mobile)\.js$/.test(url)) {
       res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache' });
       return fs.createReadStream(path.join(APP_DIR, url.slice(1))).pipe(res);
     }
@@ -908,7 +914,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && url === '/api/chat') {
-      const { text } = await readBody(req);
+      const { text, auto } = await readBody(req);
       res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-cache' });
       if (!text || !text.trim()) return res.end(JSON.stringify({ type: 'done' }) + '\n');
       if (busy) {
@@ -916,7 +922,7 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ type: 'done' }) + '\n');
       }
       busy = true;
-      return chat(text.trim(), res);
+      return chat(text.trim(), res, !!auto);
     }
     res.writeHead(404);
     res.end();
