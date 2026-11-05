@@ -95,3 +95,14 @@
   body:not(.vnmode) #thumbs { display: none !important; }
   header #vnToggle span { padding: 3px 12px; font-size: 13px; }
 }
+
+/* 手机上点过以后「悬停」状态会一直留着：放大、歪一下这些悬停效果在触屏上全部关掉，免得点过的东西一直歪着 / 大一圈 */
+@media (hover: none) {
+  .inv .iwho:hover, .inv .attr:hover, .inv .slot:hover, .store .slot:hover, .palette button:hover, #stage .dtl:hover { transform: none !important; }
+}
+@media (max-width: 760px) {
+  /* 详情顶上那排头像：一样大、一条线 */
+  #invPop .inv .iside { align-items: center; gap: 10px; }
+  #invPop .inv .iwho { box-sizing: border-box; flex: 0 0 52px !important; width: 52px !important; height: 52px !important; margin: 0 !important; border-width: 2px; transform: none !important; }
+  #invPop .inv .iwho.on { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--c); }
+}
