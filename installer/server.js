@@ -421,10 +421,12 @@ function renameSave(name, to) {
 // ---------- 6. 自定义游戏机制：交给游戏的大脑整理成 自定义规则.md ----------
 function brainReady() {
   const d = dirs(), cfg = brainCfg();
-  if (!isGame(d.game)) return { ok: false, why: '先装游戏本体' };
-  if ((cfg.brain || 'claude') === 'claude') return findClaude() ? { ok: true, what: 'Claude Code' } : { ok: false, why: '还没装好语言模型：去「语言模型」选一个当大脑' };
-  if (!cfg.api?.base || !cfg.api?.model) return { ok: false, why: '还没装好语言模型：去「语言模型」选一个当大脑' };
-  return { ok: true, what: /127\.0\.0\.1|localhost/.test(cfg.api.base) ? '本地模型' : cfg.api.model };
+  // 两样分开查：游戏没装时大脑也可能已经先选好了（pendingCfg）
+  const brain = (cfg.brain || (isGame(d.game) ? 'claude' : null)) === 'claude' ? (findClaude() ? 'Claude Code' : '')
+    : cfg.brain === 'api' && cfg.api?.base && cfg.api?.model ? (/127\.0\.0\.1|localhost/.test(cfg.api.base) ? '本地模型' : cfg.api.model) : '';
+  const game = isGame(d.game);
+  if (game && brain) return { ok: true, what: brain, game, brain };
+  return { ok: false, game, brain, why: !game ? '先装游戏本体' : '还没选好大脑：去「语言模型」选一个' };
 }
 // 游戏开着就直接问它；没开就临时开一个不跑整点模拟的后台，用完关掉
 async function withGame(fn) {
