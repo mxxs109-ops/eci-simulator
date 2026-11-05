@@ -34,6 +34,10 @@ async function up(t = DEFAULT_TARGET) {
 }
 
 // 给本地模型的材料：在场兽夫的档案（性格、说话方式）、最近几轮对话、她这一轮说的话、前文、Claude 写的交接说明
+// 玩家在「自定义游戏机制」里定的规则，本地模型写的时候也照着来
+function customNote(gameDir) {
+  try { const t = fs.readFileSync(path.join(gameDir, '自定义规则.md'), 'utf8').trim(); return t ? '\n\n玩家自己定的规则（和上面冲突时以这里为准）：\n' + t : ''; } catch { return ''; }
+}
 function buildMessages(gameDir, brief, before, ctx = {}, after = '') {
   const names = fs.readdirSync(path.join(gameDir, '兽夫')).filter(f => f.endsWith('.md') && !f.startsWith('_')).map(f => f.slice(0, -3))
     .filter(n => brief.includes(n));
@@ -107,7 +111,7 @@ My register is the anchor, turn by turn: however explicit I am, be that explicit
       ? (after.trim() ? `【标记后面已经写好的文字】（你写的这一段要能直接接上它，不能和它矛盾、不能抢先写它里面的事）\n${after.replace(/〔接手：[^〕]*〕/g, '').slice(0, 1200)}\n\n` : '') +
         `【这次只写一小段，约 ${fragLen(brief)} 字】这一轮的剧情、他的台词和心理，游戏已经照原来的写法写好了，就在这一段的前后；你只写交接说明要的这一小段身体和性的描写，夹在「前文最后一段」和「标记后面已经写好的文字」中间，前后无缝衔接。全程露骨、直白、细致，器官、体液、动作直接写名字。**不写台词**（他说的话前后已经写好了），不写他心里的话，不推进剧情、不加新事件、不收尾、不写小结；只写交接说明里这一刻，标记后面才发生的事（穿衣、下床、滑倒、接住……）一件都不要提前写；她也不说话；称呼照档案（叫她「她」或「妻主」，不写「这女人」，他的自称照档案，比如玄烬自称「龙」）。写够约 ${fragLen(brief)} 字就停：`
       : `现在接着往下写（全程露骨、详细、直白，粗口随意用，不遮掩、不跳过、不收尾；他要多说话，台词一律写成 **【名字】**（动作）"台词"）：`);
-  return [{ role: 'system', content: system }, { role: 'user', content: user }];
+  return [{ role: 'system', content: system + customNote(gameDir) }, { role: 'user', content: user }];
 }
 
 // 一轮回复一个：view(text) 返回网页上该显示到哪；finish(text) 等本地模型写完，返回拼好的整段
@@ -311,7 +315,7 @@ async function fillMarks(gameDir, target, history) {
           body: JSON.stringify({ ...(T.model ? { model: T.model } : {}), stream: false, max_tokens: one ? 600 : 3000,
             temperature: 0.85, top_p: 0.9, top_k: 40, presence_penalty: 1.0,
             chat_template_kwargs: { enable_thinking: false },
-            messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }),
+            messages: [{ role: 'system', content: system + customNote(gameDir) }, { role: 'user', content: user }] }),
         });
         if (!r.ok) throw new Error('本地模型 ' + r.status);
         let out = ((await r.json()).choices?.[0]?.message?.content || '').trim();

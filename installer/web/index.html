@@ -4,199 +4,580 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>恶雌模拟器安装器</title>
+<link rel="icon" href="icon.png">
 <style>
-  :root { --bg: #f6efe6; --card: #fffaf4; --ink: #3b2a20; --soft: #8a6f5c; --line: #e2d3c2; --me: #8a5a3c; --ok: #3f7a3a; --bad: #b4412f; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #1f1915; --card: #2a221d; --ink: #f1e6da; --soft: #b8a493; --line: #43362d; --me: #d39a6f; --ok: #8fc287; --bad: #e0806e; } }
+  :root {
+    --bg: #f7f0e8; --bg2: #efe4d6; --card: #fffbf6; --ink: #2f211a; --soft: #8b7262; --line: #eadccb;
+    --me: #b5532f; --me2: #d9784c; --meSoft: #f8e1d3; --ok: #2f8a4c; --okSoft: #dff1e3; --bad: #c13f2c; --badSoft: #fbe1dc; --warn: #b7791f;
+    --shadow: 0 1px 2px rgba(80,40,20,.06), 0 8px 24px rgba(80,40,20,.08);
+    --r: 18px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #171210; --bg2: #211915; --card: #241c18; --ink: #f4e9df; --soft: #b9a191; --line: #3a2d26;
+      --me: #e07a4f; --me2: #f0a070; --meSoft: #3d261b; --ok: #79c98f; --okSoft: #1d3324; --bad: #f08a76; --badSoft: #3d201b; --warn: #e6b45c;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35); }
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.65 "PingFang SC", "Microsoft YaHei", sans-serif; }
-  header { padding: 18px 16px 6px; max-width: 980px; margin: 0 auto; }
-  h1 { margin: 0; font-size: 26px; letter-spacing: 2px; }
-  nav { max-width: 980px; margin: 0 auto; padding: 8px 16px; display: flex; gap: 6px; flex-wrap: wrap; position: sticky; top: 0; background: var(--bg); z-index: 5; }
-  nav a { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); text-decoration: none; color: var(--ink); background: var(--card); font-size: 14px; }
-  nav a.on { background: var(--me); color: #fff; border-color: var(--me); }
-  main { max-width: 980px; margin: 0 auto; padding: 8px 16px 60px; }
-  section { display: none; } section.on { display: block; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin: 12px 0; }
-  h2 { font-size: 19px; margin: 4px 0 8px; } h3 { font-size: 16px; margin: 14px 0 6px; }
-  button { font: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 10px; padding: 7px 16px; }
-  button.p { background: var(--me); border-color: var(--me); color: #fff; }
-  button:disabled { opacity: .4; cursor: not-allowed; }
-  button.danger { border-color: var(--bad); color: var(--bad); }
-  input[type=text], input[type=password], select, textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; background: transparent; color: inherit; }
-  label { display: block; margin: 8px 0; }
-  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.7 "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif; }
+  a { color: var(--me); }
+  .app { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+  /* 侧边栏 */
+  aside { background: var(--bg2); border-right: 1px solid var(--line); padding: 22px 14px; position: sticky; top: 0; height: 100vh; overflow: auto; }
+  .brand { display: flex; gap: 12px; align-items: center; padding: 0 8px 18px; }
+  .brand img { width: 46px; height: 46px; border-radius: 14px; box-shadow: var(--shadow); }
+  .brand b { display: block; font-size: 18px; letter-spacing: 1px; }
+  .brand span { font-size: 12px; color: var(--soft); }
+  .nav a { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 12px; color: var(--ink); text-decoration: none; margin: 2px 0; transition: background .15s, transform .15s; }
+  .nav a:hover { background: var(--card); transform: translateX(2px); }
+  .nav a.on { background: var(--card); box-shadow: var(--shadow); font-weight: 700; }
+  .nav .ic { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: var(--card); font-size: 16px; flex: none; }
+  .nav a.on .ic { background: var(--meSoft); }
+  .nav .st { margin-left: auto; width: 9px; height: 9px; border-radius: 50%; background: var(--line); flex: none; }
+  .nav .st.ok { background: var(--ok); } .nav .st.run { background: var(--ok); box-shadow: 0 0 0 4px var(--okSoft); } .nav .st.new { background: var(--me); box-shadow: 0 0 0 4px var(--meSoft); }
+  .nav .grp { font-size: 12px; color: var(--soft); padding: 14px 12px 4px; letter-spacing: 1px; }
+  main { padding: 28px 36px 80px; max-width: 1040px; width: 100%; }
+  section { display: none; animation: in .25s ease; } section.on { display: block; }
+  @keyframes in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .hd { margin: 0 0 18px; } .hd h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: 1px; } .hd p { margin: 0; color: var(--soft); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 20px 22px; margin: 14px 0; box-shadow: var(--shadow); }
+  .card h2 { font-size: 18px; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+  .card h3 { font-size: 15px; margin: 16px 0 6px; }
   .soft { color: var(--soft); font-size: 14px; }
   .ok { color: var(--ok); } .bad { color: var(--bad); }
-  .bar { height: 10px; background: var(--line); border-radius: 99px; overflow: hidden; margin: 8px 0 4px; }
-  .bar i { display: block; height: 100%; background: var(--me); width: 0; transition: width .5s; }
-  .log { font: 12px/1.5 Consolas, monospace; color: var(--soft); max-height: 120px; overflow: auto; white-space: pre-wrap; }
-  table { border-collapse: collapse; width: 100%; } td { padding: 4px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  td:first-child { color: var(--soft); width: 32%; }
-  .choice { border: 2px solid var(--line); border-radius: 12px; padding: 12px 14px; margin: 8px 0; cursor: pointer; }
-  .choice.on { border-color: var(--me); }
-  .steps { counter-reset: s; padding: 0; list-style: none; }
-  .steps li { counter-increment: s; margin: 10px 0; padding-left: 36px; position: relative; }
-  .steps li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 26px; height: 26px; border-radius: 50%; background: var(--me); color: #fff; text-align: center; font-weight: 700; line-height: 26px; }
-  .shot { display: block; max-width: 100%; border: 1px solid var(--line); border-radius: 10px; margin: 8px 0; background: #fff; }
-  .msg { border-left: 3px solid var(--me); padding: 6px 12px; margin: 10px 0; }
-  .msg .t { font-weight: 700; } .msg .m { white-space: pre-wrap; }
-  .pill { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12px; border: 1px solid currentColor; margin-left: 6px; }
+  /* 按钮 */
+  button { font: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 12px; padding: 9px 18px; transition: transform .12s, box-shadow .15s, background .15s, opacity .15s; }
+  button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--shadow); }
+  button:active:not(:disabled) { transform: translateY(1px) scale(.98); }
+  button.p { background: linear-gradient(135deg, var(--me), var(--me2)); border-color: transparent; color: #fff; font-weight: 700; }
+  button.big { padding: 13px 26px; font-size: 16px; border-radius: 14px; }
+  button.ghost { background: transparent; }
+  button.danger { color: var(--bad); border-color: var(--bad); background: transparent; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.busy { pointer-events: none; opacity: .8; }
+  button.busy::before { content: ""; display: inline-block; width: 13px; height: 13px; margin-right: 8px; vertical-align: -2px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
+  input[type=text], input[type=password], select, textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; font: inherit; background: var(--bg); color: inherit; transition: border-color .15s, box-shadow .15s; }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--me); box-shadow: 0 0 0 4px var(--meSoft); }
+  label.f { display: block; margin: 12px 0 0; font-size: 14px; font-weight: 700; } label.f > input, label.f > select, label.f > textarea { margin-top: 6px; font-weight: 400; }
+  /* 状态 */
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; box-shadow: var(--shadow); cursor: pointer; transition: transform .15s; position: relative; overflow: hidden; }
+  .tile:hover { transform: translateY(-3px); }
+  .tile .em { font-size: 28px; } .tile b { display: block; font-size: 16px; margin-top: 6px; } .tile .v { font-size: 13px; color: var(--soft); }
+  .tile .tag { position: absolute; top: 14px; right: 14px; }
+  .tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--bg2); color: var(--soft); white-space: nowrap; }
+  .tag.ok { background: var(--okSoft); color: var(--ok); } .tag.bad { background: var(--badSoft); color: var(--bad); } .tag.me { background: var(--meSoft); color: var(--me); }
+  .hero { background: linear-gradient(135deg, var(--me), var(--me2)); color: #fff; border: none; display: flex; gap: 18px; align-items: center; }
+  .hero img { width: 84px; height: 84px; border-radius: 22px; background: rgba(255,255,255,.2); }
+  .hero h2 { color: #fff; font-size: 22px; } .hero p { margin: 4px 0 0; opacity: .92; }
+  .hero button { background: #fff; color: var(--me); border: none; font-weight: 700; }
+  /* 进度 */
+  .job { margin-top: 14px; } .job:empty { display: none; }
+  .bar { height: 12px; background: var(--bg2); border-radius: 99px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; border-radius: 99px; background: linear-gradient(90deg, var(--me), var(--me2)); transition: width .6s; position: relative; }
+  .bar i::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.35), transparent); animation: shine 1.4s infinite; }
+  .bar.done i::after { display: none; } .bar.done i { background: var(--ok); } .bar.err i { background: var(--bad); }
+  @keyframes shine { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+  .job .step { margin-top: 6px; font-weight: 700; } .log { font: 12px/1.5 Consolas, monospace; color: var(--soft); max-height: 110px; overflow: auto; white-space: pre-wrap; margin-top: 4px; }
+  table.kv { border-collapse: collapse; width: 100%; } table.kv td { padding: 7px 4px; border-bottom: 1px dashed var(--line); } table.kv td:first-child { color: var(--soft); width: 34%; }
+  /* 大脑 */
+  .prov { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+  .pv { border: 2px solid var(--line); border-radius: 16px; padding: 12px; cursor: pointer; background: var(--card); transition: transform .12s, border-color .15s, box-shadow .15s; display: flex; gap: 10px; align-items: center; }
+  .pv:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+  .pv.on { border-color: var(--me); box-shadow: 0 0 0 4px var(--meSoft); }
+  .pv .lg { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 15px; flex: none; }
+  .pv b { display: block; font-size: 14px; line-height: 1.3; } .pv small { color: var(--soft); font-size: 12px; line-height: 1.3; display: block; }
+  .pv.cur::after { content: "当前"; margin-left: auto; font-size: 11px; font-weight: 700; color: var(--ok); background: var(--okSoft); padding: 1px 7px; border-radius: 99px; }
+  .grpt { font-size: 13px; font-weight: 700; color: var(--soft); margin: 16px 0 8px; }
+  .steps { counter-reset: s; padding: 0; list-style: none; margin: 8px 0; }
+  .steps li { counter-increment: s; margin: 10px 0; padding: 10px 14px 10px 50px; position: relative; background: var(--bg); border-radius: 12px; }
+  .steps li::before { content: counter(s); position: absolute; left: 12px; top: 10px; width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(135deg, var(--me), var(--me2)); color: #fff; text-align: center; font-weight: 800; line-height: 26px; font-size: 13px; }
+  .shot { display: block; max-width: 100%; border: 1px solid var(--line); border-radius: 12px; margin: 10px 0; background: #fff; }
+  .note { padding: 10px 14px; border-radius: 12px; background: var(--meSoft); margin: 10px 0; font-size: 14px; }
+  .note.ok { background: var(--okSoft); color: inherit; } .note.bad { background: var(--badSoft); }
+  .result { margin-top: 10px; min-height: 1em; font-weight: 700; }
+  /* 存档 */
+  .saves { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+  .sv { background: var(--card); border: 2px solid var(--line); border-radius: var(--r); padding: 16px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 6px; transition: transform .15s; }
+  .sv:hover { transform: translateY(-2px); }
+  .sv.on { border-color: var(--me); background: linear-gradient(180deg, var(--meSoft), var(--card) 60%); }
+  .sv .nm { font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+  .sv .meta { display: flex; flex-wrap: wrap; gap: 6px; }
+  .sv .acts { display: flex; gap: 8px; margin-top: auto; padding-top: 8px; }
+  .sv .acts button { padding: 6px 12px; font-size: 14px; }
+  .sv.add { border-style: dashed; align-items: center; justify-content: center; text-align: center; cursor: pointer; min-height: 170px; color: var(--soft); }
+  .sv.add .plus { font-size: 40px; line-height: 1; color: var(--me); }
+  /* 自定义 */
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+  .chip { padding: 5px 12px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); cursor: pointer; font-size: 13px; transition: transform .12s, border-color .15s; }
+  .chip:hover { transform: translateY(-1px); border-color: var(--me); }
+  .locked { position: relative; } .locked > .lockwrap { filter: grayscale(1) blur(.5px); opacity: .45; pointer-events: none; }
+  .lock { position: absolute; inset: 0; display: grid; place-items: center; z-index: 2; }
+  .lock > div { background: var(--card); border: 1px solid var(--line); padding: 18px 22px; border-radius: var(--r); box-shadow: var(--shadow); text-align: center; max-width: 380px; }
+  .bubble { background: var(--bg); border-radius: 14px; padding: 12px 14px; margin: 8px 0; white-space: pre-wrap; }
+  .bubble .who { font-size: 12px; color: var(--soft); font-weight: 700; margin-bottom: 2px; }
+  .rules { font: 14px/1.7 inherit; min-height: 160px; }
+  .msg { border-left: 4px solid var(--me); }
+  .msg .t { font-weight: 800; } .msg .m { white-space: pre-wrap; margin: 6px 0; }
+  .cmd { font: 13px Consolas, monospace; background: var(--bg); padding: 10px 12px; border-radius: 10px; word-break: break-all; }
+  /* 提示条 */
+  #toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(30px); opacity: 0; background: var(--ink); color: var(--bg); padding: 11px 20px; border-radius: 14px; box-shadow: var(--shadow); transition: all .25s; z-index: 50; font-weight: 700; max-width: 90vw; }
+  #toast.on { opacity: 1; transform: translateX(-50%); }
+  #toast.ok { background: var(--ok); color: #fff; } #toast.bad { background: var(--bad); color: #fff; }
+  .pop { animation: pop .45s cubic-bezier(.2,1.6,.4,1); } @keyframes pop { 0% { transform: scale(.8); } 100% { transform: scale(1); } }
+  /* 手机宽度 */
+  @media (max-width: 820px) {
+    .app { grid-template-columns: 1fr; }
+    aside { position: sticky; height: auto; padding: 10px 12px; z-index: 10; border-right: 0; border-bottom: 1px solid var(--line); }
+    .brand { padding-bottom: 8px; } .nav { display: flex; overflow-x: auto; gap: 4px; } .nav .grp { display: none; }
+    .nav a { flex: none; padding: 6px 10px; } .nav a .t { white-space: nowrap; } .nav .st { margin-left: 4px; }
+    main { padding: 16px 16px 60px; } .tiles { grid-template-columns: 1fr; } .hero { flex-direction: column; text-align: center; }
+  }
 </style>
 </head>
 <body>
-<header><h1>恶雌模拟器安装器</h1><div class="soft" id="where"></div></header>
-<nav id="nav">
-  <a data-s="loc">0 安装位置</a><a data-s="game">1 游戏本体</a><a data-s="llm">2 语言模型</a><a data-s="tts">3 配音</a>
-  <a data-s="phone">7 手机</a><a data-s="board">4 留言板</a><a data-s="del">5 卸载</a>
-</nav>
+<div class="app">
+<aside>
+  <div class="brand"><img src="icon.png" alt=""><div><b>恶雌模拟器</b><span id="where">安装器</span></div></div>
+  <nav class="nav" id="nav">
+    <a data-s="home"><span class="ic">🏠</span><span class="t">总览</span></a>
+    <div class="grp">安装</div>
+    <a data-s="game"><span class="ic">🎮</span><span class="t">游戏本体</span><i class="st" id="st-game"></i></a>
+    <a data-s="llm"><span class="ic">🧠</span><span class="t">语言模型</span><i class="st" id="st-llm"></i></a>
+    <a data-s="tts"><span class="ic">🎙️</span><span class="t">配音</span><i class="st" id="st-tts"></i></a>
+    <div class="grp">玩</div>
+    <a data-s="saves"><span class="ic">💾</span><span class="t">存档</span></a>
+    <a data-s="custom"><span class="ic">✨</span><span class="t">自定义玩法</span><i class="st" id="st-custom"></i></a>
+    <a data-s="phone"><span class="ic">📱</span><span class="t">用手机玩</span></a>
+    <a data-s="board"><span class="ic">💬</span><span class="t">留言板</span></a>
+    <div class="grp">管理</div>
+    <a data-s="loc"><span class="ic">📁</span><span class="t">安装位置</span></a>
+    <a data-s="del"><span class="ic">🧹</span><span class="t">卸载</span></a>
+  </nav>
+</aside>
+
 <main>
-
-<section id="s-loc">
-  <div class="card"><h2>安装位置</h2>
-    <p>游戏、语言模型、配音都装在这个文件夹里。语言模型和配音加起来要 <b>40GB 左右</b>，建议选空间大的盘。</p>
-    <table><tr><td>现在的位置</td><td id="locNow"></td></tr><tr><td>这个盘剩余空间</td><td id="locFree"></td></tr></table>
-    <div class="row"><button class="p" id="locPick">选一个文件夹…</button><span class="soft">已经装了东西的话，会连同存档一起搬过去</span></div>
-    <div id="job-location"></div>
+<!-- 总览 -->
+<section id="s-home">
+  <div class="card hero">
+    <img src="icon.png" alt="">
+    <div style="flex:1">
+      <h2 id="heroT">欢迎来到兽世</h2>
+      <p id="heroP">三步就能开始：装游戏 → 选一个大脑 → 开玩。</p>
+    </div>
+    <button class="big" id="heroBtn">开始安装</button>
+  </div>
+  <div class="tiles">
+    <div class="tile" data-go="game"><span class="em">🎮</span><b>游戏本体</b><div class="v" id="tGame">还没装</div><span class="tag" id="tgGame">第 1 步</span></div>
+    <div class="tile" data-go="llm"><span class="em">🧠</span><b>语言模型（大脑）</b><div class="v" id="tLlm">还没选</div><span class="tag" id="tgLlm">第 2 步</span></div>
+    <div class="tile" data-go="tts"><span class="em">🎙️</span><b>配音</b><div class="v" id="tTts">可选</div><span class="tag" id="tgTts">可选</span></div>
+  </div>
+  <div class="card">
+    <h2>📜 这是什么</h2>
+    <p style="margin:0">一款兽世题材的成人向恋爱陪聊游戏。你是妻主，兽神给你配了一群满身是伤、被至亲背叛过的兽夫。他们的每一句话都由大语言模型实时写出来，按小时过日子，会受伤、会吃醋、会写日记。<b>仅限 18 岁以上。</b></p>
   </div>
 </section>
 
+<!-- 游戏 -->
 <section id="s-game">
-  <div class="card"><h2>游戏本体</h2>
-    <table><tr><td>已装版本</td><td id="gVer">—</td></tr><tr><td>GitHub 上的最新版</td><td id="gRemote">检查中…</td></tr></table>
-    <div class="row"><button class="p" id="gInstall">安装</button><button id="gOpen">打开游戏</button><button id="gCheck">检查更新</button></div>
-    <p class="soft">更新只换程序和规则，存档、设置、你给兽夫起的名字都不动。每次打开安装器都会自动检查一次。</p>
-    <div id="job-game"></div>
+  <div class="hd"><h1>🎮 游戏本体</h1><p>游戏程序、规则和兽夫们。更新只换程序和规则，存档、设置、你起的名字都不动。</p></div>
+  <div class="card">
+    <table class="kv"><tr><td>已装版本</td><td id="gVer">—</td></tr><tr><td>GitHub 上的最新版</td><td id="gRemote">检查中…</td></tr><tr><td>装在</td><td id="gDir">—</td></tr></table>
+    <div class="row"><button class="p big" id="gInstall">安装</button><button id="gOpen">▶ 打开游戏</button><button class="ghost" id="gCheck">检查更新</button></div>
+    <div class="job" id="job-game"></div>
   </div>
 </section>
 
+<!-- 大脑 -->
 <section id="s-llm">
-  <div class="card"><h2>谁来当游戏的大脑？</h2>
-    <p>游戏里每一句话都是大语言模型写的。三种选一种：</p>
-    <div class="choice" data-brain="local"><b>A. 本地模型</b>（装在你电脑上，免费，不限尺度；要好显卡、大内存，比线上慢）</div>
-    <div class="choice" data-brain="api"><b>B. 线上 API</b>（DeepSeek、GPT、Claude、通义……按用量付费，快，任何电脑都能用）</div>
-    <div class="choice" data-brain="claude"><b>C. Claude Code</b>（有 Claude 订阅、装了 Claude Code 的人用，写得最好）</div>
-    <p class="soft">亲密段落：B、C 写不了的那一截，会自动交给本地模型写（装了的话）。只用 B、C 也能玩，那一段会被跳过。</p>
+  <div class="hd"><h1>🧠 语言模型</h1><p>游戏里每一句话都是它写的。选一家，跟着步骤做，测试通过就能用。</p></div>
+  <div class="card">
+    <div class="grpt">在你自己电脑上跑（免费、不限尺度）</div>
+    <div class="prov" id="provLocal"></div>
+    <div class="grpt">Claude（写得最好）</div>
+    <div class="prov" id="provClaude"></div>
+    <div class="grpt">线上 API（按用量付费，快，任何电脑都能用）</div>
+    <div class="prov" id="provApi"></div>
   </div>
-
-  <div class="card" id="llmLocal" hidden><h2>A. 本地模型</h2>
-    <div class="row"><button class="p" id="lCheck">① 检查我的电脑</button></div>
-    <div id="lReport"></div>
-    <div class="row"><button class="p" id="lInstall" disabled>② 安装</button><button id="lTest" disabled>③ 试一下</button><button id="lUse" disabled>④ 用它当大脑</button></div>
-    <div id="job-llm"></div><div id="job-llmtest"></div>
-  </div>
-
-  <div class="card" id="llmApi" hidden><h2>B. 线上 API</h2>
-    <label>选一家 <select id="aPreset"></select></label>
-    <div id="aGuide"></div>
-    <label>接口地址 <input type="text" id="aBase"></label>
-    <label>模型名 <input type="text" id="aModel"></label>
-    <label>API key <input type="password" id="aKey" placeholder="把复制的 key 粘贴到这里"></label>
-    <div class="row"><button id="aTest">测试一下</button><button class="p" id="aSave">保存，用它当大脑</button><span id="aMsg"></span></div>
-  </div>
-
-  <div class="card" id="llmClaude" hidden><h2>C. Claude Code</h2>
-    <p id="cFound"></p>
-    <ol class="steps">
-      <li>要有 Claude 的付费订阅（Pro 或 Max），或者 Anthropic 的 API 额度。</li>
-      <li>装 Claude Code：装好 <a href="#" data-open="https://code.visualstudio.com/">VS Code</a>，在左边「扩展」里搜 <b>Claude Code</b>，点安装；或者按 <a href="#" data-open="https://docs.claude.com/en/docs/claude-code/setup">官方教程</a> 装命令行版。</li>
-      <li>打开一次 Claude Code，按提示用你的 Claude 账号登录。</li>
-      <li>回到这里点「重新检查」，找到了就点「用 Claude Code 当大脑」。</li>
-    </ol>
-    <div class="row"><button id="cRecheck">重新检查</button><button class="p" id="cUse">用 Claude Code 当大脑</button><span id="cMsg"></span></div>
-  </div>
+  <div class="note">亲密段落：线上模型和 Claude 不写最露骨的那一截，会自动交给本地模型写（装了本地模型的话）。没装也能玩，那几段会跳过。</div>
+  <div id="provPanel"></div>
 </section>
 
+<!-- 配音 -->
 <section id="s-tts">
-  <div class="card"><h2>配音（每句话用角色自己的声音读出来）</h2>
-    <p>用开源的 IndexTTS-2.5，在你电脑上跑。要 <b>NVIDIA 显卡、8GB 以上显存、驱动 570 以上、25GB 硬盘</b>。没有也不影响玩，只是没有声音。</p>
-    <div class="row"><button class="p" id="tCheck">① 检查我的电脑</button><button id="tInstall" disabled>② 安装（检查通过后才能点）</button></div>
+  <div class="hd"><h1>🎙️ 配音</h1><p>每句台词用兽夫自己的声音读出来。用开源的 IndexTTS-2.5，在你电脑上跑。</p></div>
+  <div class="card">
+    <h2>需要</h2>
+    <table class="kv"><tr><td>显卡</td><td>NVIDIA，8GB 以上显存</td></tr><tr><td>驱动</td><td>570 以上</td></tr><tr><td>硬盘</td><td>25GB</td></tr></table>
+    <p class="soft">没有也不影响玩，只是没有声音。</p>
+    <div class="row"><button class="p" id="tCheck">① 检查我的电脑</button><button id="tInstall" disabled>② 安装</button></div>
     <div id="tReport"></div>
-    <div id="job-tts"></div>
+    <div class="job" id="job-tts"></div>
   </div>
 </section>
 
+<!-- 存档 -->
+<section id="s-saves">
+  <div class="hd"><h1>💾 存档</h1><p>每个存档是一局独立的游戏：自己的兽夫、名字、进度和自定义玩法。设置（大脑、手机、城市）所有存档通用。</p></div>
+  <div class="saves" id="saveList"></div>
+  <div class="job" id="job-saves"></div>
+</section>
+
+<!-- 自定义 -->
+<section id="s-custom">
+  <div class="hd"><h1>✨ 自定义玩法</h1><p>用大白话说你想怎么改游戏，大脑会把它整理成规则，从下一轮开始生效。只改当前存档：<b id="cuSave"></b></p></div>
+  <div class="locked" id="cuWrap">
+    <div class="lockwrap">
+      <div class="card">
+        <h2>💡 你想怎么改？</h2>
+        <textarea id="cuAsk" rows="4" placeholder="比如：雪季提前到第 10 天；兽夫好感涨得快一点；每天早上有人给我送早饭……"></textarea>
+        <div class="chips" id="cuChips"></div>
+        <div class="row"><button class="p big" id="cuGo">✨ 让大脑改</button><span class="soft" id="cuBrain"></span></div>
+        <div id="cuReply"></div>
+      </div>
+      <div class="card">
+        <h2>📜 现在的自定义规则</h2>
+        <p class="soft">这些规则优先于游戏原来的规则。也可以直接在这里改，或者清空恢复原样。</p>
+        <textarea id="cuRules" class="rules" placeholder="（还没有自定义规则，游戏按原样玩）"></textarea>
+        <div class="row"><button id="cuSave2">保存修改</button><button class="danger" id="cuClear">清空，恢复原样</button></div>
+      </div>
+      <div class="card" id="cuLogCard" hidden><h2>🕘 改过什么</h2><div id="cuLog"></div></div>
+    </div>
+    <div class="lock" id="cuLock"><div><div style="font-size:34px">🔒</div><b>要先装好语言模型</b><p class="soft" id="cuWhy"></p><button class="p" data-go="llm">去选一个大脑</button></div></div>
+  </div>
+</section>
+
+<!-- 手机 -->
 <section id="s-phone">
-  <div class="card"><h2>用手机玩</h2>
-    <p>游戏还是在电脑上跑，手机只是一个窗口。电脑开着游戏，手机和电脑连<b>同一个 Wi-Fi</b>，就能用手机玩。</p>
+  <div class="hd"><h1>📱 用手机玩</h1><p>游戏还是在电脑上跑，手机只是一个窗口。手机和电脑连同一个 Wi-Fi 就行。</p></div>
+  <div class="card">
     <ol class="steps">
       <li>下载安卓 App：<a href="#" data-open="https://github.com/mxxs109-ops/eci-simulator/releases/latest">GitHub 发布页</a> 里的 <b>eci-simulator.apk</b>（用手机浏览器打开这个页面下载）。</li>
-      <li>手机上点下载好的 apk。第一次会提示「不允许安装未知来源的应用」，点「设置」→ 打开「允许来自此来源」，再返回点「安装」。</li>
-      <li>点下面的按钮，让 Windows 防火墙放行游戏（会弹一个「是否允许更改」，点「是」）。</li>
+      <li>手机上点下载好的 apk。提示「不允许安装未知来源的应用」时，点「设置」→ 打开「允许来自此来源」，返回点「安装」。</li>
+      <li>点下面的按钮，让 Windows 防火墙放行游戏（会问「是否允许更改」，点「是」）。<div class="row"><button class="p" id="fwOn">放行防火墙</button><button class="ghost" id="fwOff">取消放行</button></div></li>
       <li>电脑上打开游戏 → 右下角 ⚙️ → 勾上「允许同一个 Wi-Fi 下的手机连进来」→ 保存，会出现二维码。</li>
-      <li>手机 App 里点「扫码连接」，对准电脑屏幕上的二维码。第一次会问「允许访问本地网络」，点允许。</li>
+      <li>手机 App 里点「扫码连接」，对准电脑屏幕上的二维码。问「允许访问本地网络」时点允许。</li>
     </ol>
-    <div class="row"><button class="p" id="fwOn">放行防火墙</button><button id="fwOff">取消放行</button><span id="fwMsg"></span></div>
-    <h3>出门在外也想玩？</h3>
-    <p class="soft">装 <a href="#" data-open="https://tailscale.com/download">Tailscale</a>（免费）：电脑和手机都装、登录同一个账号。之后手机在哪都能连回家里的电脑，二维码照样扫。</p>
-    <h3>连不上？</h3>
-    <ul class="soft"><li>手机和电脑是不是同一个 Wi-Fi（公司、酒店的 Wi-Fi 常常不让设备互相访问，换手机热点试试）</li><li>第 3 步的防火墙放行做了没有</li><li>电脑上的游戏黑窗口还开着吗</li></ul>
   </div>
+  <div class="card"><h2>🌍 出门在外也想玩？</h2><p class="soft" style="margin:0">电脑和手机都装 <a href="#" data-open="https://tailscale.com/download">Tailscale</a>（免费），登录同一个账号。之后手机在哪都能连回家里的电脑，二维码照样扫。</p></div>
+  <div class="card"><h2>🔧 连不上？</h2><ul class="soft" style="margin:0"><li>手机和电脑是不是同一个 Wi-Fi（公司、酒店的 Wi-Fi 常常不让设备互相访问，换手机热点试试）</li><li>第 3 步的防火墙放行做了没有</li><li>电脑上的游戏还开着吗</li></ul></div>
 </section>
 
+<!-- 留言板 -->
 <section id="s-board">
-  <div class="card"><h2>留言板</h2>
-    <p class="soft">留言收在 GitHub 上，所有人都看得到。发留言要有一个 GitHub 账号（免费注册）：点「写留言」会打开浏览器，内容已经帮你填好，点「Submit new issue」就发出去了。</p>
-    <label>标题 <input type="text" id="bTitle" placeholder="比如：玄烬太可爱了 / 配音装不上"></label>
-    <label>内容 <textarea id="bBody" rows="4"></textarea></label>
-    <div class="row"><button class="p" id="bNew">写留言</button><button id="bLoad">刷新留言</button></div>
+  <div class="hd"><h1>💬 留言板</h1><p>留言收在 GitHub 上，所有人都看得到。发留言要一个 GitHub 账号（免费注册）。</p></div>
+  <div class="card">
+    <label class="f">标题 <input type="text" id="bTitle" placeholder="比如：玄烬太可爱了 / 配音装不上"></label>
+    <label class="f">内容 <textarea id="bBody" rows="4"></textarea></label>
+    <div class="row"><button class="p" id="bNew">写留言（会打开浏览器）</button><button class="ghost" id="bLoad">刷新</button></div>
   </div>
   <div id="bList"></div>
 </section>
 
+<!-- 位置 -->
+<section id="s-loc">
+  <div class="hd"><h1>📁 安装位置</h1><p>游戏、存档、语言模型、配音都装在这个文件夹里。模型和配音加起来要 40GB 左右，建议选空间大的盘。</p></div>
+  <div class="card">
+    <table class="kv"><tr><td>现在的位置</td><td id="locNow"></td></tr><tr><td>这个盘剩余空间</td><td id="locFree"></td></tr></table>
+    <div class="row"><button class="p" id="locPick">选一个文件夹…</button><span class="soft">已经装了的东西会连同存档一起搬过去</span></div>
+    <div class="job" id="job-location"></div>
+  </div>
+</section>
+
+<!-- 卸载 -->
 <section id="s-del">
-  <div class="card"><h2>一键卸载</h2>
-    <p>默认全部删干净：游戏和存档、语言模型、配音、安装器自己、桌面图标、防火墙规则。</p>
-    <label><input type="checkbox" class="dp" value="game" checked> 游戏本体和存档</label>
-    <label><input type="checkbox" class="dp" value="llm" checked> 语言模型</label>
-    <label><input type="checkbox" class="dp" value="tts" checked> 配音</label>
+  <div class="hd"><h1>🧹 一键卸载</h1><p>默认全部删干净：游戏和所有存档、语言模型、配音、安装器自己、桌面图标、防火墙规则。</p></div>
+  <div class="card">
+    <label><input type="checkbox" class="dp" value="game" checked> 游戏本体和所有存档</label><br>
+    <label><input type="checkbox" class="dp" value="llm" checked> 语言模型</label><br>
+    <label><input type="checkbox" class="dp" value="tts" checked> 配音</label><br>
     <label><input type="checkbox" class="dp" value="installer" checked> 安装器自己（最后删，删完这个页面就打不开了）</label>
     <div class="row"><button class="danger" id="dGo">卸载选中的</button></div>
-    <div id="job-uninstall"></div>
+    <div class="job" id="job-uninstall"></div>
   </div>
 </section>
 </main>
+</div>
+<div id="toast"></div>
 
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const api = (u, b) => fetch(u, b === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json());
 let S = {};
+let toastT;
+function toast(t, kind = '') { const el = $('toast'); el.textContent = t; el.className = 'on ' + kind; clearTimeout(toastT); toastT = setTimeout(() => el.className = '', 3200); }
+async function busyBtn(btn, fn) { btn.classList.add('busy'); try { return await fn(); } finally { btn.classList.remove('busy'); } }
 
 // 导航
 function go(s) {
-  document.querySelectorAll('nav a').forEach(a => a.classList.toggle('on', a.dataset.s === s));
+  if (!$('s-' + s)) s = 'home';
+  document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.dataset.s === s));
   document.querySelectorAll('section').forEach(x => x.classList.toggle('on', x.id === 's-' + s));
-  location.hash = s;
+  history.replaceState(null, '', '#' + s);
+  window.scrollTo({ top: 0 });
   if (s === 'board') loadBoard();
+  if (s === 'saves') loadSaves();
+  if (s === 'custom') loadCustom();
 }
 $('nav').onclick = e => { const a = e.target.closest('a'); if (a) { e.preventDefault(); go(a.dataset.s); } };
-document.addEventListener('click', e => { const a = e.target.closest('[data-open]'); if (a) { e.preventDefault(); api('/api/open', { url: a.dataset.open }); } });
+document.addEventListener('click', e => {
+  const o = e.target.closest('[data-open]'); if (o) { e.preventDefault(); api('/api/open', { url: o.dataset.open }); }
+  const g = e.target.closest('[data-go]'); if (g) { e.preventDefault(); go(g.dataset.go); }
+});
 
+const isLocal = () => S.brain === 'api' && /127\.0\.0\.1|localhost/.test(S.api?.base || '');
+function brainLabel() {
+  if (!S.game) return '';
+  if (S.brain === 'claude') return S.claude ? 'Claude Code' : '';
+  if (!S.api?.base || !S.api?.model) return '';
+  return isLocal() ? (/:8080/.test(S.api.base) ? '本地模型' : '本机模型（' + S.api.model + '）') : S.api.model;
+}
 async function refresh() {
   S = await api('/api/state');
-  $('where').textContent = '装在：' + S.root;
-  $('locNow').textContent = S.root;
-  $('locFree').textContent = S.free == null ? '—' : S.free + ' GB';
-  $('gVer').innerHTML = S.game ? esc(S.game.version) + (S.running.game ? '<span class="pill ok">运行中</span>' : '') : '还没装';
+  $('where').textContent = S.game ? '版本 ' + S.game.version + (S.save ? ' · ' + S.save : '') : '安装器';
+  $('locNow').textContent = S.root; $('locFree').textContent = S.free == null ? '—' : S.free + ' GB';
+  $('gVer').innerHTML = S.game ? esc(S.game.version) + (S.running.game ? ' <span class="tag ok">● 运行中</span>' : '') : '还没装';
+  $('gDir').textContent = S.dirs?.game || '—';
   $('gInstall').textContent = S.game ? '更新' : '安装';
   $('gOpen').disabled = !S.game;
-  $('cFound').innerHTML = S.claude ? `<span class="ok">✅ 找到了 Claude Code（${esc(S.claude)}）</span>` : '<span class="bad">还没找到 Claude Code，照下面做：</span>';
-  document.querySelectorAll('[data-brain]').forEach(c => c.classList.toggle('on', c.dataset.brain === (S.brain === 'api' && /127\.0\.0\.1/.test(S.api.base || '') ? 'local' : S.brain)));
+  const b = brainLabel();
+  // 侧边栏的小圆点
+  $('st-game').className = 'st ' + (S.running.game ? 'run' : S.game ? 'ok' : 'new');
+  $('st-llm').className = 'st ' + (b ? 'ok' : S.game ? 'new' : '');
+  $('st-tts').className = 'st ' + (S.running.tts ? 'run' : S.tts ? 'ok' : '');
+  $('st-custom').className = 'st ' + (b ? '' : '');
+  // 总览
+  $('tGame').textContent = S.game ? '版本 ' + S.game.version + (S.running.game ? '，运行中' : '') : '还没装';
+  $('tgGame').className = 'tag ' + (S.game ? 'ok' : 'me'); $('tgGame').textContent = S.game ? '✓ 装好了' : '第 1 步';
+  $('tLlm').textContent = b || '还没选';
+  $('tgLlm').className = 'tag ' + (b ? 'ok' : S.game ? 'me' : ''); $('tgLlm').textContent = b ? '✓ ' + (S.llm ? '本地已装' : '可以用') : '第 2 步';
+  $('tTts').textContent = S.tts ? (S.running.tts ? '运行中' : '装好了') : '可选，有 NVIDIA 显卡才行';
+  $('tgTts').className = 'tag ' + (S.tts ? 'ok' : ''); $('tgTts').textContent = S.tts ? '✓ 装好了' : '可选';
+  const [t, p, btn, to] = !S.game ? ['欢迎来到兽世', '三步就能开始：装游戏 → 选一个大脑 → 开玩。', '开始安装', 'game']
+    : !b ? ['游戏装好了', '下一步：选一个语言模型当游戏的大脑。', '选大脑', 'llm']
+    : ['一切就绪', '大脑：' + b + '。双击桌面上的「恶雌模拟器」，或者点这里。', '▶ 打开游戏', 'open'];
+  $('heroT').textContent = t; $('heroP').textContent = p; $('heroBtn').textContent = btn; $('heroBtn').dataset.to = to;
+  markProviders();
 }
+$('heroBtn').onclick = e => { const to = e.target.dataset.to; if (to === 'open') { api('/api/game/open', {}); toast('正在打开游戏…'); } else go(to); };
 
 // 后台任务进度
+const jobSeen = {};
 async function poll() {
   const jobs = await api('/api/jobs').catch(() => ({}));
   for (const [name, j] of Object.entries(jobs)) {
     const box = $('job-' + name); if (!box) continue;
-    box.innerHTML = `<div class="bar"><i style="width:${j.pct}%"></i></div><div class="${j.error ? 'bad' : j.done ? 'ok' : ''}">${esc(j.error ? '出错：' + j.error : j.step)}</div><div class="log">${esc(j.log.slice(-6).join('\n'))}</div>`;
-    if (j.done && !box.dataset.done) { box.dataset.done = 1; refresh(); if (name === 'llm' && !j.error) { $('lTest').disabled = false; } if (name === 'llmtest' && !j.error) $('lUse').disabled = false; }
-    if (!j.done) delete box.dataset.done;
+    box.innerHTML = `<div class="bar ${j.error ? 'err' : j.done ? 'done' : ''}"><i style="width:${j.error ? 100 : j.pct}%"></i></div>
+      <div class="step ${j.error ? 'bad' : j.done ? 'ok' : ''}">${j.error ? '😵 出错：' + esc(j.error) : j.done ? '🎉 ' + esc(j.step) : esc(j.step)}</div><div class="log">${esc(j.log.slice(-5).join('\n'))}</div>`;
+    const key = name + j.log.length + j.done;
+    if (j.done && jobSeen[name] !== key) {
+      jobSeen[name] = key; refresh();
+      if (j.error) toast('出错了：' + j.error, 'bad'); else toast(j.step, 'ok');
+      if (name === 'llm' && !j.error) $('lTest') && ($('lTest').disabled = false);
+      if (name === 'llmtest' && !j.error) $('lUse') && ($('lUse').disabled = false);
+      if (name === 'saves') loadSaves();
+    }
   }
 }
 setInterval(poll, 1000);
 
-// 0 安装位置
+// ---------- 游戏 ----------
+async function checkUpdate() {
+  $('gRemote').textContent = '检查中…';
+  const r = await api('/api/game/check').catch(e => ({ error: e.message }));
+  if (r.error) return $('gRemote').innerHTML = `<span class="bad">${esc(r.error)}</span>`;
+  const newer = r.local && r.remote.version !== r.local;
+  $('gRemote').innerHTML = esc(r.remote.version) + (newer ? ` <span class="tag me">🔔 有新版本</span><div class="soft">${esc(r.remote.notes || '')}</div>` : r.local ? ' <span class="tag ok">已是最新</span>' : '');
+  if (newer) { $('st-game').className = 'st new'; $('gInstall').classList.add('pop'); }
+}
+$('gInstall').onclick = () => { api('/api/game/install', {}); toast(S.game ? '开始更新…' : '开始安装…'); };
+$('gOpen').onclick = () => { api('/api/game/open', {}); toast('正在打开游戏…'); };
+$('gCheck').onclick = e => busyBtn(e.target, checkUpdate);
+
+// ---------- 大脑 ----------
+// lg：图标底色和字；steps：手把手教程；model 留空的，照官网填（各家型号更新快）
+const P = [
+  { id: 'local', g: 'Local', name: '本地模型（推荐）', sub: '装在你电脑上', lg: ['#5b4636', '本'], kind: 'local' },
+  { id: 'ollama', g: 'Local', name: 'Ollama', sub: '已经装了 Ollama 的人', lg: ['#222', 'O'], base: 'http://127.0.0.1:11434/v1', model: '', site: 'https://ollama.com/download',
+    steps: ['装好 <a href="#" data-open="https://ollama.com/download">Ollama</a>，打开它。', '在命令行里拉一个模型，比如 <span class="cmd">ollama pull qwen3</span>（选能塞进你显存的大小）。', '模型名填你拉下来的名字（<span class="cmd">ollama list</span> 能看到），key 留空。', '点「测试一下」。'] },
+  { id: 'lmstudio', g: 'Local', name: 'LM Studio', sub: '图形界面跑本地模型', lg: ['#4a3aff', 'LM'], base: 'http://127.0.0.1:1234/v1', model: '', site: 'https://lmstudio.ai/',
+    steps: ['装好 <a href="#" data-open="https://lmstudio.ai/">LM Studio</a>，在里面搜一个模型下载（选能塞进你显存的大小）。', '左边点「Developer」→ 打开「Start server」。', '模型名填 LM Studio 里显示的模型 ID，key 留空。', '点「测试一下」。'] },
+  { id: 'claudecode', g: 'Claude', name: 'Claude Code', sub: '有 Claude 订阅的人', lg: ['#d97757', 'C'], kind: 'claude' },
+  { id: 'anthropic', g: 'Claude', name: 'Claude API', sub: 'Anthropic 控制台的 key', lg: ['#c96442', 'A'], base: 'https://api.anthropic.com/v1', model: 'claude-sonnet-5-5', site: 'https://console.anthropic.com/',
+    steps: ['打开 <a href="#" data-open="https://console.anthropic.com/">console.anthropic.com</a> 注册登录。', '「Plans & Billing」里充值。', '「API Keys」→「Create Key」，名字随便填，复制 <b>sk-ant-</b> 开头的 key（只显示一次）。', '模型名默认是 Claude Sonnet，想用更强的可以换成 Opus 的型号名。', '粘贴 key，点「测试一下」。'] },
+  { id: 'deepseek', g: 'Api', name: 'DeepSeek', sub: '便宜，中文好', lg: ['#4d6bfe', 'DS'], base: 'https://api.deepseek.com/v1', model: 'deepseek-chat', site: 'https://platform.deepseek.com/', shot: 'deepseek',
+    steps: ['打开 <a href="#" data-open="https://platform.deepseek.com/">platform.deepseek.com</a>，用手机号注册登录。', '左边点「充值」，充 10 元就能玩很久（按字数扣钱）。', '左边点「API keys」→「创建 API key」，名字随便填（比如 恶雌）。', '弹出来的 <b>sk-</b> 开头的一串就是 key，<b>只显示这一次</b>，点「复制」。', '回到这里粘贴到「API key」，点「测试一下」。'] },
+  { id: 'openai', g: 'Api', name: 'OpenAI', sub: 'GPT 系列', lg: ['#10a37f', 'AI'], base: 'https://api.openai.com/v1', model: '', site: 'https://platform.openai.com/api-keys',
+    steps: ['打开 <a href="#" data-open="https://platform.openai.com/">platform.openai.com</a> 注册登录（要能访问 OpenAI 的网络）。', '右上角 Settings →「Billing」，绑卡充值（最少 5 美元）。', '左边「API keys」→「Create new secret key」→ 复制 <b>sk-</b> 开头的 key。', '模型名填官网「Models」页面上的型号名。', '粘贴 key，点「测试一下」。'] },
+  { id: 'gemini', g: 'Api', name: 'Google Gemini', sub: '有免费额度', lg: ['#1a73e8', 'G'], base: 'https://generativelanguage.googleapis.com/v1beta/openai', model: '', site: 'https://aistudio.google.com/apikey',
+    steps: ['打开 <a href="#" data-open="https://aistudio.google.com/apikey">Google AI Studio</a>，用 Google 账号登录（要能访问 Google 的网络）。', '点「Create API key」，复制。', '模型名填 AI Studio 里模型列表上的名字（gemini- 开头）。', '粘贴 key，点「测试一下」。'] },
+  { id: 'qwen', g: 'Api', name: '通义千问', sub: '阿里云百炼', lg: ['#615ced', '通'], base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus', site: 'https://bailian.console.aliyun.com/',
+    steps: ['打开 <a href="#" data-open="https://bailian.console.aliyun.com/">阿里云百炼</a>，用阿里云账号登录（要实名）。', '开通「模型服务」，新用户有免费额度。', '右上角头像 →「API-KEY」→ 创建 → 复制。', '粘贴 key，点「测试一下」。'] },
+  { id: 'kimi', g: 'Api', name: 'Kimi', sub: '月之暗面', lg: ['#111', 'K'], base: 'https://api.moonshot.cn/v1', model: '', site: 'https://platform.moonshot.cn/',
+    steps: ['打开 <a href="#" data-open="https://platform.moonshot.cn/">platform.moonshot.cn</a> 注册登录。', '账户里充值。', '「API Key 管理」→ 新建 → 复制。', '模型名照官网文档里的填。粘贴 key，点「测试一下」。'] },
+  { id: 'zhipu', g: 'Api', name: '智谱 GLM', sub: '清华系', lg: ['#3859ff', '智'], base: 'https://open.bigmodel.cn/api/paas/v4', model: '', site: 'https://open.bigmodel.cn/',
+    steps: ['打开 <a href="#" data-open="https://open.bigmodel.cn/">open.bigmodel.cn</a> 注册登录。', '新用户有免费额度，不够再充值。', '右上角「API Keys」→ 添加新的 API Key → 复制。', '模型名照官网「模型」页面的填（glm- 开头）。粘贴 key，点「测试一下」。'] },
+  { id: 'silicon', g: 'Api', name: '硅基流动', sub: '国内一个 key 用很多家', lg: ['#7c3aed', '硅'], base: 'https://api.siliconflow.cn/v1', model: '', site: 'https://cloud.siliconflow.cn/',
+    steps: ['打开 <a href="#" data-open="https://cloud.siliconflow.cn/">cloud.siliconflow.cn</a>，手机号注册登录。', '新用户送额度；左边「API 密钥」→ 新建 → 复制。', '模型名从「模型广场」复制（比如 deepseek-ai/ 或 Qwen/ 开头的）。', '粘贴 key，点「测试一下」。'] },
+  { id: 'openrouter', g: 'Api', name: 'OpenRouter', sub: '海外一个 key 用很多家', lg: ['#6467f2', 'OR'], base: 'https://openrouter.ai/api/v1', model: '', site: 'https://openrouter.ai/',
+    steps: ['打开 <a href="#" data-open="https://openrouter.ai/">openrouter.ai</a> 注册登录。', '「Credits」里充值。', '「Keys」→「Create Key」→ 复制。', '模型名从「Models」页面复制（比如 deepseek/ 开头的）。粘贴 key，点「测试一下」。'] },
+  { id: 'xai', g: 'Api', name: 'xAI Grok', sub: '尺度较宽', lg: ['#000', 'X'], base: 'https://api.x.ai/v1', model: '', site: 'https://console.x.ai/',
+    steps: ['打开 <a href="#" data-open="https://console.x.ai/">console.x.ai</a> 注册登录。', '充值后「API Keys」→ 创建 → 复制。', '模型名照控制台「Models」里的填（grok- 开头）。', '粘贴 key，点「测试一下」。'] },
+  { id: 'custom', g: 'Api', name: '其他', sub: '任何 OpenAI 兼容接口', lg: ['#8b7262', '+'], base: '', model: '', site: '',
+    steps: ['填服务商给的「OpenAI 兼容」接口地址（一般以 /v1 结尾）、模型名和 key。', '点「测试一下」，通了再保存。'] },
+];
+const pvHtml = p => `<div class="pv" data-pv="${p.id}"><span class="lg" style="background:${p.lg[0]}">${p.lg[1]}</span><div><b>${esc(p.name)}</b><small>${esc(p.sub)}</small></div></div>`;
+$('provLocal').innerHTML = P.filter(p => p.g === 'Local').map(pvHtml).join('');
+$('provClaude').innerHTML = P.filter(p => p.g === 'Claude').map(pvHtml).join('');
+$('provApi').innerHTML = P.filter(p => p.g === 'Api').map(pvHtml).join('');
+let curPv = null;
+function currentPv() {
+  if (S.brain === 'claude') return 'claudecode';
+  const b = S.api?.base || '';
+  if (/127\.0\.0\.1:8080/.test(b)) return 'local';
+  const hit = P.find(p => p.base && b && b.replace(/\/+$/, '') === p.base.replace(/\/+$/, ''));
+  return hit ? hit.id : b ? 'custom' : null;
+}
+function markProviders() { const c = brainLabel() ? currentPv() : null; document.querySelectorAll('.pv').forEach(x => x.classList.toggle('cur', x.dataset.pv === c)); }
+document.querySelectorAll('.prov').forEach(el => el.onclick = e => { const x = e.target.closest('.pv'); if (x) showPv(x.dataset.pv); });
+function showPv(id, scroll = true) {
+  curPv = id;
+  document.querySelectorAll('.pv').forEach(x => x.classList.toggle('on', x.dataset.pv === id));
+  const p = P.find(x => x.id === id), box = $('provPanel');
+  if (p.kind === 'local') box.innerHTML = `<div class="card pop"><h2>🖥️ 本地模型</h2>
+    <p>在你电脑上跑一个不限尺度的开源大模型（Qwen 35B）。要好显卡、大内存；比线上慢，一轮 1～3 分钟。</p>
+    <div class="row"><button class="p" id="lCheck">① 检查我的电脑</button><button id="lInstall" disabled>② 安装</button><button id="lTest" ${S.llm ? '' : 'disabled'}>③ 试一下</button><button id="lUse" ${S.llm ? '' : 'disabled'}>④ 用它当大脑</button></div>
+    <div id="lReport"></div><div class="job" id="job-llm"></div><div class="job" id="job-llmtest"></div>
+    <p class="soft">想快一点：大脑用 Claude 或线上 API，本地模型只写亲密段落（装好就自动会用，不用点 ④）。</p></div>`;
+  else if (p.kind === 'claude') box.innerHTML = `<div class="card pop"><h2>✳️ Claude Code</h2>
+    <div class="note ${S.claude ? 'ok' : 'bad'}">${S.claude ? `✅ 找到了 Claude Code（${esc(S.claude)}）` : '还没找到 Claude Code，照下面做：'}</div>
+    <ol class="steps">
+      <li>要有 Claude 的付费订阅（Pro 或 Max），或者 Anthropic 的 API 额度。<a href="#" data-open="https://claude.ai/upgrade">看订阅</a></li>
+      <li>装 Claude Code：装好 <a href="#" data-open="https://code.visualstudio.com/">VS Code</a>，左边「扩展」里搜 <b>Claude Code</b> 点安装；或者照 <a href="#" data-open="https://docs.claude.com/en/docs/claude-code/setup">官方教程</a> 装命令行版。</li>
+      <li>打开一次 Claude Code，照提示用你的 Claude 账号登录。</li>
+      <li>回到这里点「重新检查」，找到了就点「用 Claude Code 当大脑」。</li>
+    </ol>
+    <div class="row"><button id="cRecheck">重新检查</button><button class="p" id="cUse" ${S.claude ? '' : 'disabled'}>用 Claude Code 当大脑</button></div></div>`;
+  else box.innerHTML = `<div class="card pop"><h2><span class="lg" style="background:${p.lg[0]};width:30px;height:30px;border-radius:9px;display:inline-grid;place-items:center;color:#fff;font-size:13px">${p.lg[1]}</span> ${esc(p.name)}</h2>
+    <h3>怎么拿到 key</h3><ol class="steps">${p.steps.map(s => `<li>${s}</li>`).join('')}</ol>
+    ${p.shot ? `<img class="shot" src="guide/${p.shot}.svg" alt="示意图">` : ''}
+    <label class="f">接口地址 <input type="text" id="aBase" value="${esc(p.base)}"></label>
+    <label class="f">模型名 <input type="text" id="aModel" value="${esc(p.model)}" placeholder="照上面的步骤填"></label>
+    <label class="f">API key <input type="password" id="aKey" placeholder="${/127\.0\.0\.1/.test(p.base) ? '本机的一般不用填' : '把复制的 key 粘贴到这里'}"></label>
+    <div class="row"><button id="aTest">🔌 测试一下</button><button class="p" id="aSave">保存，用它当大脑</button></div><div class="result" id="aMsg"></div></div>`;
+  // 当前用的就是这一家：把已保存的填回去
+  if (!p.kind && currentPv() === id && S.api) { $('aBase').value = S.api.base || p.base; $('aModel').value = S.api.model || p.model; if (S.api.key) $('aKey').value = S.api.key; }
+  wirePanel(p);
+  if (scroll) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+let plan = null;
+function wirePanel(p) {
+  if (p.kind === 'local') {
+    $('lCheck').onclick = e => busyBtn(e.target, async () => {
+      plan = await api('/api/llm/check');
+      const h = plan.hw;
+      const rows = [['显卡', h.nvidia ? `${h.nvidia.name}，${h.nvidia.vramGB}GB 显存，驱动 ${h.nvidia.driver}` : (h.gpus.join('、') || '没找到')], ['内存', h.ramGB + ' GB'], ['CPU', `${h.cpu}（${h.cores} 线程）`], ['安装盘剩余', plan.free == null ? '—' : plan.free + ' GB']];
+      const verdict = plan.tier === 'api' ? `<div class="note bad"><b>这台电脑带不动本地模型。</b>建议选线上 API（DeepSeek 最便宜，几块钱能玩很久）。</div>`
+        : `<div class="note ok"><b>✅ 可以装：${esc(plan.model.label)}</b>，用 ${plan.build === 'cuda' ? 'NVIDIA 显卡' : plan.build === 'vulkan' ? 'Vulkan（AMD / Intel 显卡）' : 'CPU'} 跑，要下载约 ${plan.needGB}GB。</div>`;
+      $('lReport').innerHTML = `<table class="kv" style="margin-top:12px">${rows.map(r => `<tr><td>${r[0]}</td><td>${esc(r[1])}</td></tr>`).join('')}</table>${verdict}${plan.why.map(w => `<p class="soft">· ${esc(w)}</p>`).join('')}${S.game ? '' : '<div class="note bad">先去「游戏本体」装游戏。</div>'}`;
+      $('lInstall').disabled = plan.tier === 'api' || !S.game; $('lInstall').classList.toggle('p', !$('lInstall').disabled);
+    });
+    $('lInstall').onclick = () => { api('/api/llm/install', { tier: plan.tier, build: plan.build }); toast('开始下载，十几 GB，慢慢来…'); };
+    $('lTest').onclick = () => api('/api/llm/test', {});
+    $('lUse').onclick = async () => { await api('/api/brain', { brain: 'api', api: { base: 'http://127.0.0.1:8080/v1', model: 'local', key: '' } }); toast('大脑换成本地模型了，重新打开游戏生效', 'ok'); refresh(); };
+  } else if (p.kind === 'claude') {
+    $('cRecheck').onclick = e => busyBtn(e.target, async () => { await refresh(); showPv('claudecode'); toast(S.claude ? '找到了 Claude Code' : '还是没找到', S.claude ? 'ok' : 'bad'); });
+    $('cUse').onclick = async () => { const r = await api('/api/brain', { brain: 'claude' }).catch(e => ({ error: e.message })); r.ok ? toast('大脑换成 Claude Code 了', 'ok') : toast(r.error, 'bad'); refresh(); };
+  } else {
+    const body = () => ({ base: $('aBase').value.trim(), model: $('aModel').value.trim(), key: $('aKey').value.trim() });
+    $('aTest').onclick = e => busyBtn(e.target, async () => {
+      const b = body(); if (!b.base || !b.model) return $('aMsg').innerHTML = '<span class="bad">接口地址和模型名都要填</span>';
+      const r = await api('/api/brain/test', { api: b }).catch(e => ({ error: e.message }));
+      $('aMsg').innerHTML = r.ok ? `<span class="ok pop" style="display:inline-block">✅ 通了！它说：「${esc(r.reply)}」</span>` : `<span class="bad">❌ ${esc(r.error)}</span>`;
+    });
+    $('aSave').onclick = async () => {
+      const b = body(); if (!b.base || !b.model) return toast('接口地址和模型名都要填', 'bad');
+      const r = await api('/api/brain', { brain: 'api', api: b }).catch(e => ({ error: e.message }));
+      r.ok ? toast('保存好了，重新打开游戏生效', 'ok') : toast(r.error, 'bad'); refresh();
+    };
+  }
+}
+
+// ---------- 配音 ----------
+$('tCheck').onclick = e => busyBtn(e.target, async () => {
+  const r = await api('/api/tts/check'), h = r.hw;
+  $('tReport').innerHTML = `<table class="kv" style="margin-top:12px"><tr><td>显卡</td><td>${esc(h.nvidia ? `${h.nvidia.name}，${h.nvidia.vramGB}GB，驱动 ${h.nvidia.driver}` : '没有 NVIDIA 显卡')}</td></tr><tr><td>安装盘剩余</td><td>${r.free ?? '—'} GB</td></tr></table>
+    ${r.ok ? '<div class="note ok"><b>✅ 可以装。</b>要下载十几 GB，半小时到几小时，看网速。</div>' : '<div class="note bad"><b>这台电脑装不了配音。</b>不影响玩，只是没有声音。</div>'}
+    ${r.why.map(w => `<p class="soft">· ${esc(w)}</p>`).join('')}`;
+  $('tInstall').disabled = !r.ok || !S.game; $('tInstall').classList.toggle('p', !$('tInstall').disabled);
+});
+$('tInstall').onclick = () => { api('/api/tts/install', {}); toast('开始安装配音…'); };
+
+// ---------- 存档 ----------
+const ago = t => { if (!t) return '还没玩过'; const m = (Date.now() - new Date(t)) / 60000; return m < 60 ? Math.max(1, Math.round(m)) + ' 分钟前' : m < 1440 ? Math.round(m / 60) + ' 小时前' : Math.round(m / 1440) + ' 天前'; };
+async function loadSaves() {
+  if (!S.game) return $('saveList').innerHTML = '<div class="card">先去「游戏本体」装游戏，就会有第一个存档。</div>';
+  const r = await api('/api/saves');
+  $('saveList').innerHTML = r.list.map(s => `<div class="sv ${s.active ? 'on' : ''}">
+      <div class="nm">${s.active ? '🎮' : '💾'} ${esc(s.name)} ${s.active ? '<span class="tag me">正在玩</span>' : ''}</div>
+      <div class="meta">${s.started ? `<span class="tag">第 ${s.day ?? 1} 天</span><span class="tag">${s.husbands} 位兽夫</span><span class="tag">聊了 ${s.turns} 轮</span>` : '<span class="tag">还没开局</span>'}${s.custom ? '<span class="tag me">✨ 自定义玩法</span>' : ''}</div>
+      <div class="soft">最后玩：${ago(s.last)}</div>
+      <div class="acts">${s.active ? `<button class="p" data-sa="open">▶ 开始玩</button>` : `<button class="p" data-sa="load" data-n="${esc(s.name)}">加载</button>`}<button class="ghost" data-sa="rename" data-n="${esc(s.name)}">改名</button>${s.active ? '' : `<button class="danger" data-sa="del" data-n="${esc(s.name)}">删除</button>`}</div>
+    </div>`).join('') + `<div class="sv add" data-sa="new"><div class="plus">＋</div><b>新建存档</b><div class="soft">从头开始一局新游戏${r.template ? '' : '<br>（先在「游戏本体」点一次更新）'}</div></div>`;
+}
+$('saveList').onclick = async e => {
+  const b = e.target.closest('[data-sa]'); if (!b) return;
+  const n = b.dataset.n, a = b.dataset.sa;
+  try {
+    if (a === 'open') { api('/api/game/open', {}); toast('正在打开游戏…'); }
+    if (a === 'new') { const name = prompt('新存档叫什么？', '存档 ' + (document.querySelectorAll('.sv:not(.add)').length + 1)); if (name) { await api('/api/saves/new', { name }); } }
+    if (a === 'load') { if (confirm(`加载「${n}」？正在运行的游戏会先关掉，现在的存档会自动收好。`)) await api('/api/saves/load', { name: n }); }
+    if (a === 'rename') { const to = prompt('改成什么名字？', n); if (to && to !== n) { const r = await api('/api/saves/rename', { name: n, to }); r.ok === false ? toast(r.error, 'bad') : (toast('改好了', 'ok'), loadSaves(), refresh()); } }
+    if (a === 'del') { if (confirm(`删除「${n}」？这一局的进度、兽夫日记、聊天记录全都删掉，找不回来。`)) { const r = await api('/api/saves/delete', { name: n }); r.ok === false ? toast(r.error, 'bad') : (toast('删掉了', 'ok'), loadSaves()); } }
+  } catch (err) { toast(err.message, 'bad'); }
+};
+
+// ---------- 自定义玩法 ----------
+const CHIPS = ['兽夫好感涨得快一点', '雪季提前到第 10 天', '每天早上有人给我送早饭', '危险少一点，多一点日常', '兽夫们更会吃醋', '我可以有自己的异能：治愈', '易感期更频繁', '所有兽夫都更黏人'];
+$('cuChips').innerHTML = CHIPS.map(c => `<span class="chip">${c}</span>`).join('');
+$('cuChips').onclick = e => { const c = e.target.closest('.chip'); if (c) { const t = $('cuAsk'); t.value = (t.value.trim() ? t.value.trim() + '；' : '') + c.textContent; t.focus(); } };
+async function loadCustom() {
+  const r = await api('/api/custom');
+  $('cuSave').textContent = r.save;
+  $('cuWrap').classList.toggle('locked', !r.ready.ok);
+  $('cuLock').hidden = r.ready.ok; $('cuWhy').textContent = r.ready.why || '';
+  $('cuBrain').textContent = r.ready.ok ? '由 ' + r.ready.what + ' 来改' : '';
+  $('cuRules').value = r.rules;
+  $('cuLogCard').hidden = !r.log.length;
+  $('cuLog').innerHTML = r.log.map(l => `<div class="bubble"><div class="who">你 · ${esc(l.time)}</div>${esc(l.ask)}</div><div class="bubble" style="margin-left:24px"><div class="who">大脑</div>${esc(l.reply)}</div>`).join('');
+}
+$('cuGo').onclick = e => busyBtn(e.target, async () => {
+  const text = $('cuAsk').value.trim(); if (!text) return toast('先写一下想怎么改', 'bad');
+  $('cuReply').innerHTML = '<div class="bubble soft">大脑正在读规则、改规则…（Claude 和线上模型几十秒，本地模型要几分钟）</div>';
+  const r = await api('/api/custom', { text }).catch(err => ({ error: err.message }));
+  if (r.ok) { $('cuReply').innerHTML = `<div class="bubble pop"><div class="who">✨ 改好了</div>${esc(r.reply)}</div>`; $('cuAsk').value = ''; toast('改好了，下一轮生效', 'ok'); loadCustom(); }
+  else $('cuReply').innerHTML = `<div class="note bad">${esc(r.error || '没改成')}</div>`;
+});
+$('cuSave2').onclick = async () => { await api('/api/custom/save', { rules: $('cuRules').value }); toast('保存好了', 'ok'); refresh(); };
+$('cuClear').onclick = async () => { if (!confirm('清空所有自定义规则，游戏恢复原样？')) return; await api('/api/custom/save', { rules: '' }); toast('恢复原样了', 'ok'); loadCustom(); };
+
+// ---------- 手机 ----------
+$('fwOn').onclick = async () => { const r = await api('/api/firewall', { on: true }).catch(e => ({ error: e.message })); r.ok ? toast('放行了', 'ok') : toast(r.error, 'bad'); };
+$('fwOff').onclick = async () => { await api('/api/firewall', { on: false }); toast('取消了'); };
+
+// ---------- 留言板 ----------
+async function loadBoard() {
+  $('bList').innerHTML = '<p class="soft">读取中…</p>';
+  const list = await api('/api/board').catch(e => ({ error: e.message }));
+  if (list.error) return $('bList').innerHTML = `<div class="note bad">${esc(list.error)}</div>`;
+  $('bList').innerHTML = list.length ? list.map(m => `<div class="card msg"><div class="t">${esc(m.title)}</div><div class="soft">${esc(m.user)} · ${esc(m.at.slice(0, 10))}${m.comments ? ` · ${m.comments} 条回复` : ''}</div><div class="m">${esc(m.body)}</div><a href="#" data-open="${esc(m.url)}" class="soft">在 GitHub 上看 / 回复 →</a></div>`).join('') : '<div class="card soft">还没有留言，来写第一条吧。</div>';
+}
+$('bLoad').onclick = loadBoard;
+$('bNew').onclick = () => { api('/api/board/new', { title: $('bTitle').value.trim(), body: $('bBody').value.trim() }); toast('在浏览器里点「Submit new issue」就发出去了'); };
+
+// ---------- 位置 ----------
 $('locPick').onclick = async () => {
   const r = await api('/api/pick-folder', {});
   if (!r.path) return;
@@ -205,122 +586,15 @@ $('locPick').onclick = async () => {
   await api('/api/location', { dir });
 };
 
-// 1 游戏
-async function checkUpdate() {
-  $('gRemote').textContent = '检查中…';
-  const r = await api('/api/game/check').catch(e => ({ error: e.message }));
-  if (r.error) return $('gRemote').innerHTML = `<span class="bad">${esc(r.error)}</span>`;
-  const newer = r.local && r.remote.version !== r.local;
-  $('gRemote').innerHTML = esc(r.remote.version) + (newer ? ` <span class="pill ok">有新版本</span><div class="soft">${esc(r.remote.notes || '')}</div>` : r.local ? ' <span class="soft">（已是最新）</span>' : '');
-  if (newer) document.querySelector('[data-s=game]').textContent = '1 游戏本体 🔔';
-}
-$('gInstall').onclick = () => api('/api/game/install', {});
-$('gOpen').onclick = () => api('/api/game/open', {});
-$('gCheck').onclick = checkUpdate;
-
-// 2 大脑
-document.querySelectorAll('[data-brain]').forEach(c => c.onclick = () => {
-  const b = c.dataset.brain;
-  $('llmLocal').hidden = b !== 'local'; $('llmApi').hidden = b !== 'api'; $('llmClaude').hidden = b !== 'claude';
-  document.querySelectorAll('[data-brain]').forEach(x => x.classList.toggle('on', x === c));
-});
-let plan = null;
-$('lCheck').onclick = async () => {
-  $('lReport').innerHTML = '<p class="soft">正在看你的显卡、内存、硬盘…</p>';
-  plan = await api('/api/llm/check');
-  const h = plan.hw;
-  const rows = [['显卡', h.nvidia ? `${h.nvidia.name}，${h.nvidia.vramGB}GB 显存，驱动 ${h.nvidia.driver}` : (h.gpus.join('、') || '没找到')], ['内存', h.ramGB + ' GB'], ['CPU', `${h.cpu}（${h.cores} 线程）`], ['安装盘剩余', plan.free == null ? '—' : plan.free + ' GB']];
-  const verdict = plan.tier === 'api'
-    ? `<p class="bad"><b>这台电脑带不动本地模型。</b>建议选 B 线上 API（DeepSeek 最便宜，几块钱能玩很久）。</p>`
-    : `<p class="ok"><b>可以装：${esc(plan.model.label)}</b>，用 ${plan.build === 'cuda' ? 'NVIDIA 显卡' : plan.build === 'vulkan' ? 'Vulkan（AMD / Intel 显卡）' : 'CPU'} 跑，要下载约 ${plan.needGB}GB。</p>`;
-  $('lReport').innerHTML = `<table>${rows.map(r => `<tr><td>${r[0]}</td><td>${esc(r[1])}</td></tr>`).join('')}</table>${verdict}${plan.why.map(w => `<p class="soft">· ${esc(w)}</p>`).join('')}
-    <p class="soft">本地模型当大脑：一轮回复大概 1～3 分钟（要读完三万字的规则）。想快一点：大脑用 B 或 C，本地模型只写亲密段落。</p>`;
-  $('lInstall').disabled = plan.tier === 'api' || !S.game;
-  if (!S.game) $('lReport').insertAdjacentHTML('beforeend', '<p class="bad">先去「1 游戏本体」装游戏。</p>');
-  $('lTest').disabled = $('lUse').disabled = !S.llm;
-};
-$('lInstall').onclick = () => api('/api/llm/install', { tier: plan.tier, build: plan.build });
-$('lTest').onclick = () => api('/api/llm/test', {});
-$('lUse').onclick = async () => {
-  await api('/api/brain', { brain: 'api', api: { base: 'http://127.0.0.1:8080/v1', model: 'local', key: '' } });
-  alert('好了：游戏的大脑换成本地模型。重新打开游戏生效。'); refresh();
-};
-
-// B. API：每家的申请步骤（示意图是按官网布局画的，官网改版时以官网为准）
-const PRESETS = [
-  { id: 'deepseek', name: 'DeepSeek（推荐，便宜）', base: 'https://api.deepseek.com/v1', model: 'deepseek-chat', site: 'https://platform.deepseek.com/',
-    steps: ['打开 <a href="#" data-open="https://platform.deepseek.com/">platform.deepseek.com</a>，用手机号注册登录。', '左边点「充值」，充 10 元就能玩很久（按字数扣钱）。', '左边点「API keys」→「创建 API key」，名字随便填（比如 恶雌）。', '弹出来的 <b>sk-</b> 开头的一串就是 key，<b>只显示这一次</b>，点「复制」。', '回到这里，粘贴到下面的「API key」框里，点「测试一下」。'] },
-  { id: 'openai', name: 'OpenAI（GPT）', base: 'https://api.openai.com/v1', model: '', site: 'https://platform.openai.com/api-keys',
-    steps: ['打开 <a href="#" data-open="https://platform.openai.com/">platform.openai.com</a> 注册登录（要能访问 OpenAI 的网络）。', '右上角 Settings → Billing，绑卡充值（最少 5 美元）。', '左边 API keys → Create new secret key → 复制 sk- 开头的 key。', '模型名填官网 Models 页面上的名字（比如 gpt- 开头的最新型号）。', '粘贴 key，点「测试一下」。'] },
-  { id: 'anthropic', name: 'Anthropic（Claude API）', base: 'https://api.anthropic.com/v1', model: 'claude-sonnet-5-5', site: 'https://console.anthropic.com/',
-    steps: ['打开 <a href="#" data-open="https://console.anthropic.com/">console.anthropic.com</a> 注册登录。', 'Plans & Billing 里充值。', 'API Keys → Create Key → 复制 sk-ant- 开头的 key。', '粘贴 key，点「测试一下」。（注意：Claude 不写最露骨的那一截，那段会交给本地模型）'] },
-  { id: 'qwen', name: '通义千问（阿里云百炼）', base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus', site: 'https://bailian.console.aliyun.com/',
-    steps: ['打开 <a href="#" data-open="https://bailian.console.aliyun.com/">阿里云百炼</a>，用阿里云账号登录（要实名）。', '开通「模型服务」，新用户有免费额度。', '右上角头像 → API-KEY → 创建 → 复制。', '粘贴 key，点「测试一下」。'] },
-  { id: 'kimi', name: 'Kimi（月之暗面）', base: 'https://api.moonshot.cn/v1', model: '', site: 'https://platform.moonshot.cn/',
-    steps: ['打开 <a href="#" data-open="https://platform.moonshot.cn/">platform.moonshot.cn</a> 注册登录。', '账户里充值。', 'API Key 管理 → 新建 → 复制。', '模型名照官网文档里的填。粘贴 key，点「测试一下」。'] },
-  { id: 'openrouter', name: 'OpenRouter（一个 key 用很多家）', base: 'https://openrouter.ai/api/v1', model: '', site: 'https://openrouter.ai/',
-    steps: ['打开 <a href="#" data-open="https://openrouter.ai/">openrouter.ai</a> 注册登录。', 'Credits 里充值。', 'Keys → Create Key → 复制。', '模型名照 Models 页面复制（比如 deepseek/ 开头的）。粘贴 key，点「测试一下」。'] },
-  { id: 'custom', name: '其他（自己填地址）', base: '', model: '', site: '', steps: ['填服务商给的「OpenAI 兼容」接口地址（一般以 /v1 结尾）、模型名和 key。'] },
-];
-$('aPreset').innerHTML = PRESETS.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
-function showPreset(id) {
-  const p = PRESETS.find(x => x.id === id);
-  $('aBase').value = p.base; $('aModel').value = p.model;
-  $('aGuide').innerHTML = `<h3>怎么拿到 API key</h3><ol class="steps">${p.steps.map(s => `<li>${s}</li>`).join('')}</ol>
-    <img class="shot" src="guide/${p.id === 'deepseek' ? 'deepseek' : 'apikey'}.svg" alt="示意图">`;
-}
-$('aPreset').onchange = e => showPreset(e.target.value);
-showPreset('deepseek');
-const apiBody = () => ({ base: $('aBase').value.trim(), model: $('aModel').value.trim(), key: $('aKey').value.trim() });
-$('aTest').onclick = async () => {
-  $('aMsg').textContent = '正在连…';
-  const r = await api('/api/brain/test', { api: apiBody() }).catch(e => ({ error: e.message }));
-  $('aMsg').innerHTML = r.ok ? `<span class="ok">✅ 通了：${esc(r.reply)}</span>` : `<span class="bad">❌ ${esc(r.error)}</span>`;
-};
-$('aSave').onclick = async () => {
-  const r = await api('/api/brain', { brain: 'api', api: apiBody() }).catch(e => ({ error: e.message }));
-  $('aMsg').innerHTML = r.ok ? '<span class="ok">保存好了，重新打开游戏生效</span>' : `<span class="bad">${esc(r.error)}</span>`;
-};
-// C. Claude Code
-$('cRecheck').onclick = refresh;
-$('cUse').onclick = async () => { const r = await api('/api/brain', { brain: 'claude' }).catch(e => ({ error: e.message })); $('cMsg').innerHTML = r.ok ? '<span class="ok">好了</span>' : `<span class="bad">${esc(r.error)}</span>`; };
-
-// 3 配音
-$('tCheck').onclick = async () => {
-  $('tReport').innerHTML = '<p class="soft">检查中…</p>';
-  const r = await api('/api/tts/check');
-  const h = r.hw;
-  $('tReport').innerHTML = `<table><tr><td>显卡</td><td>${esc(h.nvidia ? `${h.nvidia.name}，${h.nvidia.vramGB}GB，驱动 ${h.nvidia.driver}` : '没有 NVIDIA 显卡')}</td></tr><tr><td>安装盘剩余</td><td>${r.free ?? '—'} GB</td></tr></table>
-    ${r.ok ? '<p class="ok"><b>✅ 可以装。</b>要下载十几 GB，大概半小时到几小时，看网速。</p>' : '<p class="bad"><b>这台电脑装不了配音。</b>不影响玩，只是没有声音。</p>'}
-    ${r.why.map(w => `<p class="soft">· ${esc(w)}</p>`).join('')}`;
-  $('tInstall').disabled = !r.ok || !S.game;
-  $('tInstall').classList.toggle('p', r.ok);
-};
-$('tInstall').onclick = () => api('/api/tts/install', {});
-
-// 7 手机
-$('fwOn').onclick = async () => { const r = await api('/api/firewall', { on: true }).catch(e => ({ error: e.message })); $('fwMsg').innerHTML = r.ok ? '<span class="ok">放行了</span>' : `<span class="bad">${esc(r.error)}</span>`; };
-$('fwOff').onclick = async () => { await api('/api/firewall', { on: false }); $('fwMsg').textContent = '取消了'; };
-
-// 4 留言板
-async function loadBoard() {
-  $('bList').innerHTML = '<p class="soft">读取中…</p>';
-  const list = await api('/api/board').catch(e => ({ error: e.message }));
-  if (list.error) return $('bList').innerHTML = `<p class="bad">${esc(list.error)}</p>`;
-  $('bList').innerHTML = list.length ? list.map(m => `<div class="card msg"><div class="t">${esc(m.title)} <span class="soft">— ${esc(m.user)} · ${esc(m.at.slice(0, 10))}${m.comments ? ` · ${m.comments} 条回复` : ''}</span></div><div class="m">${esc(m.body)}</div><a href="#" data-open="${esc(m.url)}" class="soft">在 GitHub 上看 / 回复 →</a></div>`).join('') : '<p class="soft">还没有留言，来写第一条吧。</p>';
-}
-$('bLoad').onclick = loadBoard;
-$('bNew').onclick = () => api('/api/board/new', { title: $('bTitle').value.trim(), body: $('bBody').value.trim() });
-
-// 5 卸载
+// ---------- 卸载 ----------
 $('dGo').onclick = () => {
   const parts = [...document.querySelectorAll('.dp:checked')].map(x => x.value);
   if (!parts.length) return;
-  if (!confirm('确定删除：' + parts.map(p => ({ game: '游戏和存档', llm: '语言模型', tts: '配音', installer: '安装器' }[p])).join('、') + '？删了找不回来。')) return;
+  if (!confirm('确定删除：' + parts.map(p => ({ game: '游戏和所有存档', llm: '语言模型', tts: '配音', installer: '安装器' }[p])).join('、') + '？删了找不回来。')) return;
   api('/api/uninstall', { parts });
 };
 
-refresh().then(() => { go(location.hash.slice(1) || (S.game ? 'llm' : 'game')); checkUpdate(); });
+refresh().then(() => { go(location.hash.slice(1) || 'home'); checkUpdate(); const c = currentPv(); if (c && brainLabel()) showPv(c, false); });
 </script>
 </body>
 </html>

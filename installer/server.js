@@ -8,8 +8,8 @@ const { spawn, exec, execSync } = require('child_process');
 
 const REPO = 'mxxs109-ops/eci-simulator';
 const BRANCH = 'main';
-const PORT = 7790;
-const HOME = path.join(process.env.LOCALAPPDATA || os.homedir(), 'EciSimulator');   // 安装器自己住的地方
+const PORT = Number(process.env.ECI_PORT) || 7790;
+const HOME = process.env.ECI_HOME || path.join(process.env.LOCALAPPDATA || os.homedir(), 'EciSimulator');   // ECI_HOME：测试时换个地方   // 安装器自己住的地方
 const STATE_FILE = path.join(HOME, 'state.json');
 const NODE = process.execPath;
 const HERE = __dirname;
@@ -35,7 +35,7 @@ const desktop = () => { try { return ps('[Environment]::GetFolderPath(\'Desktop\
 function writeBat(file, lines) { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, ['@echo off', 'chcp 65001 >nul', ...lines, ''].join('\r\n'), 'utf8'); }
 // 桌面图标：用 shortcut.ps1（IShellLinkW），中文名字、中文路径在任何语言的 Windows 上都行
 function shortcut(name, target, args, icon) {
-  const lnk = path.join(desktop(), name + '.lnk');
+  const lnk = path.join(process.env.ECI_HOME ? HOME : desktop(), name + '.lnk');   // 测试时图标放进测试文件夹，不动真桌面
   const r = require('child_process').spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(HERE, 'shortcut.ps1'),
     lnk, target, args || '', path.dirname(target), icon || ''], { windowsHide: true, encoding: 'utf8' });
   if (r.status !== 0) throw new Error('建桌面图标失败：' + (r.stderr || '').slice(0, 200));
@@ -128,7 +128,7 @@ async function moveRoot(to, say) {
     say('先关掉正在运行的游戏、模型和配音');
     await stopOurs('game', 'llm', 'tts');
     fs.mkdirSync(to, { recursive: true });
-    for (const name of ['game', 'llm', 'tts']) {
+    for (const name of ['game', 'saves', 'template', 'llm', 'tts']) {
       const a = path.join(from, name), b = path.join(to, name);
       if (!fs.existsSync(a)) continue;
       say(`正在搬 ${name}（大文件可能要几分钟）`);
@@ -156,7 +156,7 @@ function writeLaunchers() {
 }
 
 // ---------- 1. 游戏本体：下载、更新 ----------
-const SAVE_FILES = ['状态.md', '物品与等级.md', '回忆.md', '回忆摘要.md', '我的一天.md', '模拟日志.md', '崽崽.md', '开局.json', '兽夫日记', '归档',
+const SAVE_FILES = ['自定义规则.md', 'app/自定义记录.json', '状态.md', '物品与等级.md', '回忆.md', '回忆摘要.md', '我的一天.md', '模拟日志.md', '崽崽.md', '开局.json', '兽夫日记', '归档',
   'app/config.json', 'app/history.json', 'app/session.json', 'app/session-api.json', 'app/sim.json', 'app/room.json', 'app/ui.json', 'app/uploads', '配音/缓存'];
 async function remoteVersion() {
   const r = await fetch(`https://raw.githubusercontent.com/${REPO}/${BRANCH}/version.json?t=${Date.now()}`, { signal: AbortSignal.timeout(15000) });
@@ -182,31 +182,54 @@ function applyRenames(dir, map) {
   for (const f of all.filter(f => /\.(md|json|txt|js|html)$/i.test(f))) { const s = fs.readFileSync(f, 'utf8'), n = swap(s); if (n !== s) fs.writeFileSync(f, n, 'utf8'); }
   for (const f of all) { const b = path.basename(f), nb = swap(b); if (nb !== b) fs.renameSync(f, path.join(path.dirname(f), nb)); }
 }
+// 复制一个游戏文件夹：图片、声音这些大文件用硬链接（不多占硬盘），文字文件复制一份（开局改名会改它们）
+function cloneDir(a, b) {
+  fs.mkdirSync(b, { recursive: true });
+  for (const e of fs.readdirSync(a, { withFileTypes: true })) {
+    const fa = path.join(a, e.name), fb = path.join(b, e.name);
+    if (e.isDirectory()) cloneDir(fa, fb);
+    else if (/\.(md|json|txt|js|html|css|bat|ps1|py)$/i.test(e.name)) fs.copyFileSync(fa, fb);
+    else { try { fs.linkSync(fa, fb); } catch { fs.copyFileSync(fa, fb); } }
+  }
+}
+// 用模板（干净的新版本）更新一个游戏文件夹：存档和设置不动；玩家改过名，新文件也换成新名字
+function updateDir(dir, say) {
+  const tpl = templateDir();
+  const start = readJson(path.join(dir, '开局.json'), null);
+  let src = tpl;
+  if (start && start.renamed) {
+    say('把新文件里的名字换成你起的名字');
+    src = path.join(HOME, 'tmp-rename'); rmrf(src); cloneDir(tpl, src); applyRenames(src, start.renamed);
+  }
+  const keep = new Set(SAVE_FILES.map(p => path.join(dir, p).toLowerCase()));
+  const copy = (a, b) => {
+    for (const e of fs.readdirSync(a, { withFileTypes: true })) {
+      const fa = path.join(a, e.name), fb = path.join(b, e.name);
+      if (keep.has(fb.toLowerCase())) continue;
+      if (e.isDirectory()) { fs.mkdirSync(fb, { recursive: true }); copy(fa, fb); }
+      else { try { fs.unlinkSync(fb); } catch {} fs.copyFileSync(fa, fb); }   // 先删再写：硬链接不会改到别的存档
+    }
+  };
+  copy(src, dir);
+  if (src !== tpl) rmrf(src);
+}
 async function installGame(say) {
   const s = state(), d = dirs(s);
   const repo = await fetchRepo(say);
   const ver = readJson(path.join(repo, 'version.json'), { version: '?' });
   const fresh = !fs.existsSync(path.join(d.game, 'app', 'server.js'));
+  say('准备干净的模板（新建存档用）');
+  rmrf(templateDir(s)); fs.mkdirSync(s.root, { recursive: true });
+  fs.cpSync(path.join(repo, 'game'), templateDir(s), { recursive: true });
+  fs.copyFileSync(path.join(repo, 'version.json'), path.join(templateDir(s), 'version.json'));
   if (fresh) {
     say('复制游戏文件');
-    fs.mkdirSync(s.root, { recursive: true });
-    fs.cpSync(path.join(repo, 'game'), d.game, { recursive: true });
+    cloneDir(templateDir(s), d.game);
+    saveState({ save: '存档 1' });
   } else {
-    // 更新：存档和设置不动；玩家改过名就把新文件也换成新名字
     say('更新游戏（存档和设置不动）');
     await stopOurs('game');
-    const start = readJson(path.join(d.game, '开局.json'), null);
-    const src = path.join(repo, 'game');
-    if (start && start.renamed) { say('把新文件里的名字换成你起的名字'); applyRenames(src, start.renamed); }
-    const keep = new Set(SAVE_FILES.map(p => path.join(d.game, p).toLowerCase()));
-    const copy = (a, b) => {
-      for (const e of fs.readdirSync(a, { withFileTypes: true })) {
-        const fa = path.join(a, e.name), fb = path.join(b, e.name);
-        if (keep.has(fb.toLowerCase())) continue;
-        if (e.isDirectory()) { fs.mkdirSync(fb, { recursive: true }); copy(fa, fb); } else fs.copyFileSync(fa, fb);
-      }
-    };
-    copy(src, d.game);
+    updateDir(d.game, say);
   }
   fs.copyFileSync(path.join(repo, 'version.json'), path.join(d.game, 'version.json'));
   // 安装器自己也跟着更新
@@ -217,6 +240,119 @@ async function installGame(say) {
   writeLaunchers();
   say(fresh ? '装好了，桌面上多了「恶雌模拟器」' : '更新到 ' + ver.version);
 }
+
+// ---------- 8. 存档：root/game 是正在玩的那个，其他存档整个放在 root/saves/名字 ----------
+const savesDir = (s = state()) => path.join(s.root, 'saves');
+const templateDir = (s = state()) => path.join(s.root, 'template');
+const isGame = dir => fs.existsSync(path.join(dir, 'app', 'server.js'));
+function saveInfo(dir, name, active) {
+  const start = readJson(path.join(dir, '开局.json'), null);
+  let st = ''; try { st = fs.readFileSync(path.join(dir, '状态.md'), 'utf8'); } catch {}
+  const day = (st.match(/第\s*(\d+)\s*天/) || [])[1];
+  let last = null; try { last = fs.statSync(path.join(dir, 'app', 'history.json')).mtime; } catch {}
+  let turns = 0; try { turns = readJson(path.join(dir, 'app', 'history.json'), []).filter(m => m.role === 'user').length; } catch {}
+  const custom = fs.existsSync(path.join(dir, '自定义规则.md'));
+  return { name, active, started: !!start, husbands: start ? (start.order || []).length - (start.skipped || []).length : 0, day: day ? Number(day) : null, turns, last, custom,
+    version: readJson(path.join(dir, 'version.json'), {}).version || null };
+}
+function listSaves() {
+  const s = state(), d = dirs(s), out = [];
+  if (isGame(d.game)) out.push(saveInfo(d.game, s.save || '存档 1', true));
+  try { for (const n of fs.readdirSync(savesDir(s))) if (isGame(path.join(savesDir(s), n))) out.push(saveInfo(path.join(savesDir(s), n), n, false)); } catch {}
+  return out;
+}
+function saveName(n) {
+  n = String(n || '').trim();
+  if (!n || n.length > 20 || /[\\/:*?"<>|]/.test(n) || /^\.+$/.test(n)) throw new Error('存档名 1～20 个字，不能有 \\ / : * ? " < > |');
+  if (listSaves().some(x => x.name === n)) throw new Error('已经有叫「' + n + '」的存档了');
+  return n;
+}
+// 设置（大脑、接口、手机、城市）是全局的：换存档时带过去
+function carryConfig(from, to) {
+  const a = readJson(path.join(from, 'app', 'config.json'), {}), f = path.join(to, 'app', 'config.json');
+  const b = readJson(f, {});
+  for (const k of ['brain', 'api', 'handoff', 'lan', 'city']) if (a[k] !== undefined) b[k] = a[k];
+  writeJson(f, b);
+}
+async function newSave(name, say) {
+  const s = state(), d = dirs(s);
+  name = saveName(name);
+  if (!isGame(templateDir(s))) throw new Error('没有模板：先在「游戏本体」里点一次「更新」');
+  const to = path.join(savesDir(s), name);
+  say('复制一份干净的游戏');
+  cloneDir(templateDir(s), to);
+  if (isGame(d.game)) carryConfig(d.game, to);
+  say('建好了「' + name + '」，点「加载」开始玩');
+}
+async function loadSave(name, say) {
+  const s = state(), d = dirs(s);
+  const cur = s.save || '存档 1';
+  if (name === cur) return say('正在玩的就是「' + name + '」');
+  const from = path.join(savesDir(s), name);
+  if (!isGame(from)) throw new Error('找不到存档「' + name + '」');
+  say('关掉正在运行的游戏');
+  await stopOurs('game');
+  await new Promise(r => setTimeout(r, 800));
+  fs.mkdirSync(savesDir(s), { recursive: true });
+  const park = path.join(savesDir(s), cur);
+  if (fs.existsSync(park)) throw new Error('saves 文件夹里已经有「' + cur + '」，先给它改个名');
+  say('把「' + cur + '」收起来');
+  try { fs.renameSync(d.game, park); } catch (e) { throw new Error('游戏文件夹正被占用（开着的黑窗口、文件夹窗口、编辑器？）关掉再试：' + e.code); }
+  say('换上「' + name + '」');
+  try { fs.renameSync(from, d.game); } catch (e) { fs.renameSync(park, d.game); throw new Error('换不过去，已经还原：' + e.code); }
+  carryConfig(park, d.game);
+  saveState({ save: name });
+  const ver = state().game?.version;
+  if (ver && readJson(path.join(d.game, 'version.json'), {}).version !== ver && isGame(templateDir())) {
+    say('这个存档的程序是旧版本，更新到 ' + ver);
+    updateDir(d.game, say);
+    fs.copyFileSync(path.join(templateDir(), 'version.json'), path.join(d.game, 'version.json'));
+  }
+  writeLaunchers();
+  say('现在玩的是「' + name + '」');
+}
+function deleteSave(name) {
+  const s = state();
+  if (name === (s.save || '存档 1')) throw new Error('正在玩的存档不能删：先加载别的存档');
+  const p = path.join(savesDir(s), name);
+  if (!isGame(p)) throw new Error('找不到存档「' + name + '」');
+  rmrf(p);
+  if (fs.existsSync(p)) throw new Error('有文件被占用，没删干净：关掉打开着的文件再试');
+}
+function renameSave(name, to) {
+  const s = state();
+  to = saveName(to);
+  if (name === (s.save || '存档 1')) { saveState({ save: to }); return; }
+  fs.renameSync(path.join(savesDir(s), name), path.join(savesDir(s), to));
+}
+
+// ---------- 6. 自定义游戏机制：交给游戏的大脑整理成 自定义规则.md ----------
+function brainReady() {
+  const d = dirs(), cfg = readJson(path.join(d.game, 'app', 'config.json'), {});
+  if (!isGame(d.game)) return { ok: false, why: '先装游戏本体' };
+  if ((cfg.brain || 'claude') === 'claude') return findClaude() ? { ok: true, what: 'Claude Code' } : { ok: false, why: '还没装好语言模型：去「语言模型」选一个当大脑' };
+  if (!cfg.api?.base || !cfg.api?.model) return { ok: false, why: '还没装好语言模型：去「语言模型」选一个当大脑' };
+  return { ok: true, what: /127\.0\.0\.1|localhost/.test(cfg.api.base) ? '本地模型' : cfg.api.model };
+}
+// 游戏开着就直接问它；没开就临时开一个不跑整点模拟的后台，用完关掉
+async function withGame(fn) {
+  const d = dirs();
+  try {
+    const st = await (await fetch('http://127.0.0.1:7788/api/status', { signal: AbortSignal.timeout(1500) })).json();
+    if (st.gameDir && path.resolve(st.gameDir).toLowerCase() === path.resolve(d.game).toLowerCase()) return await fn('http://127.0.0.1:7788');
+  } catch {}
+  if (brainReady().what === '本地模型' && !(await up('http://127.0.0.1:8080/health')) && state().llm) {
+    spawn('cmd', ['/c', 'start', '"恶雌模拟器-本地模型"', '/min', path.join(dirs().llm, '启动本地模型.bat')], { windowsHide: true, detached: true });
+    for (let i = 0; i < 90 && !(await up('http://127.0.0.1:8080/health')); i++) await new Promise(r => setTimeout(r, 2000));
+  }
+  const port = 7791;
+  const child = spawn(NODE, ['server.js'], { cwd: path.join(d.game, 'app'), env: { ...process.env, PORT: String(port), NO_OPEN: '1', NO_SIM: '1' }, windowsHide: true });
+  try {
+    for (let i = 0; i < 40 && !(await up(`http://127.0.0.1:${port}/api/status`)); i++) await new Promise(r => setTimeout(r, 300));
+    return await fn(`http://127.0.0.1:${port}`);
+  } finally { try { child.kill(); } catch {} }
+}
+const gameApi = (base, p, b) => fetch(base + p, b === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json());
 
 // ---------- 2. 语言模型：检查电脑 → 推荐 → 安装 ----------
 function hardware() {
@@ -371,6 +507,8 @@ async function uninstall(parts, say) {
   if (parts.includes('tts')) { del(d.tts, '配音'); saveState({ tts: null }); }
   if (parts.includes('game')) {
     del(d.game, '游戏本体和存档');
+    del(savesDir(s), '其他存档');
+    del(templateDir(s), '新存档用的模板');
     try { fs.unlinkSync(path.join(desktop(), '恶雌模拟器.lnk')); } catch {}
     saveState({ game: null });
   }
@@ -421,6 +559,25 @@ const routes = {
   'POST /api/open': async b => { if (/^https:\/\//.test(b.url)) exec(`start "" "${b.url.replace(/"/g, '%22')}"`); return { ok: true }; },
   'POST /api/firewall': async b => { firewall(!!b.on); return { ok: true }; },
   'POST /api/uninstall': async b => { job('uninstall', say => uninstall(b.parts || ['game', 'llm', 'tts', 'installer'], say)); return { ok: true }; },
+  'GET /api/saves': async () => ({ list: listSaves(), template: isGame(templateDir()) }),
+  'POST /api/saves/new': async b => { job('saves', say => newSave(b.name, say)); return { ok: true }; },
+  'POST /api/saves/load': async b => { job('saves', say => loadSave(b.name, say)); return { ok: true }; },
+  'POST /api/saves/delete': async b => { deleteSave(b.name); return { ok: true }; },
+  'POST /api/saves/rename': async b => { renameSave(b.name, b.to); return { ok: true }; },
+  'GET /api/custom': async () => {
+    const ready = brainReady(), d = dirs();
+    let rules = ''; try { rules = fs.readFileSync(path.join(d.game, '自定义规则.md'), 'utf8').trim(); } catch {}
+    return { ready, rules, log: readJson(path.join(d.game, 'app', '自定义记录.json'), []).slice(-20).reverse(), save: state().save || '存档 1' };
+  },
+  'POST /api/custom': async b => {
+    const ready = brainReady(); if (!ready.ok) throw new Error(ready.why);
+    return withGame(base => gameApi(base, '/api/custom', { text: b.text }));
+  },
+  'POST /api/custom/save': async b => {
+    const f = path.join(dirs().game, '自定义规则.md'), t = String(b.rules || '').trim();
+    if (t) fs.writeFileSync(f, t + '\n', 'utf8'); else rmrf(f);
+    return { ok: true };
+  },
   'GET /api/jobs': async () => jobs,
 };
 async function up(u) { try { return (await fetch(u, { signal: AbortSignal.timeout(1200) })).ok; } catch { return false; } }
@@ -433,7 +590,7 @@ const server = http.createServer(async (req, res) => {
     if (fn) return json(res, await fn(req.method === 'POST' ? await body(req) : {}));
     const file = path.join(HERE, 'web', decodeURIComponent(url === '/' ? 'index.html' : url.slice(1)));
     if (!file.startsWith(path.join(HERE, 'web')) || !fs.existsSync(file)) { res.writeHead(404); return res.end(); }
-    const type = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg' }[path.extname(file)] || 'application/octet-stream';
+    const type = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.jpg': 'image/jpeg' }[path.extname(file)] || 'application/octet-stream';
     res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-cache' });
     fs.createReadStream(file).pipe(res);
   } catch (e) { json(res, { ok: false, error: e.message }, 500); }

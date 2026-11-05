@@ -209,6 +209,10 @@ function listHusbandDiaries() {
 
 // ---------- 存档快照（新会话开头一次性给全，省掉一个个读文件的来回） ----------
 const SNAPSHOT_FILE = path.join(APP_DIR, 'snapshot.md');
+// 自定义游戏机制：玩家自己定的规则，和 CLAUDE.md 等原规则冲突时以它为准（存档的一部分，更新游戏不会覆盖）
+const CUSTOM_FILE = path.join(GAME_DIR, '自定义规则.md');
+const CUSTOM_LOG = path.join(APP_DIR, '自定义记录.json');
+const customRules = () => { try { return fs.readFileSync(CUSTOM_FILE, 'utf8').trim(); } catch { return ''; } };
 const ARCHIVE_DIR = path.join(GAME_DIR, '归档');
 function readGame(rel) { try { return fs.readFileSync(path.join(GAME_DIR, rel), 'utf8').replace(/^﻿/, ''); } catch { return ''; } }
 // 只留文件开头和最后 n 个「## 」小节（日记、我的一天按天分节）
@@ -227,6 +231,7 @@ function buildSnapshot() {
   const recent = readJson(HISTORY_FILE, []).filter(m => !m.tick).slice(-6)
     .map(m => `${m.role === 'user' ? '【她】' : '【兽夫们】'}（${m.time || ''}）${m.text}`).join('\n\n');
   let s = '# 存档快照\n服务器在这段会话开始时替你读好的存档，下面就是这些文件此刻的内容，**不用再去读它们**，直接开始写回复。之后你自己改过的，以文件为准。没放进来的（不在场兽夫的档案、事件池其他节、原著参考、归档）需要时再读。';
+  s += sec('自定义规则.md（玩家自己定的规则，和 CLAUDE.md、世界设定等原规则冲突时**一律以这里为准**）', customRules());
   s += sec('世界设定.md', readGame('世界设定.md'));
   s += sec('状态.md', readGame('状态.md'));
   s += sec('物品与等级.md', readGame('物品与等级.md'));
@@ -269,19 +274,19 @@ let busy = false;
 // 游戏规则（CLAUDE.md）改过以后，提醒正在进行的对话重新读一遍
 function rulesNote(session) {
   let mtime = 0;
-  try { mtime = fs.statSync(path.join(GAME_DIR, 'CLAUDE.md')).mtimeMs; } catch {}
+  for (const f of [path.join(GAME_DIR, 'CLAUDE.md'), CUSTOM_FILE]) { try { mtime = Math.max(mtime, fs.statSync(f).mtimeMs); } catch {} }
   const seen = session.rulesMtime;
   session.rulesMtime = mtime;
   if (!session.id || !seen || mtime <= seen) return '';
-  return '[系统提示，不是她说的话：游戏规则 CLAUDE.md 和存档格式刚刚更新过，请先重新读一遍 CLAUDE.md 和 状态.md，按新规则继续。不要在回复里提到这件事。]\n\n';
+  return '[系统提示，不是她说的话：游戏规则 CLAUDE.md 和存档格式刚刚更新过，请先重新读一遍 CLAUDE.md、自定义规则.md（有的话，冲突时以它为准）和 状态.md，按新规则继续。不要在回复里提到这件事。]\n\n';
 }
 
 // ---------- 大脑：Claude Code 或 OpenAI 兼容接口，对外是同一套回调 ----------
 // on: { block() 一段新文字开始, tool() 开始用工具, text(字), session(id) }；返回 { ok, err }
 const API_MSGS_FILE = path.join(APP_DIR, 'session-api.json');
-function runBrain({ prompt, resume, stream, on }) {
+function runBrain({ prompt, resume, stream, on, ephemeral }) {
   const cfg = readConfig();
-  if (cfg.brain === 'api') return runApiBrain(cfg, { prompt, resume, on });
+  if (cfg.brain === 'api') return runApiBrain(cfg, { prompt, resume, on, ephemeral });
   return new Promise(resolve => {
     const args = [prompt, '-p', '--output-format', stream ? 'stream-json' : 'text', '--permission-mode', 'acceptEdits'];
     if (stream) args.push('--verbose', '--include-partial-messages');
@@ -319,7 +324,7 @@ function runBrain({ prompt, resume, stream, on }) {
   });
 }
 
-async function runApiBrain(cfg, { prompt, resume, on }) {
+async function runApiBrain(cfg, { prompt, resume, on, ephemeral }) {
   if (!cfg.api.base || !cfg.api.model) return { ok: false, err: '还没设置模型接口：打开「设置」填上接口地址、模型名和 API key' };
   // 和 Claude 一样：一个游戏日一段会话；会话开头放规则 + 存档快照
   const saved = readJson(API_MSGS_FILE, {});
@@ -350,7 +355,7 @@ async function runApiBrain(cfg, { prompt, resume, on }) {
   }
   // 会话太长就丢掉中间的工具往来，只留开头的规则和最近的对话
   if (messages.length > 80) messages = [messages[0], ...messages.slice(-50).filter((m, i, a) => !(i === 0 && m.role === 'tool'))];
-  writeJson(API_MSGS_FILE, { id, messages });
+  if (!ephemeral) writeJson(API_MSGS_FILE, { id, messages });
   return { ok: true };
 }
 
@@ -549,8 +554,10 @@ async function simTick() {
   writeJson(HISTORY_FILE, history);
   localLLM.fillMarks(GAME_DIR, readConfig().handoff, history);   // 存档里亲密的那段交给本地模型
 }
-setInterval(simTick, 60 * 1000);
-setTimeout(simTick, 10 * 1000);
+if (!process.env.NO_SIM) {   // 安装器临时开一个游戏后台来改规则时不跑整点模拟
+  setInterval(simTick, 60 * 1000);
+  setTimeout(simTick, 10 * 1000);
+}
 
 // ---------- 小屋（装修）和崽崽 ----------
 const ROOM_FILE = path.join(APP_DIR, 'room.json');
@@ -779,6 +786,42 @@ const server = http.createServer(async (req, res) => {
     }
 
     // 设置（API key 只回显前后几位）
+    // 自定义游戏机制：只能在电脑上改
+    if (url.startsWith('/api/custom')) {
+      if (!isLoopback(req)) return json(res, { ok: false, error: '只能在电脑上改' }, 403);
+      if (req.method === 'GET' && url === '/api/custom') return json(res, { rules: customRules(), log: readJson(CUSTOM_LOG, []).slice(-20) });
+      const b = await readBody(req);
+      if (url === '/api/custom/save') {
+        const t = String(b.rules || '').trim();
+        if (t) fs.writeFileSync(CUSTOM_FILE, t + '\n', 'utf8'); else { try { fs.unlinkSync(CUSTOM_FILE); } catch {} }
+        return json(res, { ok: true, rules: customRules() });
+      }
+      if (url === '/api/custom') {
+        const ask = String(b.text || '').trim();
+        if (!ask) return json(res, { ok: false, error: '写一下想怎么改' });
+        if (busy) return json(res, { ok: false, error: '游戏正在写回复或整点模拟，等它写完再改' });
+        busy = true;
+        let out = '';
+        const prompt = `[自定义游戏机制，不是她在游戏里说的话，不要写剧情]
+玩家想这样改游戏：
+「${ask}」
+
+把玩家的要求整理成清楚、具体、能照着执行的游戏规则，写进游戏文件夹里的 自定义规则.md（没有就新建）。这个文件里的规则优先于 CLAUDE.md、世界设定.md 等原来的规则。
+- 文件开头一行写 \`# 自定义规则\`；每条规则一行，以「- **简短标题**：」开头，后面写清楚怎么执行
+- 已有的条目保留；和这次要求冲突的就改掉那一条，不要两条打架；玩家要求删掉某条就删掉
+- 只改 自定义规则.md 这一个文件，不要动别的文件和存档
+- 改完只回复两三句大白话：你理解的是什么，加了 / 改了 / 删了哪几条，从下一轮开始生效`;
+        const r = await runBrain({ prompt, stream: false, ephemeral: true, on: { text: t => { out += t; }, tool: () => { out = ''; } } });
+        busy = false;
+        const reply = out.trim() || (r.ok ? '改好了' : '');
+        if (!r.ok && !reply) return json(res, { ok: false, error: r.err || '大脑没有回应' });
+        const log = readJson(CUSTOM_LOG, []);
+        log.push({ time: `${dateStr()} ${timeStr()}`, ask, reply });
+        writeJson(CUSTOM_LOG, log);
+        return json(res, { ok: true, reply, rules: customRules() });
+      }
+      return json(res, { ok: false }, 404);
+    }
     if (req.method === 'GET' && url === '/api/config') {
       const c = readConfig();
       return json(res, { ...c, api: { ...c.api, key: maskKey(c.api.key), hasKey: !!c.api.key }, handoff: { ...c.handoff, key: maskKey(c.handoff.key), hasKey: !!c.handoff.key }, lan: { enabled: c.lan.enabled }, weather });
