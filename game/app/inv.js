@@ -3,7 +3,7 @@
    数据还是 物品与等级.md，格式不用改：「- **属性名**：内容」是属性，「- 名字｜来历｜说明」是物品。 */
 (() => {
   const $ = s => document.querySelector(s);
-  const G = p => '/game/' + p.split('/').map(encodeURIComponent).join('/');
+  const G = p => (innerWidth <= 760 && /\.(jpe?g|png|webp)$/i.test(p) ? (/^立绘\/抠图\//.test(p) ? '/thumb/600/' : '/thumb/900/') : '/game/') + p.split('/').map(encodeURIComponent).join('/') + (/.(jpe?g|png|webp|gif)$/i.test(p) ? '?v=' + (window.ASSET_V || '') : '');   // 手机上用缩小版；图片带版本号（手机存一年）
   const E = s => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const T = s => E(s).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/（([^）]*)）/g, '<span class="ivp">（$1）</span>');
 

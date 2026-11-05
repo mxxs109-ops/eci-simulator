@@ -4,7 +4,7 @@
    在主脚本之后加载：包一层 render()，聊天流里每来一次新文字就把写完的段落放进队列。 */
 (() => {
   const $ = s => document.querySelector(s);
-  const G = p => '/game/' + p.split('/').map(encodeURIComponent).join('/');
+  const G = p => (innerWidth <= 760 && /\.(jpe?g|png|webp)$/i.test(p) ? (/^立绘\/抠图\//.test(p) ? '/thumb/600/' : '/thumb/900/') : '/game/') + p.split('/').map(encodeURIComponent).join('/') + (/.(jpe?g|png|webp|gif)$/i.test(p) ? '?v=' + (window.ASSET_V || '') : '');   // 手机上用缩小版；图片带版本号（手机存一年）
   const escH = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const inl = s => escH(s).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/（([^）]*)）/g, '<span class="vact">（$1）</span>').replace(/\*([^*]+)\*/g, '<i class="vthink">$1</i>');
 
@@ -73,8 +73,9 @@
   // 队列：pages = [{who, text, kind}]，idx = 正在看的那一段
   let waiting = false, roundKey = '', pages = [], idx = -1, streamText = '', streamFed = 0, typing = null, shown = '';
   const parse = raw => {
-    const p = raw.trim(); if (!p) return null;
-    const m = p.match(/^\*{0,2}【([^】]+)】\*{0,2}\s*([\s\S]*)$/);
+    const p = raw.trim(); if (!p || /^\s*[\[【]\s*(系统提示|开场|自动续写|原地复活|重生|整点模拟|自定义游戏机制)[^\]】]*(不是她说的话|[：:])/.test(p)) return null;   // 复述出来的系统提示不显示
+    let m = p.match(/^\*{0,2}【([^】]+)】\*{0,2}\s*([\s\S]*)$/);
+    if (m && (m[1].length > 10 || /[，。：:；！？,.!?「」]/.test(m[1]))) m = null;   // 长句子不是名字
     if (m) return { who: m[1], text: m[2], kind: 'say' };
     if (/^📌/.test(p)) return { who: '小结', text: p.replace(/^📌\s*小结[：:]\s*/, ''), kind: 'sum' };
     if (/^`?——/.test(p)) return { who: '', text: p.replace(/`/g, ''), kind: 'env' };

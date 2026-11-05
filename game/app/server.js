@@ -3,7 +3,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { spawn, exec } = require('child_process');
+const { spawn, exec, execFile } = require('child_process');
 const crypto = require('crypto');
 const localLLM = require('./local-llm');   // 〔接手：…〕 那段交给本地模型写
 // 她的话沾一点亲密就整段交给本地模型；说了这些，上一轮没写完的亲密戏才算结束
@@ -717,15 +717,138 @@ fetch('https://raw.githubusercontent.com/mxxs109-ops/eci-simulator/main/version.
   .then(r => r.ok ? r.json() : null).then(v => { remoteVersion = v; }).catch(() => {});
 
 // ---------- 静态文件 ----------
-function serveFile(res, root, rel) {
+// 图片、配音、视频让手机存一年、不再来问（网址带版本号 ?v=，换了图版本号就变，手机会重新下）；其余文件每次问一句「变了没」，没变回 304
+function serveFile(res, root, rel, req) {
   const full = path.resolve(root, rel);
   if (!full.startsWith(path.resolve(root) + path.sep) || !fs.existsSync(full)) {
     res.writeHead(404);
     return res.end();
   }
-  res.writeHead(200, { 'Content-Type': MIME[path.extname(full).toLowerCase()] || 'application/octet-stream' });
+  const st = fs.statSync(full), ext = path.extname(full).toLowerCase();
+  const tag = `W/"${st.size.toString(36)}-${Math.floor(st.mtimeMs).toString(36)}"`;
+  const media = /^\.(png|jpe?g|gif|webp|bmp|svg|mp4|webm|mov|mp3|wav|m4a|ogg)$/.test(ext);
+  const head = { 'Content-Type': MIME[ext] || 'application/octet-stream', ETag: tag, 'Last-Modified': st.mtime.toUTCString(), 'Cache-Control': media ? 'public, max-age=31536000, immutable' : 'no-cache' };
+  if (req && req.headers['if-none-match'] === tag) { res.writeHead(304, head); return res.end(); }
+  res.writeHead(200, { ...head, 'Content-Length': st.size });
   fs.createReadStream(full).pipe(res);
 }
+
+// ---------- 缩小版立绘（给手机和小头像用）----------
+// /thumb/480/立绘/x.jpg：有做好的缩小版就发它，还没有就先发原图、排队去做。游戏启动后把所有立绘一次做好
+const THUMB_DIR = path.join(APP_DIR, 'cache', 'thumbs');
+// 立绘的版本号：立绘文件夹里最新的修改时间（一分钟算一次）；页面拿它拼进图片网址
+let assetV = { at: 0, v: '' };
+function assetVer() {
+  if (Date.now() - assetV.at < 60000 && assetV.v) return assetV.v;
+  let max = 0;
+  const walk = d => { try { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else max = Math.max(max, fs.statSync(p).mtimeMs); } } catch {} };
+  walk(path.join(GAME_DIR, '立绘'));
+  assetV = { at: Date.now(), v: Math.floor(max).toString(36) };
+  return assetV.v;
+}
+const THUMB_W = [480, 600, 900];
+const thumbQueue = new Map();   // 缩小版路径 → [原图, 宽]
+let thumbBusy = false;
+const thumbOf = (rel, w) => path.join(THUMB_DIR, String(w), rel);
+function thumbFresh(src, out) { try { return fs.statSync(out).mtimeMs >= fs.statSync(src).mtimeMs; } catch { return false; } }
+function queueThumb(rel, w) {
+  const src = path.join(GAME_DIR, rel), out = thumbOf(rel, w);
+  if (!thumbFresh(src, out)) thumbQueue.set(out, [src, w]);
+}
+function runThumbs() {
+  if (thumbBusy || !thumbQueue.size) return;
+  thumbBusy = true;
+  const jobs = [...thumbQueue].slice(0, 40); jobs.forEach(([out]) => thumbQueue.delete(out));
+  for (const [out] of jobs) fs.mkdirSync(path.dirname(out), { recursive: true });
+  const done = () => { thumbBusy = false; if (thumbQueue.size) setTimeout(runThumbs, 500); };
+  if (process.platform === 'darwin') {   // Mac 自带 sips
+    let i = 0; const next = () => { if (i >= jobs.length) return done(); const [out, [src, w]] = jobs[i++]; execFile('sips', ['--resampleWidth', String(w), src, '--out', out], () => next()); };
+    return next();
+  }
+  // Windows 自带 System.Drawing：一个 PowerShell 处理一批
+  const list = path.join(os.tmpdir(), `eci-thumbs-${process.pid}.txt`), ps1 = path.join(os.tmpdir(), 'eci-thumbs.ps1');
+  fs.writeFileSync(list, jobs.map(([out, [src, w]]) => `${src}|${out}|${w}`).join('\n'), 'utf8');
+  fs.writeFileSync(ps1, '\uFEFF' + [
+    'param($list)',
+    'Add-Type -AssemblyName System.Drawing',
+    'foreach ($line in [IO.File]::ReadAllLines($list, [Text.Encoding]::UTF8)) {',
+    '  $src, $out, $w = $line -split "\\|"; $w = [int]$w',
+    '  try {',
+    '    $img = [Drawing.Image]::FromFile($src)',
+    '    if ($img.Width -le $w) { $img.Dispose(); Copy-Item -LiteralPath $src -Destination $out -Force; continue }',
+    '    $h = [int]($img.Height * $w / $img.Width)',
+    '    $bmp = New-Object Drawing.Bitmap $w, $h',
+    '    $g = [Drawing.Graphics]::FromImage($bmp)',
+    '    $g.InterpolationMode = "HighQualityBicubic"; $g.SmoothingMode = "HighQuality"; $g.PixelOffsetMode = "HighQuality"; $g.CompositingQuality = "HighQuality"',
+    '    $g.DrawImage($img, 0, 0, $w, $h); $g.Dispose(); $img.Dispose()',
+    '    $tmp = $out + ".tmp"',
+    '    if ($out -like "*.png") { $r = New-Object Drawing.Rectangle 0, 0, $w, $h; $d = $bmp.LockBits($r, "ReadOnly", "Format32bppArgb"); $n = $d.Stride * $h; $px = New-Object byte[] ($n + 12); [BitConverter]::GetBytes([int]$w).CopyTo($px, 0); [BitConverter]::GetBytes([int]$h).CopyTo($px, 4); [BitConverter]::GetBytes([int]$d.Stride).CopyTo($px, 8); [Runtime.InteropServices.Marshal]::Copy($d.Scan0, $px, 12, $n); $bmp.UnlockBits($d); $bmp.Dispose(); [IO.File]::WriteAllBytes($out + ".raw", $px); continue }',
+    '    else { $enc = [Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object { $_.MimeType -eq "image/jpeg" }; $p = New-Object Drawing.Imaging.EncoderParameters 1; $p.Param[0] = New-Object Drawing.Imaging.EncoderParameter ([Drawing.Imaging.Encoder]::Quality), 82L; $bmp.Save($tmp, $enc, $p) }',
+    '    $bmp.Dispose(); Move-Item -LiteralPath $tmp -Destination $out -Force',
+    '  } catch {}',
+    '}'].join('\r\n'), 'utf8');
+  execFile('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ps1, list], { windowsHide: true, timeout: 600000 }, () => {
+    try { fs.unlinkSync(list); } catch {}
+    // PNG：PowerShell 吐出来的像素在 .raw 里，这里压成真正的 PNG
+    for (const [out] of jobs) { const raw = out + '.raw'; if (!fs.existsSync(raw)) continue; try { fs.writeFileSync(out + '.tmp', encodePng(fs.readFileSync(raw))); fs.renameSync(out + '.tmp', out); } catch {} try { fs.unlinkSync(raw); } catch {} }
+    done();
+  });
+}
+// 自己压 PNG：输入 [宽 高 行跨度] + BGRA 像素；每行在 5 种过滤里挑绝对值和最小的，zlib 最高压缩
+function encodePng(buf) {
+  const zlib = require('zlib');
+  const w = buf.readInt32LE(0), h = buf.readInt32LE(4), stride = buf.readInt32LE(8), px = buf.subarray(12);
+  const row = w * 4, out = Buffer.alloc((row + 1) * h);
+  let prev = Buffer.alloc(row), cur = Buffer.alloc(row);
+  const cand = [0, 1, 2, 3, 4].map(() => Buffer.alloc(row));
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) { const i = y * stride + x * 4, o = x * 4; cur[o] = px[i + 2]; cur[o + 1] = px[i + 1]; cur[o + 2] = px[i]; cur[o + 3] = px[i + 3]; }
+    let best = 0, bestSum = Infinity;
+    for (let t = 0; t < 5; t++) {
+      const c = cand[t]; let sum = 0;
+      for (let i = 0; i < row; i++) {
+        const a = i >= 4 ? cur[i - 4] : 0, b = prev[i], cc = i >= 4 ? prev[i - 4] : 0;
+        let v;
+        if (t === 0) v = cur[i]; else if (t === 1) v = cur[i] - a; else if (t === 2) v = cur[i] - b; else if (t === 3) v = cur[i] - ((a + b) >> 1);
+        else { const p = a + b - cc, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - cc); v = cur[i] - (pa <= pb && pa <= pc ? a : pb <= pc ? b : cc); }
+        v &= 255; c[i] = v; sum += v < 128 ? v : 256 - v;
+        if (sum >= bestSum) break;
+      }
+      if (sum < bestSum) { bestSum = sum; best = t; }
+    }
+    out[y * (row + 1)] = best; cand[best].copy(out, y * (row + 1) + 1);
+    [prev, cur] = [cur, prev];
+  }
+  const crcT = []; for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; crcT[n] = c >>> 0; }
+  const crc = b => { let c = 0xffffffff; for (const x of b) c = crcT[(c ^ x) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const chunk = (type, data) => { const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const td = Buffer.concat([Buffer.from(type), data]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td)); return Buffer.concat([len, td, c]); };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 6;
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(out, { level: 9, memLevel: 9 })), chunk('IEND', Buffer.alloc(0))]);
+}
+function serveThumb(req, res, url) {
+  const m = url.match(/^\/thumb\/(\d+)\/(.+)$/);
+  const w = m && Number(m[1]), rel = m && m[2];   // url 已经解码过
+  if (!m || !THUMB_W.includes(w) || !/\.(png|jpe?g|webp)$/i.test(rel)) { res.writeHead(404); return res.end(); }
+  const src = path.resolve(GAME_DIR, rel);
+  if (!src.startsWith(path.resolve(GAME_DIR) + path.sep) || !fs.existsSync(src)) { res.writeHead(404); return res.end(); }
+  const out = thumbOf(rel, w);
+  if (thumbFresh(src, out)) return serveFile(res, path.join(THUMB_DIR, String(w)), rel, req);
+  queueThumb(rel, w); runThumbs();
+  // 还没做好：先发原图，但只让手机存一会儿，做好以后就换成小图
+  res.writeHead(200, { 'Content-Type': MIME[path.extname(src).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'max-age=60' });
+  fs.createReadStream(src).pipe(res);
+}
+// 游戏开起来 10 秒后：所有立绘的头像用小图（480）、抠图立绘 600、2D 场景图 900 先做好
+setTimeout(() => {
+  const walk = (dir, out = []) => { try { for (const e of fs.readdirSync(dir, { withFileTypes: true })) { const p = path.join(dir, e.name); if (e.isDirectory()) walk(p, out); else out.push(p); } } catch {} return out; };
+  for (const p of walk(path.join(GAME_DIR, '立绘'))) {
+    const rel = path.relative(GAME_DIR, p).split(path.sep).join('/');
+    if (/\.(jpe?g|webp)$/i.test(p) && !/[\\/]2D[\\/]/.test(p)) queueThumb(rel, 480);
+    if (/[\\/]抠图[\\/].*\.png$/i.test(p)) queueThumb(rel, 600);
+    if (/[\\/]2D[\\/][^\\/]*\.png$/i.test(p)) queueThumb(rel, 900);
+  }
+  runThumbs();
+}, 10000).unref?.();
 
 function json(res, data, status = 200) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -869,9 +992,10 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
       // 还没开局：先进选兽夫的界面
       const page = fs.existsSync(START_FILE) ? 'index.html' : 'start.html';
-      return fs.createReadStream(path.join(APP_DIR, page)).pipe(res);
+      return res.end(fs.readFileSync(path.join(APP_DIR, page), 'utf8').replace('__ASSET_V__', assetVer()));   // 页面里填上立绘版本号
     }
-    if (req.method === 'GET' && url.startsWith('/game/')) return serveFile(res, GAME_DIR, url.slice(6));
+    if (req.method === 'GET' && url.startsWith('/game/')) return serveFile(res, GAME_DIR, url.slice(6), req);
+    if (req.method === 'GET' && url.startsWith('/thumb/')) return serveThumb(req, res, url);
     if (req.method === 'GET' && url.startsWith('/diary/')) return serveFile(res, DIARY_DIR, url.slice(7));
     if (req.method === 'GET' && url === '/api/diary') return json(res, listDiary());
     if (req.method === 'POST' && url === '/api/diary') {

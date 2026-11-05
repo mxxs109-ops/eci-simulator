@@ -393,6 +393,16 @@ function esc(s) {
   return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 function fileUrl(root, p) { return root + p.split('/').map(encodeURIComponent).join('/'); }
+// 缩小版：小头像都用 480 宽的；手机上的大图用 900 宽的（电脑上还用原图）
+// 图片网址带立绘版本号（服务器打开页面时填进来）：手机把图片存一年，换了图版本号变、才重新下
+window.ASSET_V = '__ASSET_V__';
+const withV = u => u + '?v=' + window.ASSET_V;
+const thumbUrl = (p, w) => withV(fileUrl('/thumb/' + w + '/', p));
+const bigUrl = p => (innerWidth <= 760 && /\.(jpe?g|png|webp)$/i.test(p) ? thumbUrl(p, 900) : withV(fileUrl('/game/', p)));
+// 大脑偶尔会把给它的系统提示原样复述出来：这种段落不显示
+const ECHO = /^\s*[\[【]\s*(系统提示|开场|自动续写|原地复活|重生|整点模拟|自定义游戏机制)[^\]】]*(不是她说的话|[：:])/;
+// 说话人名字：短（10 个字以内）、不带句子标点，才当名字；不然当旁白
+const isName = n => n.length <= 10 && !/[，。：:；！？,.!?「」]/.test(n);
 
 /* ---------------- 附件 ---------------- */
 function makeAttach(listEl) {
@@ -459,7 +469,7 @@ function faceStyle(name, size, zoom = ZOOM) {
   // r = 图片高÷宽，z = 放大倍数；横版老图没写就用默认值
   const fx = f.x ?? FACE_X, fy = f.y ?? FACE_Y, ratio = f.r ?? RATIO;
   const w = size * (f.z ?? zoom), x = size / 2 - fx * w, y = size / 2 - fy * w * ratio;
-  return `background-image:url('${fileUrl('/game/', src)}');background-size:${w}px auto;background-position:${x}px ${y}px`;
+  return `background-image:url('${size > 300 ? bigUrl(src) : thumbUrl(src, 480)}');background-size:${w}px auto;background-position:${x}px ${y}px`;
 }
 function avatar(name) {
   // 头像按屏幕上实际的大小裁（手机上 .av 小很多，还按电脑的尺寸裁，脸就跑出框了）
@@ -488,7 +498,7 @@ function shownImg(r, id) {
 function cardHtml(r, id) {
   const c = COLORS[r.name] || 'var(--c-other)';
   const img = shownImg(r, id);
-  const bg = img ? `background-image:url('${fileUrl('/game/', img)}')` : '';
+  const bg = img ? `background-image:url('${bigUrl(img)}')` : '';
   const mode = id === 'stage' ? (VIEWS.find(v => r[v[2]] && img === r[v[2]]) || [''])[0] : '';
   const cls = ['card', img ? '' : 'noimg', speaking.has(r.name) ? 'speaking' : '', mode === 'beast' ? 'beastmode' : '', ['full', 'id', 'wreck', 'fever'].includes(mode) ? 'fullmode' : ['wreckHalf', 'feverHalf'].includes(mode) ? 'covermode' : '', mode === 'three' ? 'threemode' : '', id !== 'stage' && img && img === r.idImg ? 'idpic' : (r.face?.r > 1 ? 'tall' : '')].join(' ');
   // 大立绘左上角：有哪几种图就显示哪几个按钮，当前这张高亮
@@ -746,9 +756,9 @@ function render(text) {
   const out = [];
   for (const raw of text.split(/\n\s*\n/)) {
     const p = raw.trim();
-    if (!p) continue;
+    if (!p || ECHO.test(p)) continue;
     const m = p.match(/^\*{0,2}【([^】]+)】\*{0,2}\s*([\s\S]*)$/);
-    if (m) {
+    if (m && isName(m[1])) {
       const c = COLORS[m[1]] || 'var(--c-other)';
       out.push(`<div class="speaker" style="--c:${c}"><div class="who">${avatar(m[1])}<div class="name">${esc(m[1])}</div></div><div class="text">${inline(m[2])}</div></div>`);
     } else if (/^📌/.test(p)) {

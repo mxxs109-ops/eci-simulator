@@ -13,3 +13,4 @@ game/归档/
 node_modules/
 android/build/
 android/*.apk
+game/app/cache/
