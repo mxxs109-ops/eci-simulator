@@ -608,7 +608,8 @@ const routes = {
   'POST /api/brain/test': async b => {
     const t = { ...b.api };
     if (t.key && t.key.includes('…')) t.key = readJson(path.join(dirs().game, 'app', 'config.json'), {}).api?.key || '';
-    const r = await fetch(t.base.replace(/\/+$/, '') + '/chat/completions', { method: 'POST', signal: AbortSignal.timeout(30000),
+    // 本机模型第一次要先把模型读进内存，给 2 分钟
+    const r = await fetch(t.base.replace(/\/+$/, '') + '/chat/completions', { method: 'POST', signal: AbortSignal.timeout(/127\.0\.0\.1|localhost/.test(t.base) ? 120000 : 30000),
       headers: { 'Content-Type': 'application/json', ...(t.key ? { Authorization: 'Bearer ' + t.key } : {}) },
       body: JSON.stringify({ model: t.model, messages: [{ role: 'user', content: '只回复两个字：你好' }], max_tokens: 20 }) });
     const x = await r.text();

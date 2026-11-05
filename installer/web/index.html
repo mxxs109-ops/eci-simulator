@@ -203,8 +203,8 @@
 
 <!-- 大脑 -->
 <section id="s-llm">
-  <div class="hd"><h1>🧠 语言模型</h1><p>游戏里每一句话都是它写的。先看看你电脑上已经有什么，能用的点一下就用上；没有再选一家照步骤做。</p></div>
-  <div class="card" id="detCard"><h2>🔍 你电脑上已经有的 <button class="ghost" id="detAgain" style="margin-left:auto;padding:4px 12px;font-size:13px">重新找</button></h2><div id="detList"><p class="soft">正在找…</p></div></div>
+  <div class="hd"><h1>🧠 语言模型</h1><p>游戏里每一句话都是它写的。先点「一键检查」看看你电脑上已经有什么，能用的点一下就用上；没有再选一家照步骤做。</p></div>
+  <div class="card" id="detCard"><h2>🔍 你电脑上已经有的</h2><p class="soft" style="margin:0">点一下，帮你找电脑上已经装好的 Claude Code、本地模型、Ollama、LM Studio，找到了点「一键用它」就能用。</p><div class="row"><button class="p" id="detGo">🔍 一键检查</button></div><div id="detList"></div></div>
   <div class="card">
     <div class="grpt">在你自己电脑上跑（免费、不限尺度）</div>
     <div class="prov" id="provLocal"></div>
@@ -213,8 +213,7 @@
     <div class="grpt">线上 API（按用量付费，快，任何电脑都能用）</div>
     <div class="prov" id="provApi"></div>
   </div>
-  <div class="note info">亲密段落：线上模型和 Claude 不写最露骨的那一截，会自动交给本地模型写（装了本地模型的话）。没装也能玩，那几段会跳过。</div>
-  <div id="provPanel"></div>
+    <div id="provPanel"></div>
 </section>
 
 <!-- 配音 -->
@@ -336,7 +335,7 @@ function go(s) {
   if (s === 'board') loadBoard();
   if (s === 'saves') loadSaves();
   if (s === 'custom') loadCustom();
-  if (s === 'llm') detect();
+
 }
 $('nav').onclick = e => { const a = e.target.closest('a'); if (a) { e.preventDefault(); go(a.dataset.s); } };
 document.addEventListener('click', e => {

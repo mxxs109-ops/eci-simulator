@@ -80,7 +80,8 @@ async function detect() {
   $('detList').innerHTML = rows || '<p class="soft">没找到已经装好的。下面任选一家，照步骤做：有好显卡推荐「本地模型」，没有就选 DeepSeek（便宜）。</p>';
   $('detCard').classList.toggle('doneCard', !!brainLabel());
 }
-$('detAgain').onclick = e => busyBtn(e.target, detect);
+// 玩家点了才检查，不自动去找
+$('detGo').onclick = e => busyBtn(e.target, async () => { await detect(); e.target.textContent = '🔍 重新检查'; });
 $('detList').onclick = async e => {
   const show = e.target.closest('[data-dshow]'); if (show) return showPv(show.dataset.dshow);
   const b = e.target.closest('[data-duse]'); if (!b) return;
@@ -162,12 +163,12 @@ function wirePanel(p) {
     });
     $('lInstall').onclick = () => { api('/api/llm/install', { tier: plan.tier, build: plan.build }); toast('开始下载，十几 GB，慢慢来…'); };
     $('lTest').onclick = () => api('/api/llm/test', {});
-    $('lUse').onclick = async () => { await api('/api/brain', { brain: 'api', api: { base: 'http://127.0.0.1:8080/v1', model: 'local', key: '' } }); toast('大脑换成本地模型了，重新打开游戏生效', 'ok'); await refresh(); showPv('local', false); detect(); };
+    $('lUse').onclick = async () => { await api('/api/brain', { brain: 'api', api: { base: 'http://127.0.0.1:8080/v1', model: 'local', key: '' } }); toast('大脑换成本地模型了，重新打开游戏生效', 'ok'); await refresh(); showPv('local', false); if (DET) detect(); };
     return;
   }
   if (p.kind === 'claude') {
     $('cRecheck').onclick = e => busyBtn(e.target, async () => { await refresh(); showPv('claudecode', false); toast(S.claude ? '找到了 Claude Code' : '还是没找到', S.claude ? 'ok' : 'bad'); });
-    if ($('cUse')) $('cUse').onclick = async () => { const r = await api('/api/brain', { brain: 'claude' }).catch(e => ({ error: e.message })); r.ok ? toast('大脑换成 Claude Code 了', 'ok') : toast(r.error, 'bad'); await refresh(); showPv('claudecode', false); detect(); };
+    if ($('cUse')) $('cUse').onclick = async () => { const r = await api('/api/brain', { brain: 'claude' }).catch(e => ({ error: e.message })); r.ok ? toast('大脑换成 Claude Code 了', 'ok') : toast(r.error, 'bad'); await refresh(); showPv('claudecode', false); if (DET) detect(); };
     return;
   }
   const body = () => ({ base: $('aBase').value.trim(), model: $('aModel').value.trim(), key: $('aKey') ? $('aKey').value.trim() : '' });
@@ -195,8 +196,7 @@ function wirePanel(p) {
       $('aBase').value = x.base; $('mlist').innerHTML = x.models.map(m => `<option value="${esc(m)}">`).join(''); $('aModel').value = x.model;
       $('aAutoMsg').innerHTML = `<span class="ok">✓ 找到了，填好了：${esc(x.model)}（共 ${x.models.length} 个模型）</span>`;
     };
-    $('aAuto').onclick = e => busyBtn(e.target, auto);
-    auto();
+    $('aAuto').onclick = e => busyBtn(e.target, auto);   // 点了才找
   }
   $('aTest').onclick = e => busyBtn(e.target, async () => {
     const b = body(); if (!b.base || !b.model) return $('aMsg').innerHTML = '<span class="bad">接口地址和模型名都要填</span>';
@@ -206,6 +206,6 @@ function wirePanel(p) {
   $('aSave').onclick = async () => {
     const b = body(); if (!b.base || !b.model) return toast('接口地址和模型名都要填', 'bad');
     const r = await api('/api/brain', { brain: 'api', api: b }).catch(err => ({ error: err.message }));
-    r.ok ? toast('保存好了，重新打开游戏生效', 'ok') : toast(r.error, 'bad'); await refresh(); showPv(p.id, false); detect();
+    r.ok ? toast('保存好了，重新打开游戏生效', 'ok') : toast(r.error, 'bad'); await refresh(); showPv(p.id, false); if (DET) detect();
   };
 }
