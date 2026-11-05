@@ -56,6 +56,8 @@ function currentPv() {
   const hit = P.find(p => p.base && b && b.replace(/\/+$/, '') === p.base.replace(/\/+$/, ''));
   return hit ? hit.id : b ? 'custom' : null;
 }
+// 游戏装好了才叫「正在用」；还没装时选好的叫「已选好」，装好游戏就用它
+const NOW = () => (S.game ? '✓ 正在用' : '✓ 已选好');
 const usingNow = id => !!brainLabel() && currentPv() === id;
 function markProviders() { const c = brainLabel() ? currentPv() : null; document.querySelectorAll('.pv').forEach(x => x.classList.toggle('cur', x.dataset.pv === c)); }
 document.querySelectorAll('.prov').forEach(el => el.onclick = e => { const x = e.target.closest('.pv'); if (x) showPv(x.dataset.pv); });
@@ -74,7 +76,7 @@ async function detect() {
       : d.models && d.models.length ? (d.models.length > 1 ? `有 ${d.models.length} 个模型，帮你挑了 ${d.model}` : '模型：' + d.model)
       : '开着，但还没有模型：先下载一个（点「看步骤」）';
     const can = d.id === 'claudecode' || (d.running && d.model);
-    const btn = on ? '<button class="okbtn" disabled>✓ 正在用</button>' : can ? (brainLabel() ? `<button data-duse="${d.id}">改用它</button>` : `<button class="p" data-duse="${d.id}">一键用它</button>`) : `<button class="ghost" data-dshow="${d.id}">看步骤</button>`;
+    const btn = on ? `<button class="okbtn" disabled>${NOW()}</button>` : can ? (brainLabel() ? `<button data-duse="${d.id}">改用它</button>` : `<button class="p" data-duse="${d.id}">一键用它</button>`) : `<button class="ghost" data-dshow="${d.id}">看步骤</button>`;
     return `<div class="det ${on ? 'on' : ''}"><span class="lg" style="background:${LG[d.id][0]}">${LG[d.id][1]}</span><div class="tx"><b>${esc(d.name)}</b><small>${esc(info)}</small></div>${sel}${btn}</div>`;
   }).join('');
   $('detList').innerHTML = rows || '<p class="soft">没找到已经装好的。下面任选一家，照步骤做：有好显卡推荐「本地模型」，没有就选 DeepSeek（便宜）。</p>';
@@ -87,14 +89,16 @@ $('detList').onclick = async e => {
   const b = e.target.closest('[data-duse]'); if (!b) return;
   const d = DET.found.find(x => x.id === b.dataset.duse), sel = $('detList').querySelector(`[data-dsel="${d.id}"]`);
   await busyBtn(b, async () => {
-    if (d.id === 'claudecode') await api('/api/brain', { brain: 'claude' });
+    let saved;
+    if (d.id === 'claudecode') saved = await api('/api/brain', { brain: 'claude' }).catch(err => ({ error: err.message }));
     else {
       const a = { base: d.base, model: sel ? sel.value : d.model, key: '' };
       const t = await api('/api/brain/test', { api: a }).catch(err => ({ error: err.message }));
       if (!t.ok) return toast('试了一下没通：' + (t.error || ''), 'bad');
-      await api('/api/brain', { brain: 'api', api: a });
+      saved = await api('/api/brain', { brain: 'api', api: a }).catch(err => ({ error: err.message }));
     }
-    toast('好了！大脑换成 ' + d.name + '，重新打开游戏生效', 'ok');
+    if (!saved || !saved.ok) return toast('没换成：' + ((saved && saved.error) || '保存失败'), 'bad');
+    toast('好了！大脑换成 ' + d.name + (S.game ? '，重新打开游戏生效' : '，装好游戏就用它'), 'ok');
     await refresh(); await detect(); if (curPv) showPv(curPv, false);
   });
 };
@@ -105,26 +109,26 @@ function showPv(id, scroll = true) {
   document.querySelectorAll('.pv').forEach(x => x.classList.toggle('on', x.dataset.pv === id));
   const p = P.find(x => x.id === id), box = $('provPanel'), using = usingNow(id);
   if (p.kind === 'local') box.innerHTML = `<div class="card pop ${using ? 'doneCard' : ''}"><h2>🖥️ 本地模型</h2>
-    ${using ? '<div class="note ok">✓ 正在用它当大脑</div>' : S.llm ? '<div class="note ok">✓ 已经装好了</div>' : ''}
+    ${using ? `<div class="note ok">${NOW()}它当大脑</div>` : S.llm ? '<div class="note ok">✓ 已经装好了</div>' : ''}
     <p>在你电脑上跑一个不限尺度的开源大模型（Qwen 35B）。要好显卡、大内存；比线上慢，一轮 1～3 分钟。</p>
     <div class="row">
       <button id="lCheck" class="${S.llm ? 'okbtn' : brainLabel() ? '' : 'p'}" ${S.llm ? 'disabled' : ''}>${S.llm ? '✓ 已检查' : '① 检查我的电脑'}</button>
       <button id="lInstall" class="${S.llm ? 'okbtn' : ''}" disabled>${S.llm ? '✓ 已安装' : '② 安装'}</button>
       <button id="lTest" ${S.llm ? '' : 'disabled'}>③ 试一下</button>
-      <button id="lUse" class="${using ? 'okbtn' : S.llm && !brainLabel() ? 'p' : ''}" ${S.llm && !using ? '' : 'disabled'}>${using ? '✓ 正在用' : '④ 用它当大脑'}</button></div>
+      <button id="lUse" class="${using ? 'okbtn' : S.llm && !brainLabel() ? 'p' : ''}" ${S.llm && !using ? '' : 'disabled'}>${using ? NOW() : '④ 用它当大脑'}</button></div>
     <div id="lReport"></div><div class="job" id="job-llm"></div><div class="job" id="job-llmtest"></div>
     <p class="soft">想快一点：大脑用 Claude 或线上 API，本地模型只写亲密段落（装好就自动会用，不用点 ④）。</p></div>`;
   else if (p.kind === 'claude') box.innerHTML = `<div class="card pop ${using ? 'doneCard' : ''}"><h2>✳️ Claude Code</h2>
-    <div class="note ${S.claude ? 'ok' : 'bad'}">${using ? '✓ 正在用 Claude Code 当大脑' : S.claude ? `✓ 找到了 Claude Code（${esc(S.claude)}）` : '还没找到 Claude Code，照下面做：'}</div>
+    <div class="note ${S.claude ? 'ok' : 'bad'}">${using ? NOW() + ' Claude Code 当大脑' : S.claude ? `✓ 找到了 Claude Code（${esc(S.claude)}）` : '还没找到 Claude Code，照下面做：'}</div>
     <ol class="steps ${using ? 'done' : brainLabel() ? 'idle' : ''}">
       <li class="${S.claude ? 'done' : ''}">要有 Claude 的付费订阅（Pro 或 Max），或者 Anthropic 的 API 额度。<a href="#" data-open="https://claude.ai/upgrade">看订阅</a></li>
       <li class="${S.claude ? 'done' : ''}">装 Claude Code：装好 <a href="#" data-open="https://code.visualstudio.com/">VS Code</a>，左边「扩展」里搜 <b>Claude Code</b> 点安装；或者照 <a href="#" data-open="https://docs.claude.com/en/docs/claude-code/setup">官方教程</a> 装命令行版。</li>
       <li class="${S.claude ? 'done' : ''}">打开一次 Claude Code，照提示用你的 Claude 账号登录。</li>
       <li>回到这里点「重新检查」，找到了就点「用 Claude Code 当大脑」。</li>
     </ol>
-    <div class="row"><button id="cRecheck">重新检查</button>${using ? '<button class="okbtn" disabled>✓ 正在用 Claude Code</button>' : `<button class="${brainLabel() ? '' : 'p'}" id="cUse" ${S.claude ? '' : 'disabled'}>${brainLabel() ? '改用 Claude Code' : '用 Claude Code 当大脑'}</button>`}</div></div>`;
+    <div class="row"><button id="cRecheck">重新检查</button>${using ? `<button class="okbtn" disabled>${NOW()} Claude Code</button>` : `<button class="${brainLabel() ? '' : 'p'}" id="cUse" ${S.claude ? '' : 'disabled'}>${brainLabel() ? '改用 Claude Code' : '用 Claude Code 当大脑'}</button>`}</div></div>`;
   else box.innerHTML = `<div class="card pop ${using ? 'doneCard' : ''}"><h2><span class="lg" style="background:${p.lg[0]};width:30px;height:30px;border-radius:9px;display:inline-grid;place-items:center;color:#fff;font-size:13px">${p.lg[1]}</span> ${esc(p.name)}</h2>
-    ${using ? `<div class="note ok">✓ 正在用它当大脑（模型 ${esc(S.api.model)}）</div>` : ''}
+    ${using ? `<div class="note ok">${NOW()}它当大脑（模型 ${esc(S.api.model)}）</div>` : ''}
     <h3>${p.auto ? '怎么用' : '怎么拿到 key'}</h3><ol class="steps ${using ? 'done' : brainLabel() ? 'idle' : ''}">${p.steps.map(x => `<li>${x}</li>`).join('')}</ol>
     ${p.shot ? `<img class="shot" src="guide/${p.shot}.svg" alt="示意图">` : ''}
     ${p.id === 'ollama' ? '<div id="olRec"></div>' : ''}
@@ -163,7 +167,7 @@ function wirePanel(p) {
     });
     $('lInstall').onclick = () => { api('/api/llm/install', { tier: plan.tier, build: plan.build }); toast('开始下载，十几 GB，慢慢来…'); };
     $('lTest').onclick = () => api('/api/llm/test', {});
-    $('lUse').onclick = async () => { await api('/api/brain', { brain: 'api', api: { base: 'http://127.0.0.1:8080/v1', model: 'local', key: '' } }); toast('大脑换成本地模型了，重新打开游戏生效', 'ok'); await refresh(); showPv('local', false); if (DET) detect(); };
+    $('lUse').onclick = async () => { const r = await api('/api/brain', { brain: 'api', api: { base: 'http://127.0.0.1:8080/v1', model: 'local', key: '' } }).catch(err => ({ error: err.message })); if (!r.ok) return toast('没换成：' + (r.error || ''), 'bad'); toast('大脑换成本地模型了', 'ok'); await refresh(); showPv('local', false); if (DET) detect(); };
     return;
   }
   if (p.kind === 'claude') {

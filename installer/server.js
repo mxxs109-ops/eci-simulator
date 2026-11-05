@@ -253,6 +253,9 @@ async function installGame(say) {
   if (fresh) {
     say('复制游戏文件', 88);
     cloneDir(templateDir(s), d.game);
+    // 装游戏之前就选好的大脑：写进游戏的设置
+    const pend = state().pendingCfg;
+    if (pend) { writeJson(path.join(d.game, 'app', 'config.json'), { ...readJson(path.join(d.game, 'app', 'config.json'), {}), ...pend }); saveState({ pendingCfg: null }); }
     saveState({ save: '存档 1' });
   } else {
     say('更新游戏（存档和设置不动）', 88);
@@ -356,7 +359,7 @@ function renameSave(name, to) {
 
 // ---------- 6. 自定义游戏机制：交给游戏的大脑整理成 自定义规则.md ----------
 function brainReady() {
-  const d = dirs(), cfg = readJson(path.join(d.game, 'app', 'config.json'), {});
+  const d = dirs(), cfg = brainCfg();
   if (!isGame(d.game)) return { ok: false, why: '先装游戏本体' };
   if ((cfg.brain || 'claude') === 'claude') return findClaude() ? { ok: true, what: 'Claude Code' } : { ok: false, why: '还没装好语言模型：去「语言模型」选一个当大脑' };
   if (!cfg.api?.base || !cfg.api?.model) return { ok: false, why: '还没装好语言模型：去「语言模型」选一个当大脑' };
@@ -449,13 +452,15 @@ async function testLLM(say) {
   say(`能用：${((Date.now() - t0) / 1000).toFixed(1)} 秒回了「${(r.choices?.[0]?.message?.content || '').slice(0, 40)}」`);
 }
 // 游戏的大脑写进游戏的 config.json
+// 游戏的设置文件；游戏还没装时先记在安装器自己的 state.json 里（pendingCfg），装好游戏时写进去
+const brainCfg = () => (isGame(dirs().game) ? readJson(path.join(dirs().game, 'app', 'config.json'), {}) : state().pendingCfg || {});
 function setBrain(b) {
   const f = path.join(dirs().game, 'app', 'config.json');
-  const c = readJson(f, {});
+  const c = brainCfg();
   if (b.brain) c.brain = b.brain;
   if (b.api) c.api = { ...(c.api || {}), ...b.api, key: b.api.key && !b.api.key.includes('…') ? b.api.key : (c.api || {}).key || '' };
   if (b.handoff) c.handoff = { ...(c.handoff || {}), ...b.handoff };
-  writeJson(f, c);
+  if (isGame(dirs().game)) writeJson(f, c); else saveState({ pendingCfg: c });
   return c;
 }
 function findClaude() {
@@ -665,8 +670,8 @@ function body(req) { return new Promise((ok, no) => { let b = ''; req.on('data',
 const routes = {
   'GET /api/state': async () => {
     const s = state(), d = dirs(s);
-    const cfg = readJson(path.join(d.game, 'app', 'config.json'), {});
-    return { ...s, dirs: d, home: HOME, free: freeGB(s.root), brain: cfg.brain || 'claude', api: { ...(cfg.api || {}), key: cfg.api?.key ? cfg.api.key.slice(0, 4) + '…' + cfg.api.key.slice(-4) : '' }, claude: findClaude(),
+    const cfg = brainCfg();
+    return { ...s, dirs: d, home: HOME, free: freeGB(s.root), brain: cfg.brain || (isGame(d.game) ? 'claude' : null), api: { ...(cfg.api || {}), key: cfg.api?.key ? cfg.api.key.slice(0, 4) + '…' + cfg.api.key.slice(-4) : '' }, claude: findClaude(),
       running: { game: await up('http://127.0.0.1:7788/api/status'), llm: await up('http://127.0.0.1:8080/health'), tts: await up('http://127.0.0.1:9880/health') } };
   },
   'POST /api/pick-folder': async () => ({ path: pickFolder() }),
@@ -679,7 +684,7 @@ const routes = {
   'POST /api/brain/models': async b => listModels(b.api || {}),
   'POST /api/llm/install': async b => { job('llm', say => installLLM(b.tier, b.build, say)); return { ok: true }; },
   'POST /api/llm/test': async () => { job('llmtest', testLLM); return { ok: true }; },
-  'POST /api/brain': async b => { if (!state().game) throw new Error('先装游戏本体'); return { ok: true, config: !!setBrain(b) }; },
+  'POST /api/brain': async b => ({ ok: true, config: !!setBrain(b) }),   // 游戏没装也能先选，装的时候带过去
   'POST /api/brain/test': async b => {
     const t = { ...b.api };
     if (t.key && t.key.includes('…')) t.key = readJson(path.join(dirs().game, 'app', 'config.json'), {}).api?.key || '';

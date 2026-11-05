@@ -383,7 +383,7 @@ document.addEventListener('click', e => {
 
 const isLocal = () => S.brain === 'api' && /127\.0\.0\.1|localhost/.test(S.api?.base || '');
 function brainLabel() {
-  if (!S.game) return '';
+  if (!S.brain) return '';   // 还没选（游戏没装时也可能已经先选好了）
   if (S.brain === 'claude') return S.claude ? 'Claude Code' : '';
   if (!S.api?.base || !S.api?.model) return '';
   return isLocal() ? (/:8080/.test(S.api.base) ? '本地模型' : '本机模型（' + S.api.model + '）') : S.api.model;
