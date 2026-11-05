@@ -530,6 +530,28 @@ async function setGameCfg(b) {
   return gameCfg();
 }
 
+// 天气：按网络位置找你在哪个城市（几家轮着试），或者按她填的城市名找；再问 Open-Meteo 现在的天气
+const WMO = c => c === 0 ? '晴' : c <= 2 ? '多云' : c === 3 ? '阴' : c <= 48 ? '有雾' : c <= 57 ? '毛毛雨' : c <= 67 ? '下雨' : c <= 77 ? '下雪' : c <= 82 ? '阵雨' : c <= 86 ? '阵雪' : '雷雨';
+async function geo(city) {
+  let p = null;
+  if (city) {
+    const j = await getJson('https://geocoding-api.open-meteo.com/v1/search?count=1&language=zh&name=' + encodeURIComponent(city), 8000);
+    const r = j && j.results && j.results[0];
+    if (!r) throw new Error('没找到「' + city + '」这个城市，换个写法试试（中文、英文都行）');
+    p = { city: r.name, country: r.country || '', lat: r.latitude, lon: r.longitude };
+  } else {
+    for (const [u, f] of [['https://ipwho.is/', j => j.success !== false && { city: j.city, country: j.country, lat: j.latitude, lon: j.longitude }],
+      ['https://ipapi.co/json/', j => !j.error && { city: j.city, country: j.country_name, lat: j.latitude, lon: j.longitude }],
+      ['http://ip-api.com/json/?lang=zh-CN', j => j.status === 'success' && { city: j.city, country: j.country, lat: j.lat, lon: j.lon }]]) {
+      const j = await getJson(u, 6000); const x = j && f(j); if (x && x.city) { p = x; break; }
+    }
+    if (!p) throw new Error('网络定位没查到：检查一下网络，或者改成手动填城市');
+  }
+  const w = await getJson(`https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}&current=temperature_2m,weather_code&timezone=auto`, 8000);
+  if (w && w.current) p.weather = `${WMO(w.current.weather_code)}，${Math.round(w.current.temperature_2m)}°C`;
+  return p;
+}
+
 // ---------- 3. 配音：检查 → 安装 ----------
 function ttsPlan() {
   const h = hardware(), s = state(), free = freeGB(s.root), why = [];
@@ -655,6 +677,7 @@ const routes = {
   'POST /api/open': async b => { if (/^https:\/\//.test(b.url)) exec(`start "" "${b.url.replace(/"/g, '%22')}"`); return { ok: true }; },
   'POST /api/firewall': async b => { firewall(!!b.on); return { ok: true }; },
   // 防火墙规则在不在（查不用管理员）；游戏设置里开没开手机连接
+  'POST /api/geo': async b => { try { return { ok: true, ...(await geo(String(b.city || '').trim())) }; } catch (e) { return { ok: false, error: e.message }; } },
   'GET /api/gamecfg': async () => (isGame(dirs().game) ? gameCfg() : { none: true }),
   'POST /api/gamecfg': async b => setGameCfg(b),
   'GET /api/firewall': async () => {

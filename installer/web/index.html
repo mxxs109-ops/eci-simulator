@@ -218,9 +218,11 @@
     <div class="job" id="job-game"></div>
   </div>
   <div class="card" id="cityCard"><h2>🌤️ 游戏里的天气</h2>
-    <p class="soft" style="margin:0">游戏的天气和时间跟你现实中一样。空着 = 按网络位置自动找你在哪个城市。</p>
-    <div class="row"><input type="text" id="city" placeholder="城市，例如：上海、London、Tokyo（空着就自动）" style="flex:1;min-width:220px"><button id="citySave">保存</button></div>
-    <div class="result" id="cityMsg"></div>
+    <p class="soft" style="margin:0">游戏里的天气和时间跟你现实中一样，用的是你所在城市的真实天气。</p>
+    <label class="opt" data-city="auto"><input type="radio" name="cityMode" value="auto"><div style="flex:1"><b>🛰️ 自动（推荐）</b><br><span class="soft">按你的网络位置自动找城市，出门换了地方也会跟着变</span>
+      <div class="row" style="margin-top:8px"><button id="geoGo">🔍 自动查询</button><span class="result" id="geoMsg" style="margin:0"></span></div></div></label>
+    <label class="opt" data-city="manual"><input type="radio" name="cityMode" value="manual"><div style="flex:1"><b>✏️ 手动填城市</b><br><span class="soft">自动查到的不对、或者想用别的城市的天气</span>
+      <div id="cityFields" hidden><div class="row" style="margin-top:8px"><input type="text" id="city" placeholder="城市，例如：上海、London、Tokyo" style="flex:1;min-width:200px"><button id="citySave">保存</button></div><div class="result" id="cityMsg"></div></div></div></label>
   </div>
 </section>
 
@@ -571,7 +573,6 @@ function paintHo(local) {
 }
 document.querySelectorAll('input[name=ho]').forEach(r => r.onchange = () => { paintHo(r.value === 'local'); $('hoSave').classList.add('p'); });
 ['hoBase', 'hoModel', 'hoKey'].forEach(id => $(id).addEventListener('input', () => $('hoSave').classList.add('p')));
-$('city').addEventListener('input', () => $('citySave').classList.add('p'));
 $('hoSave').onclick = e => busyBtn(e.target, async () => {
   const local = document.querySelector('input[name=ho]:checked').value === 'local';
   const handoff = local ? { base: 'http://127.0.0.1:8080/v1', model: '', key: '' } : { base: $('hoBase').value.trim(), model: $('hoModel').value.trim(), key: $('hoKey').value.trim() };
@@ -580,17 +581,48 @@ $('hoSave').onclick = e => busyBtn(e.target, async () => {
   r.error ? toast(r.error, 'bad') : toast('保存好了', 'ok'); $('hoSave').classList.remove('p'); loadHandoff();
 });
 
-// 天气城市
+// 天气：两选一。自动 = config 里 city 空着；手动 = 填了城市
+let cityCfg = '';
 async function loadCity() {
   const g = await api('/api/gamecfg').catch(() => ({ none: true }));
   $('cityCard').hidden = !!g.none; if (g.none) return;
-  $('city').value = g.city || '';
-  $('cityMsg').innerHTML = g.city ? `<span class="ok">✓ 用 ${esc(g.city)} 的天气</span>` : '<span class="ok">✓ 按网络位置自动定位</span>';
+  cityCfg = g.city || '';
+  document.querySelector(`input[name=cityMode][value=${cityCfg ? 'manual' : 'auto'}]`).checked = true;
+  $('city').value = cityCfg;
+  paintCity(cityCfg ? 'manual' : 'auto');
+  // 打开页面不去联网查，等她点「自动查询」
+  $('geoMsg').innerHTML = cityCfg ? '' : '<span class="soft">点一下，看看找到的是哪个城市</span>';
+  $('cityMsg').innerHTML = cityCfg ? `<span class="ok">✓ 用 ${esc(cityCfg)} 的天气</span>` : '';
 }
-$('citySave').onclick = e => busyBtn(e.target, async () => {
-  const r = await api('/api/gamecfg', { city: $('city').value.trim() }).catch(err => ({ error: err.message }));
-  r.error ? toast(r.error, 'bad') : toast('保存好了，游戏下一次整点会换成这里的天气', 'ok'); $('citySave').classList.remove('p'); loadCity();
+// 当前在用的那一项绿框；另一项选中但没保存时是橙框
+function paintCity(mode) {
+  const used = cityCfg ? 'manual' : 'auto';
+  document.querySelectorAll('[data-city]').forEach(x => { x.classList.toggle('on', x.dataset.city === mode); x.classList.toggle('ready', x.dataset.city === mode && mode === used); });
+  $('cityFields').hidden = mode !== 'manual';
+  $('cityCard').classList.toggle('doneCard', mode === used);
+}
+async function showGeo(where, city) {
+  $(where).innerHTML = '<span class="soft">查询中…</span>';
+  const r = await api('/api/geo', { city }).catch(err => ({ error: err.message }));
+  $(where).innerHTML = r.ok ? `<span class="ok">✓ ${city ? '' : '自动找到：'}${esc(r.city)}${r.country ? '（' + esc(r.country) + '）' : ''}${r.weather ? ' · 现在 ' + esc(r.weather) : ''}</span>` : `<span class="bad">${esc(r.error || '没查到')}</span>`;
+  return r;
+}
+document.querySelectorAll('input[name=cityMode]').forEach(r => r.onchange = async () => {
+  paintCity(r.value);
+  if (r.value === 'auto' && cityCfg) {   // 从手动改回自动：直接保存成自动、再查一次
+    await api('/api/gamecfg', { city: '' }); cityCfg = ''; paintCity('auto'); toast('改回自动了', 'ok'); showGeo('geoMsg', '');
+  }
+  if (r.value === 'manual') $('city').focus();
 });
+$('geoGo').onclick = e => { e.preventDefault(); busyBtn(e.target, () => showGeo('geoMsg', '')); };
+$('city').addEventListener('input', () => $('citySave').classList.add('p'));
+$('citySave').onclick = e => { e.preventDefault(); busyBtn(e.target, async () => {
+  const city = $('city').value.trim(); if (!city) return toast('填一个城市', 'bad');
+  const g = await showGeo('cityMsg', city); if (!g.ok) return;   // 先确认找得到这个城市
+  const r = await api('/api/gamecfg', { city }).catch(err => ({ error: err.message }));
+  if (r.error) return toast(r.error, 'bad');
+  cityCfg = city; $('citySave').classList.remove('p'); paintCity('manual'); toast('保存好了，游戏下一次整点会换成这里的天气', 'ok');
+}); };
 
 // ---------- 留言板 ----------
 async function loadBoard() {
