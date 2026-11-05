@@ -7,6 +7,7 @@ const path = require('path');
 // 交接给谁写：默认本机 llama.cpp（8080）；也可以在设置里换成任何 OpenAI 兼容接口
 const DEFAULT_TARGET = { base: process.env.LOCAL_LLM_URL || 'http://127.0.0.1:8080/v1', key: '', model: '' };
 const MARK = /〔接手：([^〕]*)〕/;
+const HOLD = 160;   // 本地模型还在写时，最后这么多字先压着不显示（防抄要剪也只剪这一截）
 // Claude 没写标记、却在回复里跳出来说写不了：从那一段起自动交接，拒绝和出戏的话不给她看
 const REFUSE = /(露骨|色情|性爱|性行为|性描写|性内容|成人内容|内容政策|使用政策|安全准则|指导原则)[^\n]{0,40}(不能|无法|没法|不便|不会|不提供|就此|到此)|(不能|无法|没法|不便|不会)[^\n]{0,30}(露骨|色情|性爱|性行为|性描写|性内容|成人内容)|作为\s*(AI|Claude|语言模型)|I (can't|cannot|won't)/;
 const OOC = /OOC|出戏|Claude|AI|语言模型|内容政策|使用政策|准则|露骨|色情/;
@@ -100,8 +101,8 @@ function create(gameDir, onUpdate, target, ctx) {
     if (n < 60 || !seen.some(t => t.includes(job.text.slice(n - 60)))) return false;
     let i = n - 60;
     while (i >= 10 && seen.some(t => t.includes(job.text.slice(i - 10, n)))) i -= 10;
-    const cut = job.text.lastIndexOf('\n', i);
-    job.text = job.text.slice(0, cut > 0 ? cut : i);
+    const head = job.text.slice(0, i), end = Math.max(...['。', '！', '？', '”', '\n'].map(c => head.lastIndexOf(c)));
+    job.text = end > i - 80 ? head.slice(0, end + 1) : head;
     console.log('[本地模型] 开始照抄上一轮，停在这里');
     return true;
   }
@@ -155,8 +156,8 @@ function create(gameDir, onUpdate, target, ctx) {
       const pre = t.slice(0, m.index);
       if (!jobs[k]) start(m[1], out + pre);
       const job = jobs[k++];
+      if (!job.done) return out + pre + (job.text.length > HOLD ? '\n\n' + job.text.slice(0, -HOLD) : '');
       out += pre + (job.text ? '\n\n' + job.text + '\n\n' : '');
-      if (!job.done) return out;
       t = t.slice(m.index + m[0].length);
     }
   }

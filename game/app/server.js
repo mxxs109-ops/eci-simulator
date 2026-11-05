@@ -376,14 +376,26 @@ function chat(text, res) {
   const send = obj => res.write(JSON.stringify(obj) + '\n');
   // 网页上显示的 = 回复里的 〔接手：…〕 换成交接模型写的那段（还在写时，后面先不显示）
   const ho = localLLM.create(GAME_DIR, () => { if (!quiet) pushView(); }, readConfig().handoff, { her: text, history: readJson(HISTORY_FILE, []).slice(-6) });
+  // 边写边存：她发的话马上存，回复显示出来一点就存一点（断电、出错也不丢）
+  const live = Date.now(), time0 = `${dateStr()} ${timeStr()}`;
+  let liveTimer = null;
+  function saveLive(t) {
+    const history = readJson(HISTORY_FILE, []);
+    let i = history.findIndex(e => e.live === live);
+    if (i < 0) { history.push({ role: 'user', text, time: time0 }, { role: 'ai', text: '', time: time0, live }); i = history.length - 1; }
+    history[i].text = t.trim();
+    writeJson(HISTORY_FILE, history);
+  }
+  saveLive('');
   function pushView() {
     const v = ho.view(reply);
     if (v.startsWith(shown)) { if (v.length > shown.length) { send({ type: 'delta', text: v.slice(shown.length) }); shown = v; } }
     else { send({ type: 'reset' }); if (v) send({ type: 'delta', text: v }); shown = v; }
+    if (!liveTimer) liveTimer = setTimeout(() => { liveTimer = null; saveLive(shown); }, 300);
   }
   // 有时会先写一遍回复、存完档又写一遍：按"工具调用"切成几段，最后只留最完整的一段
   const segments = [''];
-  let reply = '', shown = '', quiet = false, needBreak = false, sawTool = false;
+  let reply = '', shown = '', quiet = false, needBreak = false, sawTool = false, keep = -1;
 
   runBrain({
     prompt, resume: session.id, stream: true,
@@ -396,7 +408,7 @@ function chat(text, res) {
           segments.push(reply = '');
           // 前面只有零星几个字就清掉重来；已经是一段像样的回复就留在屏幕上，不让它闪
           if (shown.trim().length < 40) { shown = ''; quiet = false; send({ type: 'reset' }); }
-          else quiet = true;
+          else { quiet = true; if (keep < 0) keep = segments.length - 2; }
         } else needBreak = true;
         sawTool = false;
       },
@@ -408,20 +420,27 @@ function chat(text, res) {
       },
     },
   }).then(async ({ ok, err }) => {
-    const best = segments.reduce((a, b) => (b.trim().length > a.trim().length ? b : a), '');
-    const full = await ho.finish(best);   // 等交接那段写完，拼成一整段
+    const best = keep >= 0 ? segments[keep] : segments.reduce((a, b) => (b.trim().length > a.trim().length ? b : a), '');
+    let full = await ho.finish(best);   // 等交接那段写完，拼成一整段
+    // 已经给她看过的字不换掉：拼出来的和屏幕上的对不上，就用屏幕上的
+    const norm = x => x.replace(/\n{3,}/g, '\n\n').trim();
+    if (shown.trim() && !norm(full).startsWith(norm(shown))) full = norm(shown);
     busy = false;
+    clearTimeout(liveTimer); liveTimer = null;
     if (full !== shown) send({ type: 'final', text: full });
     if (full.trim()) {
       const history = readJson(HISTORY_FILE, []);
-      const time = `${dateStr()} ${timeStr()}`;
-      history.push({ role: 'user', text, time }, { role: 'ai', text: full.trim(), time });
+      const i = history.findIndex(e => e.live === live);
+      if (i >= 0) { history[i].text = full.trim(); delete history[i].live; }
+      else history.push({ role: 'user', text, time: time0 }, { role: 'ai', text: full.trim(), time: time0 });
       writeJson(HISTORY_FILE, history);
       const s = readJson(SESSION_FILE, {});
       s.roomSeen = readJson(ROOM_FILE, s.roomSeen);   // 剧情里兽夫自己挪的家具不算她挪的
       writeJson(SESSION_FILE, s);
-    } else if (!ok) {
-      send({ type: 'error', text: err || '没有收到回复' });
+    } else {
+      const history = readJson(HISTORY_FILE, []).filter(e => e.live !== live);   // 一个字都没写出来：她的话留着，空回复去掉
+      writeJson(HISTORY_FILE, history);
+      if (!ok) send({ type: 'error', text: err || '没有收到回复' });
     }
     send({ type: 'done' });
     res.end();
