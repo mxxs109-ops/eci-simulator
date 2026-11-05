@@ -67,6 +67,44 @@ function runTool(gameDir, name, a) {
 }
 
 // 一轮：messages 是这段会话到现在的全部消息（会被就地追加）；回调 onText(字)、onTool()（模型开始用工具）
+// 有的模型（特别是本机的小模型）不走正规的工具调用，而是把调用当正文写出来：
+//   <function_calls> {"name":"write_file","path":"回忆.md","content":"…"} </function_calls>
+//   <tool_call>{"name":"edit_file","arguments":{…}}</tool_call>
+//   <invoke name="write_file"><parameter name="path">…</parameter>…</invoke>
+// 这些不给她看，照样执行
+const CALL_START = /<\s*(function_calls|tool_call|invoke\b|antml:invoke)/i;
+function jsonObjects(t) {
+  // 一边扫一边抄一份：字符串里直接写的换行 / 制表符（小模型常这么写，严格 JSON 不认）换成转义
+  const out = []; let depth = 0, inStr = false, esc = false, buf = '';
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (depth > 0) buf += inStr && c === '\n' ? '\\n' : inStr && c === '\r' ? '' : inStr && c === '\t' ? '\\t' : c;
+    if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
+    if (c === '"') inStr = true;
+    else if (c === '{') { if (depth++ === 0) buf = '{'; }
+    else if (c === '}' && depth > 0 && --depth === 0) { try { out.push(JSON.parse(buf)); } catch {} }
+  }
+  return out;
+}
+function textCalls(text) {
+  const calls = [];
+  const blocks = /<\s*(function_calls|tool_call)\s*>([\s\S]*?)(<\s*\/\s*\1\s*>|$)|<\s*(?:antml:)?invoke\s+name="([^"]+)"\s*>([\s\S]*?)(<\s*\/\s*(?:antml:)?invoke\s*>|$)/gi;
+  const rest = text.replace(blocks, (m, tag, inner, end, invName, invBody) => {
+    if (invName) {
+      const a = {}; (invBody || '').replace(/<\s*(?:antml:)?parameter\s+name="([^"]+)"\s*>([\s\S]*?)<\s*\/\s*(?:antml:)?parameter\s*>/gi, (x, k, v) => { a[k] = v; return ''; });
+      calls.push({ name: invName, args: a });
+    } else for (const o of jsonObjects(inner || '')) {
+      const name = o.name || o.function?.name || o.tool || o.tool_name;
+      if (!name) continue;
+      let a = o.arguments ?? o.parameters ?? o.args ?? o.input ?? o.function?.arguments;
+      if (typeof a === 'string') { try { a = JSON.parse(a); } catch { a = {}; } }
+      if (!a) { a = { ...o }; delete a.name; }
+      calls.push({ name, args: a });
+    }
+    return '';
+  });
+  return { calls, rest: rest.replace(/\n{3,}/g, '\n\n') };
+}
 async function runTurn({ base, key, model, gameDir, messages, onText, onTool, signal, extraBody }) {
   const url = base.replace(/\/+$/, '') + '/chat/completions';
   // 本机 llama.cpp 跑的 Qwen 这类模型默认会先「想」一大段，关掉：省上下文，也快
@@ -80,7 +118,8 @@ async function runTurn({ base, key, model, gameDir, messages, onText, onTool, si
     });
     if (!r.ok) throw new Error(`模型接口出错 ${r.status}：${(await r.text()).slice(0, 300)}`);
     const reader = r.body.getReader(), dec = new TextDecoder();
-    let buf = '', text = '', finish = '';
+    let buf = '', text = '', finish = '', shown = 0;
+    const feed = () => { const at = text.search(CALL_START); let upto = at >= 0 ? at : text.length; if (at < 0) { const lt = text.lastIndexOf('<'); if (lt >= 0 && text.length - lt < 16) upto = lt; } if (upto > shown) { onText(text.slice(shown, upto)); shown = upto; } };
     const calls = [];   // { id, name, args }
     for (;;) {
       const { value, done } = await reader.read(); if (done) break;
@@ -93,7 +132,7 @@ async function runTurn({ base, key, model, gameDir, messages, onText, onTool, si
         if (ch?.finish_reason) finish = ch.finish_reason;
         const d = ch?.delta;
         if (!d) continue;
-        if (d.content) { text += d.content; onText(d.content); }
+        if (d.content) { text += d.content; feed(); }
         for (const tc of d.tool_calls || []) {
           const i = tc.index ?? calls.length;
           if (!calls[i]) { calls[i] = { id: tc.id || 'call_' + i, name: '', args: '' }; onTool(); }
@@ -104,6 +143,19 @@ async function runTurn({ base, key, model, gameDir, messages, onText, onTool, si
       }
     }
     const used = calls.filter(Boolean);
+    if (!used.length && CALL_START.test(text)) {
+      const { calls: tc, rest } = textCalls(text);
+      const before = text.slice(0, text.search(CALL_START));
+      const after = rest.slice(before.length);
+      if (after.trim()) onText(after);
+      const results = tc.map(c => `${c.name}：${runTool(gameDir, c.name, c.args || {})}`);
+      if (tc.length) onTool();
+      messages.push({ role: 'assistant', content: rest || null });
+      if (!rest.trim() && tc.length) { messages.push({ role: 'user', content: '[工具结果]\n' + results.join('\n') + '\n\n接着把回复写完（用正规的工具调用改存档，不要把调用写成正文）' }); continue; }
+      if (tc.length) messages.push({ role: 'user', content: '[工具结果，不是她说的话]\n' + results.join('\n') + '\n\n（以后改存档请用正规的工具调用，不要写进正文。这条不用回复）' });
+      return rest;
+    }
+    if (shown < text.length) onText(text.slice(shown));   // 压住的那几个字（不是调用）补上
     messages.push({ role: 'assistant', content: text || null, ...(used.length ? { tool_calls: used.map(c => ({ id: c.id, type: 'function', function: { name: c.name, arguments: c.args || '{}' } })) } : {}) });
     if (!used.length) {
       if (finish === 'length' && !text.trim()) throw new Error('模型的上下文不够长，回复被截断了（本机模型：在安装器里把上下文调大；线上模型：换一个上下文更长的）');
