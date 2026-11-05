@@ -317,6 +317,14 @@
 </style>
 <link rel="stylesheet" href="/mobile.css">
 <style>#reset { display: none !important; }  /* 新开一局在安装器「存档」里，游戏里不再放「新对话」 */</style>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" href="/icon-192.png">
+<meta name="theme-color" content="#8a4b2f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="恶雌模拟器">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 </head>
 <body>
 <header>
@@ -806,6 +814,8 @@ async function loadHistory() {
   // 刷新页面时如果兽夫们还在回复，就等他们回完再显示
   const s = await fetch('/api/status').then(r => r.json()).catch(() => ({}));
   if (s.busy) waitForReply(addAi(''));
+  // 自动开场：开局后还一段剧情都没有（她也没说过话），自动写第一段
+  else if (!h.some(m => m.role === 'user' || (m.role === 'ai' && !m.tick && !m.sim))) send('🎬 开场', true);
 }
 // 上一句还在回复中：等回复完成后重新载入聊天记录
 async function waitForReply(box) {

@@ -63,7 +63,7 @@ $tmp = Join-Path $env:TEMP 'eci-installer-new'
 if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
 # 安装器有哪些文件：先问 GitHub 要最新的清单；问不到（一小时最多 60 次）就用下面这份
 $files = @('installer/server.js', 'installer/shortcut.ps1', 'installer/tts_server.py', 'installer/web/index.html',
-  'installer/web/icon.png', 'installer/web/icon.ico', 'installer/web/guide/deepseek.svg', 'installer/web/guide/apikey.svg')
+  'installer/web/llm.js', 'installer/web/icon.png', 'installer/web/icon.ico', 'installer/web/guide/deepseek.svg', 'installer/web/guide/apikey.svg')
 try {
   $tree = Invoke-RestMethod "https://api.github.com/repos/$Repo/git/trees/$Branch`?recursive=1" -Headers @{ 'User-Agent' = 'eci-installer' } -TimeoutSec 8
   $list = @($tree.tree | Where-Object { $_.type -eq 'blob' -and $_.path -like 'installer/*' } | ForEach-Object { $_.path })

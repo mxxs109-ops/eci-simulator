@@ -396,6 +396,8 @@ function openingNote() {
 
 // auto：她点的是「续写」，text 只是记录里显示的那几个字，发给大脑的是续写指令
 const CONTINUE_NOTE = "[自动续写，不是她说的话：她这一轮没有新的动作和台词，按了「续写」。接着上一轮的结尾自然往下写一段：时间往前走，兽夫们按各自的性格主动行动、把正在发生的事推进一步（没什么事就推「未完成的约定 / 待解之谜」里挂着的事，或者来一件 事件池.md 里合适的小事）。**不要重复**上一轮已经写过的情节、动作、台词、描写和比喻，不要回头重演同一刻；不替她说话、不替她做决定，写到需要她回应的地方停下。存档照常改]";
+// 开局：页面打开时还一段剧情都没有，自动发一次，让第一位兽夫登场
+const OPEN_NOTE = "[开场，不是她说的话：游戏刚开始，她还没开口。照上面的开局提示写第一段剧情：交代她在哪、天气和时辰，让第一位兽夫照 状态.md「兽夫登场」登场，写到需要她回应的地方停下（他在等她做什么 / 说什么）。不替她说话、不替她做决定。存档照常改]";
 function chat(text, res, auto = false) {
   const session = readJson(SESSION_FILE, {});
   // 每个游戏日（凌晨 5 点换天）开一段新会话，剧情都在存档里，不会越聊越慢
@@ -415,7 +417,7 @@ function chat(text, res, auto = false) {
   try { rut = /【易感期】/.test(fs.readFileSync(path.join(GAME_DIR, '状态.md'), 'utf8')); } catch {}
   const intimate = (!auto && INTIMATE.test(text)) || rut || (lastAi?.local && !SCENE_END.test(text));
   const intimateNote = intimate ? `[系统提示，不是她说的话：这一轮沾到亲密（${INTIMATE.test(text) ? '她的话里有亲密的内容' : rut ? '有兽夫正在易感期' : '上一轮的亲密戏还没结束'}）。**照原来的展示方式写完整的回复**：环境、他的台词和口吻、心理（*斜体*）、剧情推进、📌 小结都由你写，和平时一样。但**身体和性的描写你一个字都不自己写，也不准带过、不准用台词或心理代替**：每到要写身体、裸体、体液、亲吻抚摸、性的地方，单独一段写交接标记 \`〔接手：兽夫名字｜在哪｜这一刻｜约 N 字：这一小段要写什么——谁对谁做了什么、写到哪一步为止〕\`（N 一般 150～500；她要的露骨内容越多，标记越多、字数越大；她这一轮要的每一个动作都要落在某个标记里）。标记前后接着写台词和心理，和标记里的事衔接，不要在标记前后重复写同一个动作。小结写清楚这场戏还没结束、他在等她什么（她说停了才算结束）。存档照常改，写到亲密的地方也用交接标记，不要自己写、不要带过]\n\n` : '';
-  const prompt = rulesNote(session) + roomNote + diaryNote(session) + openingNote() + clock + intimateNote + (auto ? CONTINUE_NOTE : text);
+  const prompt = rulesNote(session) + roomNote + diaryNote(session) + openingNote() + clock + intimateNote + (auto ? (readJson(HISTORY_FILE, []).some(m => m.role === 'ai' && !m.tick && !m.sim) ? CONTINUE_NOTE : OPEN_NOTE) : text);
   writeJson(SESSION_FILE, session);
 
   const send = obj => res.write(JSON.stringify(obj) + '\n');
@@ -795,7 +797,7 @@ const server = http.createServer(async (req, res) => {
   try {
     if (!lanAllowed(req, res)) {
       res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8' });
-      return res.end('<meta name="viewport" content="width=device-width"><p style="font:16px sans-serif;padding:24px">请在电脑上打开游戏 →「设置」→「手机连接」，用手机 App 扫二维码连接。</p>');
+      return res.end('<meta name="viewport" content="width=device-width"><p style="font:16px sans-serif;padding:24px">请在电脑上打开游戏 →「设置」→「手机连接」，用手机相机扫二维码连接。</p>');
     }
     if (req.method === 'GET' && (url === '/' || url === '/index.html')) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
@@ -816,6 +818,18 @@ const server = http.createServer(async (req, res) => {
       const tl = text ? text.split(/\r?\n/) : [];
       appendDiary(tl.length ? [head + tl[0], ...tl.slice(1), ...attach] : [head + attach[0], ...attach.slice(1)]);
       return json(res, { ok: true });
+    }
+    // 手机「添加到主屏幕」：名字、图标、全屏；从主屏幕打开时带上连接码
+    if (req.method === 'GET' && url === '/manifest.webmanifest') {
+      res.writeHead(200, { 'Content-Type': 'application/manifest+json; charset=utf-8', 'Cache-Control': 'no-cache' });
+      return res.end(JSON.stringify({ name: '恶雌模拟器', short_name: '恶雌模拟器', lang: 'zh',
+        start_url: isLoopback(req) ? '/' : '/?t=' + lanToken(), scope: '/', display: 'standalone', orientation: 'portrait',
+        background_color: '#f4ede1', theme_color: '#8a4b2f',
+        icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }, { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }] }));
+    }
+    if (req.method === 'GET' && /^\/(icon-192|icon-512|apple-touch-icon)\.png$/.test(url)) {
+      res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'max-age=86400' });
+      return fs.createReadStream(path.join(APP_DIR, url.slice(1))).pipe(res);
     }
     if (req.method === 'GET' && url === '/mobile.css') {   // 手机布局
       res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'no-cache' });

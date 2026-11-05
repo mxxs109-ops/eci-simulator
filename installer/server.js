@@ -454,6 +454,50 @@ function findClaude() {
   return '';
 }
 
+// ---------- 2b. 自动找：电脑上已经有哪些大脑能直接用 ----------
+const getJson = (u, ms = 1500) => fetch(u, { signal: AbortSignal.timeout(ms) }).then(r => (r.ok ? r.json() : null)).catch(() => null);
+async function detectLLM() {
+  const d = dirs(), s = state(), hw = hardware();
+  const vram = hw.nvidia ? hw.nvidia.vramGB : 0;
+  const found = [];
+  // 本机 llama.cpp（我们装的，或者别人自己开的 8080）
+  const lc = await getJson('http://127.0.0.1:8080/v1/models');
+  if (lc) found.push({ id: 'local', name: '本地模型（llama.cpp）', base: 'http://127.0.0.1:8080/v1', models: (lc.data || []).map(m => m.id), model: 'local', running: true });
+  else if (s.llm) found.push({ id: 'local', name: '本地模型（已装，没开）', base: 'http://127.0.0.1:8080/v1', models: ['local'], model: 'local', running: false });
+  // Ollama：11434
+  const ol = await getJson('http://127.0.0.1:11434/api/tags');
+  const olInstalled = ol || fs.existsSync(path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Ollama', 'ollama.exe'));
+  if (olInstalled) {
+    const list = ((ol && ol.models) || []).map(m => ({ id: m.name, gb: Math.round((m.size || 0) / 1e8) / 10 }));
+    // 挑一个：能塞进显存的里面最大的；中文好的（qwen / deepseek / glm / yi）优先
+    const fit = list.filter(m => !vram || m.gb <= vram * 1.1);
+    const zh = m => /qwen|deepseek|glm|yi|internlm/i.test(m.id);
+    const pick = [...fit].sort((a, b) => (zh(b) - zh(a)) || b.gb - a.gb)[0] || list[0];
+    found.push({ id: 'ollama', name: 'Ollama', base: 'http://127.0.0.1:11434/v1', models: list.map(m => m.id), sizes: list, model: pick ? pick.id : '', running: !!ol });
+  }
+  // LM Studio：1234
+  const lm = await getJson('http://127.0.0.1:1234/v1/models');
+  const lmInstalled = lm || ['LM Studio', 'lm-studio'].some(n => fs.existsSync(path.join(process.env.LOCALAPPDATA || '', 'Programs', n)));
+  if (lmInstalled) { const ids = ((lm && lm.data) || []).map(m => m.id).filter(id => !/embed/i.test(id)); found.push({ id: 'lmstudio', name: 'LM Studio', base: 'http://127.0.0.1:1234/v1', models: ids, model: ids[0] || '', running: !!lm }); }
+  // Claude Code
+  const cc = findClaude();
+  if (cc) found.push({ id: 'claudecode', name: 'Claude Code（' + cc + '）', running: true });
+  // 推荐给 Ollama 拉的模型：按显存
+  const ollamaRec = vram >= 22 ? 'qwen3:32b' : vram >= 12 ? 'qwen3:14b' : vram >= 7 ? 'qwen3:8b' : 'qwen3:4b';
+  return { found, vram, ramGB: hw.ramGB, ollamaRec };
+}
+// 去接口拿这家能用的模型列表（OpenAI 兼容的 /models）
+async function listModels(api) {
+  const t = { ...api };
+  if (t.key && t.key.includes('…')) t.key = readJson(path.join(dirs().game, 'app', 'config.json'), {}).api?.key || '';
+  const r = await fetch(t.base.replace(/\/+$/, '') + '/models', { signal: AbortSignal.timeout(15000), headers: t.key ? { Authorization: 'Bearer ' + t.key, 'x-api-key': t.key, 'anthropic-version': '2023-06-01' } : {} });
+  const x = await r.text();
+  if (!r.ok) return { ok: false, error: `${r.status}：${x.slice(0, 160)}` };
+  let j; try { j = JSON.parse(x); } catch { return { ok: false, error: '返回的不是模型列表' }; }
+  const ids = (j.data || j.models || []).map(m => (m.id || m.name || '').replace(/^models\//, '')).filter(Boolean);
+  return { ok: true, models: [...new Set(ids)] };
+}
+
 // ---------- 3. 配音：检查 → 安装 ----------
 function ttsPlan() {
   const h = hardware(), s = state(), free = freeGB(s.root), why = [];
@@ -556,6 +600,8 @@ const routes = {
   'POST /api/game/install': async () => { job('game', installGame); return { ok: true }; },
   'POST /api/game/open': async () => { spawn('cmd', ['/c', 'start', '""', path.join(dirs().game, '启动游戏.bat')], { detached: true, windowsHide: true }); return { ok: true }; },
   'GET /api/llm/check': async () => llmPlan(),
+  'GET /api/llm/detect': async () => detectLLM(),
+  'POST /api/brain/models': async b => listModels(b.api || {}),
   'POST /api/llm/install': async b => { job('llm', say => installLLM(b.tier, b.build, say)); return { ok: true }; },
   'POST /api/llm/test': async () => { job('llmtest', testLLM); return { ok: true }; },
   'POST /api/brain': async b => { if (!state().game) throw new Error('先装游戏本体'); return { ok: true, config: !!setBrain(b) }; },

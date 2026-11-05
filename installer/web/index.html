@@ -97,6 +97,18 @@
   .note { padding: 10px 14px; border-radius: 12px; background: var(--meSoft); margin: 10px 0; font-size: 14px; }
   .note.ok { background: var(--okSoft); color: inherit; } .note.bad { background: var(--badSoft); }
   .result { margin-top: 10px; min-height: 1em; font-weight: 700; }
+  .steps.done li::before { content: "✓"; background: var(--ok); }
+  .steps.done li { color: var(--soft); }
+  .note.info { background: var(--bg2); color: var(--soft); }
+  button.okbtn { background: var(--okSoft); color: var(--ok); border-color: transparent; font-weight: 700; cursor: default; opacity: 1; }
+  .card.doneCard { border-color: var(--ok); box-shadow: 0 0 0 3px var(--okSoft), var(--shadow); }
+  .det { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: var(--bg); margin: 8px 0; flex-wrap: wrap; }
+  .det.on { background: var(--okSoft); }
+  .det .lg { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; color: #fff; font-weight: 800; flex: none; }
+  .det .tx { flex: 1; min-width: 180px; } .det .tx b { display: block; } .det .tx small { color: var(--soft); }
+  .det select { width: auto; max-width: 240px; padding: 6px 10px; }
+  .rec { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 999px; background: var(--okSoft); color: var(--ok); font-size: 12px; font-weight: 700; cursor: pointer; margin: 6px 6px 0 0; border: 1px solid transparent; }
+  .rec:hover { border-color: var(--ok); }
   /* 存档 */
   .saves { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
   .sv { background: var(--card); border: 2px solid var(--line); border-radius: var(--r); padding: 16px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 6px; transition: transform .15s; }
@@ -191,7 +203,8 @@
 
 <!-- 大脑 -->
 <section id="s-llm">
-  <div class="hd"><h1>🧠 语言模型</h1><p>游戏里每一句话都是它写的。选一家，跟着步骤做，测试通过就能用。</p></div>
+  <div class="hd"><h1>🧠 语言模型</h1><p>游戏里每一句话都是它写的。先看看你电脑上已经有什么，能用的点一下就用上；没有再选一家照步骤做。</p></div>
+  <div class="card" id="detCard"><h2>🔍 你电脑上已经有的 <button class="ghost" id="detAgain" style="margin-left:auto;padding:4px 12px;font-size:13px">重新找</button></h2><div id="detList"><p class="soft">正在找…</p></div></div>
   <div class="card">
     <div class="grpt">在你自己电脑上跑（免费、不限尺度）</div>
     <div class="prov" id="provLocal"></div>
@@ -200,7 +213,7 @@
     <div class="grpt">线上 API（按用量付费，快，任何电脑都能用）</div>
     <div class="prov" id="provApi"></div>
   </div>
-  <div class="note">亲密段落：线上模型和 Claude 不写最露骨的那一截，会自动交给本地模型写（装了本地模型的话）。没装也能玩，那几段会跳过。</div>
+  <div class="note info">亲密段落：线上模型和 Claude 不写最露骨的那一截，会自动交给本地模型写（装了本地模型的话）。没装也能玩，那几段会跳过。</div>
   <div id="provPanel"></div>
 </section>
 
@@ -250,18 +263,21 @@
 
 <!-- 手机 -->
 <section id="s-phone">
-  <div class="hd"><h1>📱 用手机玩</h1><p>游戏还是在电脑上跑，手机只是一个窗口。手机和电脑连同一个 Wi-Fi 就行。</p></div>
+  <div class="hd"><h1>📱 用手机玩</h1><p>游戏在电脑上跑，手机用浏览器打开就能玩，安卓和 iPhone 都一样，不用装 App。手机和电脑连同一个 Wi-Fi。</p></div>
   <div class="card">
     <ol class="steps">
-      <li>下载安卓 App：<a href="#" data-open="https://github.com/mxxs109-ops/eci-simulator/releases/latest">GitHub 发布页</a> 里的 <b>eci-simulator.apk</b>（用手机浏览器打开这个页面下载）。</li>
-      <li>手机上点下载好的 apk。提示「不允许安装未知来源的应用」时，点「设置」→ 打开「允许来自此来源」，返回点「安装」。</li>
       <li>点下面的按钮，让 Windows 防火墙放行游戏（会问「是否允许更改」，点「是」）。<div class="row"><button class="p" id="fwOn">放行防火墙</button><button class="ghost" id="fwOff">取消放行</button></div></li>
-      <li>电脑上打开游戏 → 右下角 ⚙️ → 勾上「允许同一个 Wi-Fi 下的手机连进来」→ 保存，会出现二维码。</li>
-      <li>手机 App 里点「扫码连接」，对准电脑屏幕上的二维码。问「允许访问本地网络」时点允许。</li>
+      <li>电脑上打开游戏 → 右上角 ⚙️ → 勾上「允许同一个 Wi-Fi 下的手机连进来」→ 保存，会出现二维码。</li>
+      <li>手机打开<b>相机</b>，对准电脑屏幕上的二维码，点弹出来的链接，游戏就在手机浏览器里打开了。</li>
+      <li>把它放到手机桌面，以后点图标就进游戏（全屏，和 App 一样）：
+        <div class="row" style="align-items:flex-start;gap:24px">
+          <div><b>iPhone（Safari）</b><br><span class="soft">底部「分享」按钮 → 「添加到主屏幕」→「添加」</span></div>
+          <div><b>安卓（Chrome 等）</b><br><span class="soft">右上角「⋮」→「添加到主屏幕」或「安装应用」</span></div>
+        </div></li>
     </ol>
   </div>
   <div class="card"><h2>🌍 出门在外也想玩？</h2><p class="soft" style="margin:0">电脑和手机都装 <a href="#" data-open="https://tailscale.com/download">Tailscale</a>（免费），登录同一个账号。之后手机在哪都能连回家里的电脑，二维码照样扫。</p></div>
-  <div class="card"><h2>🔧 连不上？</h2><ul class="soft" style="margin:0"><li>手机和电脑是不是同一个 Wi-Fi（公司、酒店的 Wi-Fi 常常不让设备互相访问，换手机热点试试）</li><li>第 3 步的防火墙放行做了没有</li><li>电脑上的游戏还开着吗</li></ul></div>
+  <div class="card"><h2>🔧 连不上？</h2><ul class="soft" style="margin:0"><li>手机和电脑是不是同一个 Wi-Fi（公司、酒店的 Wi-Fi 常常不让设备互相访问，换手机热点试试）</li><li>第 1 步的防火墙放行做了没有</li><li>电脑上的游戏还开着吗</li><li>扫码打开后显示「请在电脑上打开游戏」：电脑那边换过连接码，重新扫一次</li></ul></div>
 </section>
 
 <!-- 留言板 -->
@@ -320,6 +336,7 @@ function go(s) {
   if (s === 'board') loadBoard();
   if (s === 'saves') loadSaves();
   if (s === 'custom') loadCustom();
+  if (s === 'llm') detect();
 }
 $('nav').onclick = e => { const a = e.target.closest('a'); if (a) { e.preventDefault(); go(a.dataset.s); } };
 document.addEventListener('click', e => {
@@ -340,7 +357,7 @@ async function refresh() {
   $('locNow').textContent = S.root; $('locFree').textContent = S.free == null ? '—' : S.free + ' GB';
   $('gVer').innerHTML = S.game ? esc(S.game.version) + (S.running.game ? ' <span class="tag ok">● 运行中</span>' : '') : '还没装';
   $('gDir').textContent = S.dirs?.game || '—';
-  $('gInstall').textContent = S.game ? '更新' : '安装';
+  if (!S.game) { $('gInstall').textContent = '安装'; $('gInstall').disabled = false; }
   $('gOpen').disabled = !S.game;
   const b = brainLabel();
   // 侧边栏的小圆点
@@ -391,6 +408,8 @@ async function checkUpdate() {
   const r = await api('/api/game/check').catch(e => ({ error: e.message }));
   if (r.error) return $('gRemote').innerHTML = `<span class="bad">${esc(r.error)}</span>`;
   const newer = r.local && r.remote.version !== r.local;
+  // 已经是最新：按钮变灰、写「已是最新」；有新版才亮
+  if (r.local) { $('gInstall').disabled = !newer; $('gInstall').textContent = newer ? '更新到 ' + r.remote.version : '✓ 已是最新'; $('gInstall').classList.toggle('p', !!newer); $('gInstall').classList.toggle('okbtn', !newer); }
   $('gRemote').innerHTML = esc(r.remote.version) + (newer ? ` <span class="tag me">🔔 有新版本</span><div class="soft">${esc(r.remote.notes || '')}</div>` : r.local ? ' <span class="tag ok">已是最新</span>' : '');
   if (newer) { $('st-game').className = 'st new'; $('gInstall').classList.add('pop'); }
 }
@@ -399,113 +418,7 @@ $('gOpen').onclick = () => { api('/api/game/open', {}); toast('正在打开游�
 $('gCheck').onclick = e => busyBtn(e.target, checkUpdate);
 
 // ---------- 大脑 ----------
-// lg：图标底色和字；steps：手把手教程；model 留空的，照官网填（各家型号更新快）
-const P = [
-  { id: 'local', g: 'Local', name: '本地模型（推荐）', sub: '装在你电脑上', lg: ['#5b4636', '本'], kind: 'local' },
-  { id: 'ollama', g: 'Local', name: 'Ollama', sub: '已经装了 Ollama 的人', lg: ['#222', 'O'], base: 'http://127.0.0.1:11434/v1', model: '', site: 'https://ollama.com/download',
-    steps: ['装好 <a href="#" data-open="https://ollama.com/download">Ollama</a>，打开它。', '在命令行里拉一个模型，比如 <span class="cmd">ollama pull qwen3</span>（选能塞进你显存的大小）。', '模型名填你拉下来的名字（<span class="cmd">ollama list</span> 能看到），key 留空。', '点「测试一下」。'] },
-  { id: 'lmstudio', g: 'Local', name: 'LM Studio', sub: '图形界面跑本地模型', lg: ['#4a3aff', 'LM'], base: 'http://127.0.0.1:1234/v1', model: '', site: 'https://lmstudio.ai/',
-    steps: ['装好 <a href="#" data-open="https://lmstudio.ai/">LM Studio</a>，在里面搜一个模型下载（选能塞进你显存的大小）。', '左边点「Developer」→ 打开「Start server」。', '模型名填 LM Studio 里显示的模型 ID，key 留空。', '点「测试一下」。'] },
-  { id: 'claudecode', g: 'Claude', name: 'Claude Code', sub: '有 Claude 订阅的人', lg: ['#d97757', 'C'], kind: 'claude' },
-  { id: 'anthropic', g: 'Claude', name: 'Claude API', sub: 'Anthropic 控制台的 key', lg: ['#c96442', 'A'], base: 'https://api.anthropic.com/v1', model: 'claude-sonnet-5-5', site: 'https://console.anthropic.com/',
-    steps: ['打开 <a href="#" data-open="https://console.anthropic.com/">console.anthropic.com</a> 注册登录。', '「Plans & Billing」里充值。', '「API Keys」→「Create Key」，名字随便填，复制 <b>sk-ant-</b> 开头的 key（只显示一次）。', '模型名默认是 Claude Sonnet，想用更强的可以换成 Opus 的型号名。', '粘贴 key，点「测试一下」。'] },
-  { id: 'deepseek', g: 'Api', name: 'DeepSeek', sub: '便宜，中文好', lg: ['#4d6bfe', 'DS'], base: 'https://api.deepseek.com/v1', model: 'deepseek-chat', site: 'https://platform.deepseek.com/', shot: 'deepseek',
-    steps: ['打开 <a href="#" data-open="https://platform.deepseek.com/">platform.deepseek.com</a>，用手机号注册登录。', '左边点「充值」，充 10 元就能玩很久（按字数扣钱）。', '左边点「API keys」→「创建 API key」，名字随便填（比如 恶雌）。', '弹出来的 <b>sk-</b> 开头的一串就是 key，<b>只显示这一次</b>，点「复制」。', '回到这里粘贴到「API key」，点「测试一下」。'] },
-  { id: 'openai', g: 'Api', name: 'OpenAI', sub: 'GPT 系列', lg: ['#10a37f', 'AI'], base: 'https://api.openai.com/v1', model: '', site: 'https://platform.openai.com/api-keys',
-    steps: ['打开 <a href="#" data-open="https://platform.openai.com/">platform.openai.com</a> 注册登录（要能访问 OpenAI 的网络）。', '右上角 Settings →「Billing」，绑卡充值（最少 5 美元）。', '左边「API keys」→「Create new secret key」→ 复制 <b>sk-</b> 开头的 key。', '模型名填官网「Models」页面上的型号名。', '粘贴 key，点「测试一下」。'] },
-  { id: 'gemini', g: 'Api', name: 'Google Gemini', sub: '有免费额度', lg: ['#1a73e8', 'G'], base: 'https://generativelanguage.googleapis.com/v1beta/openai', model: '', site: 'https://aistudio.google.com/apikey',
-    steps: ['打开 <a href="#" data-open="https://aistudio.google.com/apikey">Google AI Studio</a>，用 Google 账号登录（要能访问 Google 的网络）。', '点「Create API key」，复制。', '模型名填 AI Studio 里模型列表上的名字（gemini- 开头）。', '粘贴 key，点「测试一下」。'] },
-  { id: 'qwen', g: 'Api', name: '通义千问', sub: '阿里云百炼', lg: ['#615ced', '通'], base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus', site: 'https://bailian.console.aliyun.com/',
-    steps: ['打开 <a href="#" data-open="https://bailian.console.aliyun.com/">阿里云百炼</a>，用阿里云账号登录（要实名）。', '开通「模型服务」，新用户有免费额度。', '右上角头像 →「API-KEY」→ 创建 → 复制。', '粘贴 key，点「测试一下」。'] },
-  { id: 'kimi', g: 'Api', name: 'Kimi', sub: '月之暗面', lg: ['#111', 'K'], base: 'https://api.moonshot.cn/v1', model: '', site: 'https://platform.moonshot.cn/',
-    steps: ['打开 <a href="#" data-open="https://platform.moonshot.cn/">platform.moonshot.cn</a> 注册登录。', '账户里充值。', '「API Key 管理」→ 新建 → 复制。', '模型名照官网文档里的填。粘贴 key，点「测试一下」。'] },
-  { id: 'zhipu', g: 'Api', name: '智谱 GLM', sub: '清华系', lg: ['#3859ff', '智'], base: 'https://open.bigmodel.cn/api/paas/v4', model: '', site: 'https://open.bigmodel.cn/',
-    steps: ['打开 <a href="#" data-open="https://open.bigmodel.cn/">open.bigmodel.cn</a> 注册登录。', '新用户有免费额度，不够再充值。', '右上角「API Keys」→ 添加新的 API Key → 复制。', '模型名照官网「模型」页面的填（glm- 开头）。粘贴 key，点「测试一下」。'] },
-  { id: 'silicon', g: 'Api', name: '硅基流动', sub: '国内一个 key 用很多家', lg: ['#7c3aed', '硅'], base: 'https://api.siliconflow.cn/v1', model: '', site: 'https://cloud.siliconflow.cn/',
-    steps: ['打开 <a href="#" data-open="https://cloud.siliconflow.cn/">cloud.siliconflow.cn</a>，手机号注册登录。', '新用户送额度；左边「API 密钥」→ 新建 → 复制。', '模型名从「模型广场」复制（比如 deepseek-ai/ 或 Qwen/ 开头的）。', '粘贴 key，点「测试一下」。'] },
-  { id: 'openrouter', g: 'Api', name: 'OpenRouter', sub: '海外一个 key 用很多家', lg: ['#6467f2', 'OR'], base: 'https://openrouter.ai/api/v1', model: '', site: 'https://openrouter.ai/',
-    steps: ['打开 <a href="#" data-open="https://openrouter.ai/">openrouter.ai</a> 注册登录。', '「Credits」里充值。', '「Keys」→「Create Key」→ 复制。', '模型名从「Models」页面复制（比如 deepseek/ 开头的）。粘贴 key，点「测试一下」。'] },
-  { id: 'xai', g: 'Api', name: 'xAI Grok', sub: '尺度较宽', lg: ['#000', 'X'], base: 'https://api.x.ai/v1', model: '', site: 'https://console.x.ai/',
-    steps: ['打开 <a href="#" data-open="https://console.x.ai/">console.x.ai</a> 注册登录。', '充值后「API Keys」→ 创建 → 复制。', '模型名照控制台「Models」里的填（grok- 开头）。', '粘贴 key，点「测试一下」。'] },
-  { id: 'custom', g: 'Api', name: '其他', sub: '任何 OpenAI 兼容接口', lg: ['#8b7262', '+'], base: '', model: '', site: '',
-    steps: ['填服务商给的「OpenAI 兼容」接口地址（一般以 /v1 结尾）、模型名和 key。', '点「测试一下」，通了再保存。'] },
-];
-const pvHtml = p => `<div class="pv" data-pv="${p.id}"><span class="lg" style="background:${p.lg[0]}">${p.lg[1]}</span><div><b>${esc(p.name)}</b><small>${esc(p.sub)}</small></div></div>`;
-$('provLocal').innerHTML = P.filter(p => p.g === 'Local').map(pvHtml).join('');
-$('provClaude').innerHTML = P.filter(p => p.g === 'Claude').map(pvHtml).join('');
-$('provApi').innerHTML = P.filter(p => p.g === 'Api').map(pvHtml).join('');
-let curPv = null;
-function currentPv() {
-  if (S.brain === 'claude') return 'claudecode';
-  const b = S.api?.base || '';
-  if (/127\.0\.0\.1:8080/.test(b)) return 'local';
-  const hit = P.find(p => p.base && b && b.replace(/\/+$/, '') === p.base.replace(/\/+$/, ''));
-  return hit ? hit.id : b ? 'custom' : null;
-}
-function markProviders() { const c = brainLabel() ? currentPv() : null; document.querySelectorAll('.pv').forEach(x => x.classList.toggle('cur', x.dataset.pv === c)); }
-document.querySelectorAll('.prov').forEach(el => el.onclick = e => { const x = e.target.closest('.pv'); if (x) showPv(x.dataset.pv); });
-function showPv(id, scroll = true) {
-  curPv = id;
-  document.querySelectorAll('.pv').forEach(x => x.classList.toggle('on', x.dataset.pv === id));
-  const p = P.find(x => x.id === id), box = $('provPanel');
-  if (p.kind === 'local') box.innerHTML = `<div class="card pop"><h2>🖥️ 本地模型</h2>
-    <p>在你电脑上跑一个不限尺度的开源大模型（Qwen 35B）。要好显卡、大内存；比线上慢，一轮 1～3 分钟。</p>
-    <div class="row"><button class="p" id="lCheck">① 检查我的电脑</button><button id="lInstall" disabled>② 安装</button><button id="lTest" ${S.llm ? '' : 'disabled'}>③ 试一下</button><button id="lUse" ${S.llm ? '' : 'disabled'}>④ 用它当大脑</button></div>
-    <div id="lReport"></div><div class="job" id="job-llm"></div><div class="job" id="job-llmtest"></div>
-    <p class="soft">想快一点：大脑用 Claude 或线上 API，本地模型只写亲密段落（装好就自动会用，不用点 ④）。</p></div>`;
-  else if (p.kind === 'claude') box.innerHTML = `<div class="card pop"><h2>✳️ Claude Code</h2>
-    <div class="note ${S.claude ? 'ok' : 'bad'}">${S.claude ? `✅ 找到了 Claude Code（${esc(S.claude)}）` : '还没找到 Claude Code，照下面做：'}</div>
-    <ol class="steps">
-      <li>要有 Claude 的付费订阅（Pro 或 Max），或者 Anthropic 的 API 额度。<a href="#" data-open="https://claude.ai/upgrade">看订阅</a></li>
-      <li>装 Claude Code：装好 <a href="#" data-open="https://code.visualstudio.com/">VS Code</a>，左边「扩展」里搜 <b>Claude Code</b> 点安装；或者照 <a href="#" data-open="https://docs.claude.com/en/docs/claude-code/setup">官方教程</a> 装命令行版。</li>
-      <li>打开一次 Claude Code，照提示用你的 Claude 账号登录。</li>
-      <li>回到这里点「重新检查」，找到了就点「用 Claude Code 当大脑」。</li>
-    </ol>
-    <div class="row"><button id="cRecheck">重新检查</button><button class="p" id="cUse" ${S.claude ? '' : 'disabled'}>用 Claude Code 当大脑</button></div></div>`;
-  else box.innerHTML = `<div class="card pop"><h2><span class="lg" style="background:${p.lg[0]};width:30px;height:30px;border-radius:9px;display:inline-grid;place-items:center;color:#fff;font-size:13px">${p.lg[1]}</span> ${esc(p.name)}</h2>
-    <h3>怎么拿到 key</h3><ol class="steps">${p.steps.map(s => `<li>${s}</li>`).join('')}</ol>
-    ${p.shot ? `<img class="shot" src="guide/${p.shot}.svg" alt="示意图">` : ''}
-    <label class="f">接口地址 <input type="text" id="aBase" value="${esc(p.base)}"></label>
-    <label class="f">模型名 <input type="text" id="aModel" value="${esc(p.model)}" placeholder="照上面的步骤填"></label>
-    <label class="f">API key <input type="password" id="aKey" placeholder="${/127\.0\.0\.1/.test(p.base) ? '本机的一般不用填' : '把复制的 key 粘贴到这里'}"></label>
-    <div class="row"><button id="aTest">🔌 测试一下</button><button class="p" id="aSave">保存，用它当大脑</button></div><div class="result" id="aMsg"></div></div>`;
-  // 当前用的就是这一家：把已保存的填回去
-  if (!p.kind && currentPv() === id && S.api) { $('aBase').value = S.api.base || p.base; $('aModel').value = S.api.model || p.model; if (S.api.key) $('aKey').value = S.api.key; }
-  wirePanel(p);
-  if (scroll) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-let plan = null;
-function wirePanel(p) {
-  if (p.kind === 'local') {
-    $('lCheck').onclick = e => busyBtn(e.target, async () => {
-      plan = await api('/api/llm/check');
-      const h = plan.hw;
-      const rows = [['显卡', h.nvidia ? `${h.nvidia.name}，${h.nvidia.vramGB}GB 显存，驱动 ${h.nvidia.driver}` : (h.gpus.join('、') || '没找到')], ['内存', h.ramGB + ' GB'], ['CPU', `${h.cpu}（${h.cores} 线程）`], ['安装盘剩余', plan.free == null ? '—' : plan.free + ' GB']];
-      const verdict = plan.tier === 'api' ? `<div class="note bad"><b>这台电脑带不动本地模型。</b>建议选线上 API（DeepSeek 最便宜，几块钱能玩很久）。</div>`
-        : `<div class="note ok"><b>✅ 可以装：${esc(plan.model.label)}</b>，用 ${plan.build === 'cuda' ? 'NVIDIA 显卡' : plan.build === 'vulkan' ? 'Vulkan（AMD / Intel 显卡）' : 'CPU'} 跑，要下载约 ${plan.needGB}GB。</div>`;
-      $('lReport').innerHTML = `<table class="kv" style="margin-top:12px">${rows.map(r => `<tr><td>${r[0]}</td><td>${esc(r[1])}</td></tr>`).join('')}</table>${verdict}${plan.why.map(w => `<p class="soft">· ${esc(w)}</p>`).join('')}${S.game ? '' : '<div class="note bad">先去「游戏本体」装游戏。</div>'}`;
-      $('lInstall').disabled = plan.tier === 'api' || !S.game; $('lInstall').classList.toggle('p', !$('lInstall').disabled);
-    });
-    $('lInstall').onclick = () => { api('/api/llm/install', { tier: plan.tier, build: plan.build }); toast('开始下载，十几 GB，慢慢来…'); };
-    $('lTest').onclick = () => api('/api/llm/test', {});
-    $('lUse').onclick = async () => { await api('/api/brain', { brain: 'api', api: { base: 'http://127.0.0.1:8080/v1', model: 'local', key: '' } }); toast('大脑换成本地模型了，重新打开游戏生效', 'ok'); refresh(); };
-  } else if (p.kind === 'claude') {
-    $('cRecheck').onclick = e => busyBtn(e.target, async () => { await refresh(); showPv('claudecode'); toast(S.claude ? '找到了 Claude Code' : '还是没找到', S.claude ? 'ok' : 'bad'); });
-    $('cUse').onclick = async () => { const r = await api('/api/brain', { brain: 'claude' }).catch(e => ({ error: e.message })); r.ok ? toast('大脑换成 Claude Code 了', 'ok') : toast(r.error, 'bad'); refresh(); };
-  } else {
-    const body = () => ({ base: $('aBase').value.trim(), model: $('aModel').value.trim(), key: $('aKey').value.trim() });
-    $('aTest').onclick = e => busyBtn(e.target, async () => {
-      const b = body(); if (!b.base || !b.model) return $('aMsg').innerHTML = '<span class="bad">接口地址和模型名都要填</span>';
-      const r = await api('/api/brain/test', { api: b }).catch(e => ({ error: e.message }));
-      $('aMsg').innerHTML = r.ok ? `<span class="ok pop" style="display:inline-block">✅ 通了！它说：「${esc(r.reply)}」</span>` : `<span class="bad">❌ ${esc(r.error)}</span>`;
-    });
-    $('aSave').onclick = async () => {
-      const b = body(); if (!b.base || !b.model) return toast('接口地址和模型名都要填', 'bad');
-      const r = await api('/api/brain', { brain: 'api', api: b }).catch(e => ({ error: e.message }));
-      r.ok ? toast('保存好了，重新打开游戏生效', 'ok') : toast(r.error, 'bad'); refresh();
-    };
-  }
-}
+// 每一家的步骤、自动找、推荐模型在 llm.js
 
 // ---------- 配音 ----------
 $('tCheck').onclick = e => busyBtn(e.target, async () => {
@@ -598,5 +511,6 @@ $('dGo').onclick = () => {
 
 refresh().then(() => { go(location.hash.slice(1) || 'home'); checkUpdate(); const c = currentPv(); if (c && brainLabel()) showPv(c, false); });
 </script>
+<script src="llm.js"></script>
 </body>
 </html>

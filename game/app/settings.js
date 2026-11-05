@@ -25,7 +25,8 @@
   #eciSet .qr { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; }
   #eciSet .qr div { text-align: center; font-size: 12px; word-break: break-all; max-width: 200px; }
   #eciSet .qr img { width: 180px; height: 180px; background: #fff; padding: 6px; border-radius: 8px; }
-  #eciSetBtn { position: fixed; right: 12px; bottom: 12px; z-index: 9998; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line, #e2d3c2); background: var(--card, #fffaf4); font-size: 20px; cursor: pointer; }`;
+  header { padding-right: 64px !important; }
+  #eciSetBtn { position: fixed; right: 14px; top: 10px; display: grid; place-items: center; padding: 0; line-height: 1; z-index: 9998; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line, #e2d3c2); background: var(--card, #fffaf4); font-size: 20px; cursor: pointer; }`;
   document.head.insertAdjacentHTML('beforeend', `<style>${css}</style>`);
   document.body.insertAdjacentHTML('beforeend', `
   <button id="eciSetBtn" title="设置">⚙️</button>
@@ -70,7 +71,7 @@
     $('sQr').innerHTML = r.urls.map(u => {
       const q = qrcode(0, 'M'); q.addData(u); q.make();
       return `<div><img src="${q.createDataURL(6, 0)}" alt="">${u.replace(/\?t=.*/, '')}</div>`;
-    }).join('') + '<div class="msg" style="max-width:none">用手机 App 扫码；手机和电脑要连同一个 Wi-Fi。</div>';
+    }).join('') + '<div class="msg" style="max-width:none">用手机相机扫码（安卓、iPhone 都行），打开后点「添加到主屏幕」；手机和电脑要连同一个 Wi-Fi。</div>';
   }
   async function open() {
     const c = await fetch('/api/config').then(r => r.json());
