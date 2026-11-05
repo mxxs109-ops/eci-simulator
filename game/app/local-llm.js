@@ -127,7 +127,27 @@ function create(gameDir, onUpdate, target, ctx) {
   let final = false;   // Claude 写完了（finish 调过了）
   // 本地模型有时会把上一轮已经写过的一大段原样抄回来：一发现就停，抄的那截剪掉，再从剪开处接着写
   const seen = (ctx?.history || []).filter(h => h.role !== 'user').map(h => h.text);
+  // 逐句去重：句子拆成两个字一组，和见过的句子比，重合九成以上才算重复（她允许适量重复，只拦几乎一字不差的）
+  const norm = x => x.replace(/[\s*（）()「」“”"'、，,。！？!?…—\-：:；;]/g, '');
+  const grams = x => { const g = new Set(); for (let i = 0; i < x.length - 1; i++) g.add(x.slice(i, i + 2)); return g; };
+  const seenSents = [];
+  const addSeen = t => { for (const p of String(t || '').split(/[。！？!?\n]/)) { const x = norm(p); if (x.length >= 12) seenSents.push(grams(x)); } };
+  seen.forEach(addSeen);
+  function nearDup(sent) {
+    const x = norm(sent); if (x.length < 12) return false;
+    const g = grams(x);
+    return seenSents.some(h => { let same = 0; for (const k of g) if (h.has(k)) same++; return same / Math.min(g.size, h.size) >= 0.9; });
+  }
   function copying(job) {
+    // 刚写完一句：和见过的句子太像，就剪掉这一句，让它接着写新的
+    const m = job.text.match(/([^。！？!?\n]{12,}[。！？!?])\s*$/);
+    if (m && nearDup(m[1])) {
+      job.text = job.text.slice(0, job.text.length - m[0].length);
+      job.cut = (job.cut || 0) + 1;
+      (job.banned = job.banned || []).push(m[1].trim());
+      console.log('[本地模型] 这一句和前面写过的太像，剪掉：' + m[1].slice(0, 20));
+      return true;
+    }
     const n = job.text.length;
     if (n < 60 || !seen.some(t => t.includes(job.text.slice(n - 60)))) return false;
     let i = n - 60;
@@ -141,12 +161,17 @@ function create(gameDir, onUpdate, target, ctx) {
   async function once(job, messages) {
     const ac = new AbortController();
     let copied = false;
-    const msgs = job.text ? [...messages, { role: 'assistant', content: job.text }] : messages;
+    // 剪掉过的句子：明确告诉它不准再写
+    let base = messages;
+    if (job.banned && job.banned.length) {
+      base = messages.map((x, i) => i === 0 ? { ...x, content: x.content + '\n\n下面这些句子前面已经写过了，绝对不准再写，换几个字也不行；接下来要写新的动作、新的感受、新的说法：\n' + [...new Set(job.banned)].slice(-12).map(b => '- ' + b).join('\n') } : x);
+    }
+    const msgs = job.text ? [...base, { role: 'assistant', content: job.text }] : base;
     const r = await fetch(T.base.replace(/\/+$/, '') + '/chat/completions', {
       signal: ac.signal,
       method: 'POST', headers: { 'Content-Type': 'application/json', ...(T.key ? { Authorization: 'Bearer ' + T.key } : {}) },
       body: JSON.stringify({ ...(T.model ? { model: T.model } : {}), messages: msgs, stream: true, max_tokens: job.max || 6000,
-        temperature: job.frag ? 0.7 : 0.95, top_p: 0.92, top_k: 50, presence_penalty: 1.0,
+        temperature: Math.min(1.1, (job.frag ? 0.7 : 0.95) + 0.05 * (job.cut || 0)), top_p: 0.92, top_k: 50, presence_penalty: 1.0,
         chat_template_kwargs: { enable_thinking: false } }),
     });
     if (!r.ok) throw new Error('本地模型 ' + r.status);
@@ -194,10 +219,13 @@ function create(gameDir, onUpdate, target, ctx) {
       try {
         if (!(await up(T))) throw new Error('本地模型没开');
         const messages = buildMessages(gameDir, brief, before, ctx, after);
+        addSeen(before);
         // 照抄被剪掉、或者写得不够长就停了：从停下的地方接着写新的，最多接 5 次
-        const frag = fragLen(brief), minLen = frag ? Math.round(frag * 0.6) : MIN_LEN;
+        // 她这一轮点名了亲密动作：交给本地模型的每一段至少 1200 字（Claude 给的字数少了也按 1200 写，写到 960 字以上才停）
+        const asked = /舔|含|吞|吸|口交|插|操|干我|射|骑|后入|乳|胸|龙根|阴茎|肉棒|小穴|做爱|性行为|色情/.test(ctx?.her || '');
+        const frag = fragLen(brief) ? Math.max(fragLen(brief), asked ? 1200 : 0) : 0, minLen = frag ? Math.round(frag * (asked ? 0.8 : 0.6)) : MIN_LEN;
         job.frag = !!frag; job.max = frag ? frag * 2 : 6000;
-        for (let k = 0, stuck = 0; k < 6; k++) {
+        for (let k = 0, stuck = 0; k < 12; k++) {
           const len0 = job.text.trim().length;
           const copied = await once(job, messages);
           if (!copied && job.text.trim().length >= minLen) break;
@@ -206,6 +234,7 @@ function create(gameDir, onUpdate, target, ctx) {
           console.log(`[本地模型] ${copied ? '剪掉照抄的一截' : '才写了 ' + job.text.trim().length + ' 字'}，接着写`);
         }
         job.text = clean(job.text);
+        addSeen(job.text);
       } catch (e) {
         console.log('[本地模型] ' + e.message + (job.text ? '，写到这里为止' : '，这一段跳过'));
         job.text = clean(job.text);
