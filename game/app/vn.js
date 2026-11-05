@@ -105,6 +105,7 @@
     for (; streamFed < ready; streamFed++) pages.push(ps[streamFed]);
     if (waiting && idx < pages.length - 1 && !typing) { waiting = false; go(idx + 1); }   // 她点过“下一页”在等：新的一段来了再翻
     paintCount();
+    preload();   // 新的一页进来了：配音接着往后生成
   }
   // 发完了：把最后一段也放进去
   setInterval(() => {
@@ -314,6 +315,22 @@
     return voiceUrls.get(k);
   }
   const pageUrls = i => voiceOf(i).map(segUrl);
+  // 后面所有页的配音都提前生成：一页一页来（配音只有一张显卡，一起挤反而拖慢正在看的那页）；
+  // 翻页时从下一页重新开始排；剧情还在写、新的一页进来了也接着排
+  let preRun = 0, preBusy = false, preFrom = 0;
+  async function preload(from) {
+    if (from != null) { preFrom = from; preRun++; }
+    else if (!preRun) preFrom = Math.max(0, idx);   // 还没翻过页：从她现在看的这页开始，不从第一页
+    if (preBusy) return;
+    preBusy = true;
+    try {
+      for (let run = preRun, k = preFrom; ; k++) {
+        if (run !== preRun) { run = preRun; k = preFrom; }   // 她翻页了：从新位置重新排
+        if (!voiceOn || !voiceUp || k >= pages.length) break;
+        await Promise.all(pageUrls(k));
+      }
+    } finally { preBusy = false; }
+  }
   /* ---------- 自动播放：念完（没配音就按字数停一会儿）自动翻页 ---------- */
   let autoOn = (() => { try { return localStorage.getItem('vnAuto') === 'on'; } catch { return false; } })();
   let vtok = 0, autoT = null, voicing = false;
@@ -332,7 +349,7 @@
     stopVoice(); const tok = vtok;
     if (!voiceOn || !voiceUp) { if (autoOn) autoNext(i, readMs(i)); return; }
     const urls = pageUrls(i);
-    for (let k = 1; k <= 3; k++) pageUrls(i + k);   // 后面几页先生成好
+    Promise.all(urls).then(() => preload(i + 1));   // 这一页的先出来，再从下一页往后全部生成
     voicing = true;
     for (const pu of urls) {
       const u = await pu; if (tok !== vtok) return;
