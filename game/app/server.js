@@ -1025,7 +1025,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'no-cache' });
       return fs.createReadStream(path.join(APP_DIR, 'mobile.css')).pipe(res);
     }
-    if (req.method === 'GET' && /^\/(inv|vn|play|settings|vendor\/qrcode|mobile|diary)\.js$/.test(url)) {
+    if (req.method === 'GET' && /^\/(inv|vn|play|skills|settings|vendor\/qrcode|mobile|diary)\.js$/.test(url)) {
       res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache' });
       return fs.createReadStream(path.join(APP_DIR, url.slice(1))).pipe(res);
     }

@@ -516,6 +516,8 @@
       <div class="hpbox mine"><b>${me.name}</b> Lv${me.lv}<div class="hpbar"><i id="hpMe"></i></div><small id="hpMeT">${me.hp}/${me.max}</small></div>
       <div class="blog"><div class="msg2" id="bMsg"></div><div class="moves" id="bMoves"></div><div class="row2" id="bRow"></div></div>`);
     const bx = box(), sMe = $q('#sMe'), sFoe = $q('#sFoe');
+    // 攻击图：先在后台试着载一下，有才用
+    let atkImg = null; { const u = '/game/' + ['立绘', '抠图', name + '-攻击.png'].map(encodeURIComponent).join('/'); const t = new Image(); t.onload = () => { atkImg = u; }; t.src = u; }
     const say = async (t, ms = 900) => { $q('#bMsg').textContent = t; await sleep(ms); };
     const setHp = () => {
       for (const [u, id] of [[me, 'hpMe'], [foe, 'hpFoe']]) {
@@ -551,10 +553,13 @@
         d.animate([{ transform: 'translate(-50%,0) scale(.4)', opacity: 0 }, { transform: 'translate(-50%,-30px) scale(1.3)', opacity: 1, offset: .3 }, { transform: 'translate(-50%,-60px) scale(1)', opacity: 0 }], { duration: 900 }).onfinish = () => d.remove();
         setHp(); await sleep(450);
         if (e2 > 1) await say('效果拔群！', 700); else if (e2 < 1) await say('效果不太好……', 700);
+        // 反伤：被近身打中，打人的也疼
+        if (phys && t.pas && t.pas.thorns) { const back = Math.max(1, Math.round(dmg * t.pas.thorns)); u.hp -= back; replay(uEl, 'hit'); setHp(); await say(`${u.name}被反震伤了 ${back}！`, 600); }
         if (ef.drain) { u.hp = Math.min(u.max, u.hp + Math.round(dmg * ef.drain)); setHp(); await say(`${u.name}吸回了一些体力！`, 600); }
-        if (ef.para && Math.random() < ef.para && !t.para) { t.para = true; await say(`${t.name}麻痹了！`, 700); }
-        if (ef.conf && Math.random() < ef.conf && !t.conf) { t.conf = 2; await say(`${t.name}混乱了！`, 700); }
-        if (ef.poison && Math.random() < ef.poison && !t.poison) { t.poison = true; await say(`${t.name}中毒了！`, 700); }
+        const immune = t.pas && t.pas.statusImmune;
+        if (ef.para && !immune && Math.random() < ef.para && !t.para) { t.para = true; await say(`${t.name}麻痹了！`, 700); }
+        if (ef.conf && !immune && Math.random() < ef.conf && !t.conf) { t.conf = 2; await say(`${t.name}混乱了！`, 700); }
+        if (ef.poison && !immune && Math.random() < ef.poison && !t.poison) { t.poison = true; await say(`${t.name}中毒了！`, 700); }
         if (ef.foeSpd) { t.st.spd = Math.max(-3, t.st.spd + ef.foeSpd); await say(`${t.name}的速度降低了！`, 600); }
         if (ef.foeDef && Math.random() < (ef.p || 1)) { t.st.def = Math.max(-3, t.st.def - 1); await say(`${t.name}的防御降低了！`, 600); }
       } else {
@@ -626,7 +631,8 @@
   Object.assign(MOVES, { 火焰牙: ['火', 65, 95, { para: .1 }], 烈焰冲: ['火', 110, 90] });
   // 近身招：用「攻击」，不耗灵力；其余是异能：用「灵力」，按威力耗灵力
   const PHYS = new Set(['撞击', '抓', '咬住', '夹住', '劈开', '咬碎', '龙爪', '冰牙', '火焰牙', '毒牙', '暗袭', '翅膀攻击', '啄', '紧束', '缠绕', '地狱突刺', '十字毒刃']);
-  const COST = mv => { const [mt, pw] = MOVES[mv]; return PHYS.has(mv) || mt === '一般' && pw > 0 ? 0 : !pw ? 10 : pw >= 100 ? 40 : pw >= 80 ? 25 : 15; };
+  const HMETA = {};   // 专属招式：{ cost, phys, tier, desc }
+  const COST = mv => { if (HMETA[mv]) return HMETA[mv].cost; const [mt, pw] = MOVES[mv]; return PHYS.has(mv) || mt === '一般' && pw > 0 ? 0 : !pw ? 10 : pw >= 100 ? 40 : pw >= 80 ? 25 : 15; };
   // 兽夫的敌人：按地点，带阶位
   const HFOES = {
     院外林子: [['灰狼群', '🐺', ['恶'], ['咬住', '抓', '嚎叫'], 1], ['赤焰雉', '🐓', ['火', '飞行'], ['火花', '啄', '翅膀攻击'], 1], ['臭臭兽', '🦨', ['毒'], ['毒雾', '抓', '毒牙'], 1]],
@@ -652,12 +658,23 @@
     stageBusy = true;
     const egg = EGGS.find(e => e[0] === name), kin = egg ? egg[2] : '';
     const raceKey = Object.keys(RACE_TYPES).find(k => kin.includes(k)) || kin;
-    const types = (LINES[kin] && LINES[kin].types) || RACE_TYPES[raceKey] || ['一般'];
+    let types = (LINES[kin] && LINES[kin].types) || RACE_TYPES[raceKey] || ['一般'];
+    if ((window.HUSBAND_SKILLS || {})[name]) types = window.HUSBAND_SKILLS[name].types;
     // 技能：档案里写了「技能」就用写的（招式表里有的），不然用他那一族成年体的招 / 按属性配一套
-    let moves = (info.skills.match(/[^｜|，,、\s（）()]+/g) || []).filter(m => MOVES[m]).slice(0, 4);
-    if (moves.length < 4) moves = ((LINES[kin] && LINES[kin].forms['成年体']) || TYPE_MOVES[types[0]] || TYPE_MOVES.恶).slice();
-    // 灵力全无也得能打：没有不耗灵力的攻击招，就把最后一招换成「劈开」
-    if (!moves.some(m => COST(m) === 0 && MOVES[m][1] > 0)) moves[moves.length - 1] = '劈开';
+    // 专属技能（app/skills.js）：招式登记进招式表，按「现在的阶」解锁；没解锁的灰着显示几阶解锁
+    const HS = (window.HUSBAND_SKILLS || {})[name];
+    let moves, locked = [];
+    if (HS) {
+      for (const m of HS.moves) { MOVES[m.name] = [m.type, m.power, m.acc, m.ef || {}]; HMETA[m.name] = { cost: m.cost || 0, phys: !!m.phys, tier: m.tier || 0, desc: m.desc || '' }; }
+      const now = tierOf(info.tier) < 1 ? 0 : tierOf(info.tier);
+      moves = HS.moves.filter(m => (m.tier || 0) <= now).map(m => m.name);
+      locked = HS.moves.filter(m => (m.tier || 0) > now).map(m => m.name);
+    } else {
+      moves = (info.skills.match(/[^｜|，,、\s（）()]+/g) || []).filter(m => MOVES[m]).slice(0, 4);
+      if (moves.length < 4) moves = ((LINES[kin] && LINES[kin].forms['成年体']) || TYPE_MOVES[types[0]] || TYPE_MOVES.恶).slice();
+      // 灵力全无也得能打：没有不耗灵力的攻击招，就把最后一招换成「劈开」
+      if (!moves.some(m => COST(m) === 0 && MOVES[m][1] > 0)) moves[moves.length - 1] = '劈开';
+    }
     const places = Object.keys(HFOES);
     openStage(`<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#3b2f25">
       <div style="font:700 22px STKaiti,KaiTi,serif">${name}去哪里打？</div>
@@ -669,7 +686,7 @@
     const pool = HFOES[place], w = pool[Math.floor(Math.random() * pool.length)];
     const ft = w[4], cap = v => Math.min(100, Math.round(v));
     const t0 = tierOf(info.tier);
-    const me = { name, lv: Math.round(t0 * 10), types, moves, hp: info.hp[0], max: info.hp[1], mp: info.mp[0], mpMax: info.mp[1], atk: Math.max(5, info.atk), sp: Math.max(5, info.sp), def: Math.max(5, info.def), spd: Math.max(5, info.spd), st: { atk: 0, def: 0, spd: 0 } };
+    const me = { name, lv: Math.round(t0 * 10), types, moves, hp: info.hp[0], max: info.hp[1], mp: info.mp[0], mpMax: info.mp[1], atk: Math.max(5, info.atk), sp: Math.max(5, info.sp), def: Math.max(5, info.def), spd: Math.max(5, info.spd), st: { atk: 0, def: 0, spd: 0 }, pas: (HS && HS.passive && HS.passive.effect) || {} };
     const fhp = Math.round(ft * 100 * rnd(.8, 1.1));
     const foe = { name: w[0], lv: ft * 10, types: w[2], moves: w[3], hp: fhp, max: fhp, mp: 999, atk: cap(ft * 12 + rnd(0, 15)), sp: cap(ft * 12 + rnd(0, 15)), def: cap(ft * 12 + rnd(0, 15)), spd: cap(ft * 12 + rnd(0, 15)), st: { atk: 0, def: 0, spd: 0 } };
     let potions = 3;
@@ -679,6 +696,8 @@
       <div class="hpbox mine"><b>${me.name}</b> ${esc0(info.tier.replace(/（.*$/, ''))}<div class="hpbar"><i id="hpMe"></i></div><small id="hpMeT"></small><div class="hpbar mp"><i id="mpMe"></i></div><small class="mpl" id="mpMeT"></small></div>
       <div class="blog"><div class="msg2" id="bMsg"></div><div class="moves" id="bMoves"></div><div class="row2" id="bRow"></div></div>`, 'hb hb-' + place);
     const bx = box(), sMe = $q('#sMe'), sFoe = $q('#sFoe');
+    // 攻击图：先在后台试着载一下，有才用
+    let atkImg = null; { const u = '/game/' + ['立绘', '抠图', name + '-攻击.png'].map(encodeURIComponent).join('/'); const t = new Image(); t.onload = () => { atkImg = u; }; t.src = u; }
     const say = async (t, ms = 900) => { $q('#bMsg').textContent = t; await sleep(ms); };
     const setHp = () => {
       for (const [u, id] of [[me, 'hpMe'], [foe, 'hpFoe']]) {
@@ -695,6 +714,7 @@
       const [mt, pw, acc, ef = {}] = MOVES[mv];
       if (u === me) { me.mp = Math.max(0, me.mp - COST(mv)); setHp(); }
       await say(`${u.name}使出了「${mv}」！`, 500);
+      if (u === me && pw > 0 && atkImg) { const im = uEl.querySelector('img'); if (im) { const idle = im.src; im.src = atkImg; setTimeout(() => { im.src = idle; }, 1200); } }
       const dir = uEl === sMe ? 1 : -1;
       await uEl.animate([{ transform: 'scale(1,1)' }, { transform: 'scale(1.12,.86)' }], { duration: 180, fill: 'forwards' }).finished;
       if (pw > 0) {
@@ -707,18 +727,27 @@
         if (mt === '冰') burst(bx, x, y, { n: 8, text: ['❄'], size: [14, 22], dist: [30, 90] });
         if (mt === '龙') burst(bx, x, y, { n: 6, text: ['✦'], size: [20, 30], dist: [20, 80] });
         // 近身招看「攻击」，异能看「灵力」
-        const A = (u === me && COST(mv) > 0 ? u.sp : u.atk) * (1 + u.st.atk * .5), D = t.def * (1 + t.st.def * .5);
+        const phys = HMETA[mv] ? HMETA[mv].phys : COST(mv) === 0;
+        const A = (u === me && !phys ? u.sp : u.atk) * (1 + u.st.atk * .5), D = t.def * (1 + t.st.def * .5);
         const e2 = eff(mt, t.types), stab = u.types.includes(mt) ? 1.5 : 1;
-        const dmg = Math.max(1, Math.round(((2 * u.lv / 5 + 2) * pw * A / D / 50 + 2) * 2 * stab * e2 * rnd(.85, 1)));
+        const up = u.pas && u.pas.lowHpBoost === mt && u.hp < u.max / 3 ? 1.5 : 1;
+        const crit = u.pas && u.pas.critUp && Math.random() < u.pas.critUp ? 1.5 : 1;
+        const guard = t.pas && t.pas.guard ? 1 - t.pas.guard : 1;
+        const dmg = Math.max(1, Math.round(((2 * u.lv / 5 + 2) * pw * A / D / 50 + 2) * 2 * stab * e2 * up * crit * guard * rnd(.85, 1)));
+        if (crit > 1) say('会心一击！', 1);
+        if (up > 1) say(`${u.name}的「${HS && HS.passive ? HS.passive.name : '特性'}」发动了！`, 1);
         t.hp -= dmg; replay(tEl, 'hit'); shake(bx); if (e2 > 1) flash(bx, '#fff6c8');
         const d = document.createElement('div'); d.className = 'dmg'; d.textContent = '-' + dmg; d.style.left = x + 'px'; d.style.top = (y - 40) + 'px'; bx.appendChild(d);
         d.animate([{ transform: 'translate(-50%,0) scale(.4)', opacity: 0 }, { transform: 'translate(-50%,-30px) scale(1.3)', opacity: 1, offset: .3 }, { transform: 'translate(-50%,-60px) scale(1)', opacity: 0 }], { duration: 900 }).onfinish = () => d.remove();
         setHp(); await sleep(450);
         if (e2 > 1) await say('效果拔群！', 700); else if (e2 < 1) await say('效果不太好……', 700);
+        // 反伤：被近身打中，打人的也疼
+        if (phys && t.pas && t.pas.thorns) { const back = Math.max(1, Math.round(dmg * t.pas.thorns)); u.hp -= back; replay(uEl, 'hit'); setHp(); await say(`${u.name}被反震伤了 ${back}！`, 600); }
         if (ef.drain) { u.hp = Math.min(u.max, u.hp + Math.round(dmg * ef.drain)); setHp(); await say(`${u.name}吸回了一些体力！`, 600); }
-        if (ef.para && Math.random() < ef.para && !t.para) { t.para = true; await say(`${t.name}麻痹了！`, 700); }
-        if (ef.conf && Math.random() < ef.conf && !t.conf) { t.conf = 2; await say(`${t.name}混乱了！`, 700); }
-        if (ef.poison && Math.random() < ef.poison && !t.poison) { t.poison = true; await say(`${t.name}中毒了！`, 700); }
+        const immune = t.pas && t.pas.statusImmune;
+        if (ef.para && !immune && Math.random() < ef.para && !t.para) { t.para = true; await say(`${t.name}麻痹了！`, 700); }
+        if (ef.conf && !immune && Math.random() < ef.conf && !t.conf) { t.conf = 2; await say(`${t.name}混乱了！`, 700); }
+        if (ef.poison && !immune && Math.random() < ef.poison && !t.poison) { t.poison = true; await say(`${t.name}中毒了！`, 700); }
         if (ef.foeSpd) { t.st.spd = Math.max(-3, t.st.spd + ef.foeSpd); await say(`${t.name}的速度降低了！`, 600); }
         if (ef.foeDef && Math.random() < (ef.p || 1)) { t.st.def = Math.max(-3, t.st.def - 1); await say(`${t.name}的防御降低了！`, 600); }
       } else {
@@ -752,13 +781,14 @@
       if (auto) { await sleep(300); choice = me.hp < me.max * .3 && potions > 0 && Math.random() < .6 ? '灵泉水' : pickAuto(); }
       else {
         $q('#bMsg').textContent = `${me.name}要怎么做？`;
-        $q('#bMoves').innerHTML = me.moves.map(m => `<button class="t-${MOVES[m][0]}" data-mv="${m}" ${usable(m) ? '' : 'disabled'}>${m}<small>${MOVES[m][0]}${MOVES[m][1] ? ' · ' + MOVES[m][1] : ''}${COST(m) ? ` · <b>💠${COST(m)}</b>` : ''}</small></button>`).join('');
+        $q('#bMoves').innerHTML = me.moves.map(m => `<button class="t-${MOVES[m][0]}" data-mv="${m}" title="${esc0((HMETA[m] || {}).desc || '')}" ${usable(m) ? '' : 'disabled'}>${m}<small>${MOVES[m][0]}${MOVES[m][1] ? ' · ' + MOVES[m][1] : ''}${COST(m) ? ` · <b>💠${COST(m)}</b>` : ''}</small></button>`).join('') + locked.map(m => `<button class="t-${MOVES[m][0]}" disabled title="${esc0(HMETA[m].desc)}">🔒 ${m}<small>${'一二三四五六七八九'[HMETA[m].tier - 1] || HMETA[m].tier}阶解锁</small></button>`).join('');
         $q('#bRow').innerHTML = `<button data-mv="灵泉水">💧 灵泉水（剩 ${potions}）</button><button data-mv="逃跑">🏃 撤</button>`;
         choice = await new Promise(res => $q('.blog').onclick = e => { const m = e.target.closest('[data-mv]'); if (m && !m.disabled && !(m.dataset.mv === '灵泉水' && potions <= 0)) res(m.dataset.mv); });
         $q('#bMoves').innerHTML = ''; $q('#bRow').innerHTML = '';
       }
       if (choice === '逃跑') { await say(`${me.name}护着退了回来。`, 900); result = 'run'; break; }
-      const order = (me.spd * (1 + me.st.spd * .5)) >= foe.spd ? ['me', 'foe'] : ['foe', 'me'];
+      const order = (me.pas.firstStrike && !me.struck) || (me.spd * (1 + me.st.spd * .5)) >= foe.spd ? ['me', 'foe'] : ['foe', 'me'];
+      me.struck = true;
       for (const who of order) {
         if (who === 'me') {
           if (choice === '灵泉水') { potions--; me.hp = Math.min(me.max, me.hp + Math.round(me.max * .3)); const [x, y] = center(sMe); burst(bx, x, y, { n: 14, text: ['💧', '✨'], size: [14, 22], dist: [30, 90] }); setHp(); await say(`${me.name}喝了一口灵泉水，血量回来了一些！`); }
@@ -767,6 +797,8 @@
         if (foe.hp <= 0) { await fainted(foe, sFoe); result = 'win'; break; }
         if (me.hp <= 0) { await fainted(me, sMe); result = 'lose'; break; }
       }
+      if (!result && me.pas.regen && me.hp > 0 && me.hp < me.max) { me.hp = Math.min(me.max, me.hp + Math.round(me.max * me.pas.regen)); setHp(); await say(`${me.name}的伤口慢慢合上了一些。`, 500); }
+      if (!result && me.pas.mpRegen && me.mp < me.mpMax) { me.mp = Math.min(me.mpMax, me.mp + me.pas.mpRegen); setHp(); }
       if (!result) for (const [u, el] of [[me, sMe], [foe, sFoe]]) if (u.poison && u.hp > 0) { u.hp -= Math.max(1, Math.round(u.max / 14)); replay(el, 'hit'); setHp(); await say(`${u.name}受到了毒的伤害！`, 600); if (u.hp <= 0) { await fainted(u, el); result = u === me ? 'lose' : 'win'; } }
     }
     me.hp = Math.max(0, me.hp);
