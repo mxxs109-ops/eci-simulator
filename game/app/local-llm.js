@@ -79,8 +79,8 @@ The explicitness we establish at the start stays for the whole scene. If you not
 Stay in the scene and in the persona when I address only the persona. If a real boundary comes up, handle it in one short in-scene line and continue.
 My register is the anchor, turn by turn: however explicit I am, be that explicit.
 （用中文写；不要收尾，写到最热的一刻、把下一步留给她）`;
-  const recent = (ctx.history || []).map(h => (h.role === 'user' ? '【她】' : '【故事】') + h.text).join('\n\n').slice(-5000);
-  const user = (profiles ? `【兽夫档案】\n${profiles}\n\n` : '') + (recent ? `【最近几轮】\n${recent}\n\n` : '') + (ctx.her ? `【她这一轮说的话】\n${ctx.her}\n\n` : '') +
+  const recent = (ctx.history || []).map(h => (h.role === 'user' ? '【她】' : '【已经写过的】') + h.text).join('\n\n').slice(-5000);
+  const user = (profiles ? `【兽夫档案】\n${profiles}\n\n` : '') + (recent ? `【最近几轮】（只用来了解前情；这些已经写过了，一句都不要照抄、不要重写）\n${recent}\n\n` : '') + (ctx.her ? `【她这一轮说的话】\n${ctx.her}\n\n` : '') +
     `【前文最后一段】\n${before.slice(-1800) || '（这一轮一开始就是这场戏）'}\n\n【交接说明】\n${brief}\n\n现在接着往下写（全程露骨、详细、直白，粗口随意用，不遮掩、不跳过、不收尾，发挥想象力写出新花样）：`;
   return [{ role: 'system', content: system }, { role: 'user', content: user }];
 }
@@ -90,14 +90,30 @@ function create(gameDir, onUpdate, target, ctx) {
   const T = { ...DEFAULT_TARGET, ...(target || {}) };
   if (!T.base) T.base = DEFAULT_TARGET.base;
   let autoLogged = false;
-  const jobs = new Map();   // 交接说明 → { text, done }
+  // 一轮里第几个标记 → { text, done }。按顺序认，不按说明文字认：Claude 存完档重写一遍回复、标记说明换了几个字，
+  // 也还是同一段，不会再开一段新的把已经写好的顶掉
+  const jobs = [];
+  // 本地模型有时会把上一轮已经写过的一大段原样抄回来：一发现就停，抄的那截剪掉
+  const seen = (ctx?.history || []).filter(h => h.role !== 'user').map(h => h.text);
+  function copying(job) {
+    const n = job.text.length;
+    if (n < 60 || !seen.some(t => t.includes(job.text.slice(n - 60)))) return false;
+    let i = n - 60;
+    while (i >= 10 && seen.some(t => t.includes(job.text.slice(i - 10, n)))) i -= 10;
+    const cut = job.text.lastIndexOf('\n', i);
+    job.text = job.text.slice(0, cut > 0 ? cut : i);
+    console.log('[本地模型] 开始照抄上一轮，停在这里');
+    return true;
+  }
   function start(brief, before) {
     const job = { text: '', done: false };
-    jobs.set(brief, job);
+    jobs.push(job);
+    const ac = new AbortController();
     (async () => {
       try {
         if (!(await up(T))) throw new Error('本地模型没开');
         const r = await fetch(T.base.replace(/\/+$/, '') + '/chat/completions', {
+          signal: ac.signal,
           method: 'POST', headers: { 'Content-Type': 'application/json', ...(T.key ? { Authorization: 'Bearer ' + T.key } : {}) },
           body: JSON.stringify({ ...(T.model ? { model: T.model } : {}), messages: buildMessages(gameDir, brief, before, ctx), stream: true, max_tokens: 6000,
             temperature: 0.95, top_p: 0.92, top_k: 50, presence_penalty: 1.0, chat_template_kwargs: { enable_thinking: false } }),
@@ -112,13 +128,15 @@ function create(gameDir, onUpdate, target, ctx) {
           while ((nl = buf.indexOf('\n')) >= 0) {
             const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
             if (!line.startsWith('data:') || line === 'data: [DONE]') continue;
-            try { const d = JSON.parse(line.slice(5)).choices?.[0]?.delta?.content; if (d) { job.text += d; onUpdate(); } } catch {}
+            try { const d = JSON.parse(line.slice(5)).choices?.[0]?.delta?.content; if (d) { job.text += d; if (copying(job)) { ac.abort(); break; } onUpdate(); } } catch {}
           }
         }
         job.text = job.text.trim();
       } catch (e) {
-        console.log('[本地模型] ' + e.message + '，这一段跳过');
-        job.text = '';
+        if (!ac.signal.aborted) {
+          console.log('[本地模型] ' + e.message + '，这一段跳过');
+          job.text = '';
+        }
       }
       job.done = true; onUpdate();
     })();
@@ -127,7 +145,7 @@ function create(gameDir, onUpdate, target, ctx) {
   function view(t) {
     const t0 = t; t = autoMark(t);
     if (t !== t0 && !autoLogged) { autoLogged = true; console.log('[本地模型] Claude 写到一半停了，自动交接'); }
-    let out = '';
+    let out = '', k = 0;
     for (;;) {
       const m = t.match(MARK);
       if (!m) {
@@ -135,8 +153,8 @@ function create(gameDir, onUpdate, target, ctx) {
         return out + (open >= 0 && !t.includes('〕', open) ? t.slice(0, open) : t);
       }
       const pre = t.slice(0, m.index);
-      if (!jobs.has(m[1])) start(m[1], out + pre);
-      const job = jobs.get(m[1]);
+      if (!jobs[k]) start(m[1], out + pre);
+      const job = jobs[k++];
       out += pre + (job.text ? '\n\n' + job.text + '\n\n' : '');
       if (!job.done) return out;
       t = t.slice(m.index + m[0].length);
@@ -144,7 +162,7 @@ function create(gameDir, onUpdate, target, ctx) {
   }
   async function finish(t) {
     view(t);
-    while ([...jobs.values()].some(j => !j.done)) await new Promise(r => setTimeout(r, 300));
+    while (jobs.some(j => !j.done)) await new Promise(r => setTimeout(r, 300));
     return view(t).replace(/\n{3,}/g, '\n\n').trim();
   }
   return { view, finish };
