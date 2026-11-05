@@ -233,6 +233,13 @@
       nx.style.display = 'none'; return;
     }
     name.textContent = p.kind === 'say' || p.kind === 'me' ? p.who : '';   // 小结不挂名字牌，框里自己有标题
+    // 名字牌旁边的简要状态（手机上用它代替左上角的大状态框；详细的在点头像弹出的详情里）
+    const cw = p.kind === 'say' && typeof cast !== 'undefined' ? cast[p.who.split(/[、,，和]/)[0].trim()] : null;
+    if (cw) {
+      const hv = +(((cw.food && cw.food.nutrition) || '').match(/健康值\s*(\d+)/) || [])[1], d = cw.doing || '';
+      const st = /【怀孕/.test(d) ? '🥚' : /【战损】/.test(d) ? '💀' : /【易感期】/.test(d) ? '🔥' : '';
+      name.insertAdjacentHTML('beforeend', `<span class="nst"><span>❤ ${cw.favor || 0}</span>${hv >= 0 ? `<span>🩺 ${hv}</span>` : ''}${st ? `<span>${st}</span>` : ''}</span>`);
+    }
     name.style.setProperty('--c', p.kind === 'sum' ? '#b8893a' : p.kind === 'me' ? 'var(--me)' : (COLORS[p.who]) || '#8a5a3c');
     box.className = 'box ' + p.kind;
     // 说话的人：对话框左边一个头像框

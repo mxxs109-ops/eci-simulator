@@ -80,3 +80,10 @@
   #invPop .inv .main { padding: 12px 12px 30px; }
   #invPop .inv .pic { min-height: 340px; }
 }
+
+/* 名字牌旁边的简要状态：电脑上有左上角的状态框，不显示；手机上显示 */
+#vn .name .nst { display: none; }
+@media (max-width: 760px) {
+  #vn .name .nst { display: inline-flex; gap: 6px; margin-left: 10px; vertical-align: 2px; font: 600 12px "PingFang SC","Microsoft YaHei",sans-serif; letter-spacing: 0; }
+  #vn .name .nst span { background: rgba(0,0,0,.22); border-radius: 999px; padding: 0 7px; line-height: 1.6; }
+}
