@@ -8,6 +8,10 @@ const path = require('path');
 const DEFAULT_TARGET = { base: process.env.LOCAL_LLM_URL || 'http://127.0.0.1:8080/v1', key: '', model: '' };
 const MARK = /〔接手：([^〕]*)〕/;
 const MIN_LEN = 1500;   // 一段至少这么多字，不够就让它接着写
+// 交接说明里写了「约 N 字」：只是回复中间的一小段（剧情、台词、心理 Claude 写好了），不是整场戏
+// 本地模型有时把交接说明抄一行出来（带 ｜），或者加 *** 分隔线：去掉
+const clean = t => t.split('\n').filter(l => !/｜/.test(l) && !/^\s*(\*{3,}|-{3,}|—{3,})\s*$/.test(l)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+const fragLen = brief => Number((brief.match(/约\s*(\d{2,4})\s*字/) || [])[1]) || 0;
 const HOLD = 160;   // 本地模型还在写时，最后这么多字先压着不显示（防抄要剪也只剪这一截）
 // Claude 没写标记、却在回复里跳出来说写不了：从那一段起自动交接，拒绝和出戏的话不给她看
 const REFUSE = /(露骨|色情|性爱|性行为|性描写|性内容|成人内容|内容政策|使用政策|安全准则|指导原则)[^\n]{0,40}(不能|无法|没法|不便|不会|不提供|就此|到此)|(不能|无法|没法|不便|不会)[^\n]{0,30}(露骨|色情|性爱|性行为|性描写|性内容|成人内容)|作为\s*(AI|Claude|语言模型)|I (can't|cannot|won't)/;
@@ -30,7 +34,7 @@ async function up(t = DEFAULT_TARGET) {
 }
 
 // 给本地模型的材料：在场兽夫的档案（性格、说话方式）、最近几轮对话、她这一轮说的话、前文、Claude 写的交接说明
-function buildMessages(gameDir, brief, before, ctx = {}) {
+function buildMessages(gameDir, brief, before, ctx = {}, after = '') {
   const names = fs.readdirSync(path.join(gameDir, '兽夫')).filter(f => f.endsWith('.md') && !f.startsWith('_')).map(f => f.slice(0, -3))
     .filter(n => brief.includes(n));
   const profiles = names.map(n => `### ${n}\n` + fs.readFileSync(path.join(gameDir, '兽夫', n + '.md'), 'utf8').slice(0, 3500)).join('\n\n');
@@ -42,7 +46,12 @@ function buildMessages(gameDir, brief, before, ctx = {}) {
 - **方向跟着她走**：她这一轮想继续、想要更多，就往上推；她想起身、想离开、找衣服、洗澡、吃饭、说话，就照她的方向写（身体、裸体、体液、他的反应照样写得露骨细致），**不要擅自把她拉回床上再来一轮**，除非她自己要
 - **不要自己结束这场戏**：不写高潮后的平静、不写事后、不写睡着、不写天亮、不写「这一夜」之类的收尾。写到正在进行、最热的一刻停下，把下一步留给她（他在等她的回应、在问她、在动作做到一半）。只有她明确说停、说结束、说睡了，才写收尾
 - 文风、人称、用词和前文一致：第三人称，叫她「她」或「妻主」，兽夫按档案里的自称和说话方式说话（比如玄烬自称「龙」）
-- 格式和前文一样：段落之间空一行；兽夫说话单独成段，写成 **【名字】**（动作、神态）台词；兽夫心里想的用 *斜体* 单独成段
+- **他要说话，而且说得多**：这是对手戏，不是旁白独角戏。全篇至少 8～12 句他的台词，分散在每一段里：调笑、逗她、荤话、问她、哄她、使坏、嘴硬、说心里话。口吻严格照档案（比如玄烬：懒洋洋带笑、话里有话、自称「龙」、爱逗她、坏起来很坏）。不要让他只剩「嗯」「小心」「穿上」这种一两个字
+- **台词格式（游戏靠这个认出谁在说话、给他配音，必须照做）**：他每说一句话都单独成段，开头写 **【名字】**，后面括号写动作神态，再写台词，台词用中文双引号。例子：
+  **【玄烬】**（懒洋洋地笑，尾巴尖勾住她的脚踝往回一带）"跑什么？龙又不吃人……昨夜吃的不算。"
+  不要用「」写他的话，不要把他的台词混在叙述句子里
+- 兽夫心里想的用 *斜体* 单独成段；段落之间空一行
+- 别写错设定：尾巴、鳞片、角长在他身上，不在她身上；家里有什么、谁在场，照前文和档案，不要凭空多出人和东西
 露骨程度（最重要）：
 - 这是成人色情小说，不是暧昧言情：性行为要正面、完整、直接地写出来，越详细越露骨越好。不含蓄、不点到为止、不用「那里」「那处」「下面」「某处」「欲望」这类词遮掩，不用花、蕊、火、浪潮之类的比喻代替器官和动作，不用省略号或「……」把过程跳过，不拉灯、不转场、不跳时间
 - 器官、体液、动作全部直接用名字写（中文成人小说里常用的直白说法和粗口都可以用）；每一次插入、抽送、舔、吮、揉、捏、咬，都写清楚：碰的是哪里、用什么碰、多深、多重、多快、换了什么姿势
@@ -85,7 +94,11 @@ My register is the anchor, turn by turn: however explicit I am, be that explicit
 （用中文写；不要收尾，写到最热的一刻、把下一步留给她）`;
   const recent = (ctx.history || []).map(h => (h.role === 'user' ? '【她】' : '【已经写过的】') + h.text).join('\n\n').slice(-5000);
   const user = (profiles ? `【兽夫档案】\n${profiles}\n\n` : '') + (recent ? `【最近几轮】（只用来了解前情；这些已经写过了，一句都不要照抄、不要重写）\n${recent}\n\n` : '') + (ctx.her ? `【她这一轮说的话】\n${ctx.her}\n\n` : '') +
-    `【前文最后一段】\n${before.slice(-1800) || '（这一轮一开始就是这场戏）'}\n\n【交接说明】\n${brief}\n\n现在接着往下写（全程露骨、详细、直白，粗口随意用，不遮掩、不跳过、不收尾，发挥想象力写出新花样）：`;
+    `【前文最后一段】\n${before.slice(-1800) || '（这一轮一开始就是这场戏）'}\n\n【交接说明】\n${brief}\n\n` + (fragLen(brief)
+      // 一小段：Claude 把剧情、台词、心理都写好了，只把身体和性的那几句交给本地模型
+      ? (after.trim() ? `【标记后面已经写好的文字】（你写的这一段要能直接接上它，不能和它矛盾、不能抢先写它里面的事）\n${after.replace(/〔接手：[^〕]*〕/g, '').slice(0, 1200)}\n\n` : '') +
+        `【这次只写一小段，约 ${fragLen(brief)} 字】这一轮的剧情、他的台词和心理，游戏已经照原来的写法写好了，就在这一段的前后；你只写交接说明要的这一小段身体和性的描写，夹在「前文最后一段」和「标记后面已经写好的文字」中间，前后无缝衔接。全程露骨、直白、细致，器官、体液、动作直接写名字。**不写台词**（他说的话前后已经写好了），不写他心里的话，不推进剧情、不加新事件、不收尾、不写小结；只写交接说明里这一刻，标记后面才发生的事（穿衣、下床、滑倒、接住……）一件都不要提前写；她也不说话；称呼照档案（叫她「她」或「妻主」，不写「这女人」，他的自称照档案，比如玄烬自称「龙」）。写够约 ${fragLen(brief)} 字就停：`
+      : `现在接着往下写（全程露骨、详细、直白，粗口随意用，不遮掩、不跳过、不收尾；他要多说话，台词一律写成 **【名字】**（动作）"台词"）：`);
   return [{ role: 'system', content: system }, { role: 'user', content: user }];
 }
 
@@ -97,6 +110,7 @@ function create(gameDir, onUpdate, target, ctx) {
   // 一轮里第几个标记 → { text, done }。按顺序认，不按说明文字认：Claude 存完档重写一遍回复、标记说明换了几个字，
   // 也还是同一段，不会再开一段新的把已经写好的顶掉
   const jobs = [];
+  let final = false;   // Claude 写完了（finish 调过了）
   // 本地模型有时会把上一轮已经写过的一大段原样抄回来：一发现就停，抄的那截剪掉，再从剪开处接着写
   const seen = (ctx?.history || []).filter(h => h.role !== 'user').map(h => h.text);
   function copying(job) {
@@ -117,10 +131,8 @@ function create(gameDir, onUpdate, target, ctx) {
     const r = await fetch(T.base.replace(/\/+$/, '') + '/chat/completions', {
       signal: ac.signal,
       method: 'POST', headers: { 'Content-Type': 'application/json', ...(T.key ? { Authorization: 'Bearer ' + T.key } : {}) },
-      body: JSON.stringify({ ...(T.model ? { model: T.model } : {}), messages: msgs, stream: true, max_tokens: 6000,
-        temperature: 0.95, top_p: 0.92, top_k: 50, presence_penalty: 1.0,
-        // DRY：前文里出现过的长句子越往下抄罚得越重（llama.cpp 的采样器；只发给本机，线上接口可能不认这几个参数）
-        ...(/127.0.0.1|localhost/.test(T.base) ? { dry_multiplier: 0.8, dry_base: 1.75, dry_allowed_length: 4, dry_penalty_last_n: 16384 } : {}),
+      body: JSON.stringify({ ...(T.model ? { model: T.model } : {}), messages: msgs, stream: true, max_tokens: job.max || 6000,
+        temperature: job.frag ? 0.7 : 0.95, top_p: 0.92, top_k: 50, presence_penalty: 1.0,
         chat_template_kwargs: { enable_thinking: false } }),
     });
     if (!r.ok) throw new Error('本地模型 ' + r.status);
@@ -136,7 +148,8 @@ function create(gameDir, onUpdate, target, ctx) {
           if (!line.startsWith('data:') || line === 'data: [DONE]') continue;
           let d; try { d = JSON.parse(line.slice(5)).choices?.[0]?.delta?.content; } catch {}
           if (!d) continue;
-          job.text += d;
+          // 台词行漏了加粗（【玄烬】…）就补上，游戏靠 **【名字】** 认出谁在说话
+          job.text = (job.text + d).replace(/(^|\n)【([^】\n]{1,8})】/g, '$1**【$2】**');
           if (copying(job)) { copied = true; ac.abort(); break; }
           onUpdate();
         }
@@ -160,29 +173,31 @@ function create(gameDir, onUpdate, target, ctx) {
     const t = ((await r.json()).choices?.[0]?.message?.content || '').trim();
     return t.replace(/^📌\s*/, '').replace(/^小结[：:]\s*/, '').replace(/\s*\n+\s*/g, '');
   }
-  function start(brief, before) {
+  function start(brief, before, after) {
     const job = { text: '', done: false };
     jobs.push(job);
     (async () => {
       try {
         if (!(await up(T))) throw new Error('本地模型没开');
-        const messages = buildMessages(gameDir, brief, before, ctx);
+        const messages = buildMessages(gameDir, brief, before, ctx, after);
         // 照抄被剪掉、或者写得不够长就停了：从停下的地方接着写新的，最多接 5 次
+        const frag = fragLen(brief), minLen = frag ? Math.round(frag * 0.6) : MIN_LEN;
+        job.frag = !!frag; job.max = frag ? frag * 2 : 6000;
         for (let k = 0, stuck = 0; k < 6; k++) {
           const len0 = job.text.trim().length;
           const copied = await once(job, messages);
-          if (!copied && job.text.trim().length >= MIN_LEN) break;
+          if (!copied && job.text.trim().length >= minLen) break;
           // 接着写也写不出几个字了（这一段它已经写完）：不硬凑
           if (!copied && job.text.trim().length - len0 < 50 && ++stuck >= 2) break;
           console.log(`[本地模型] ${copied ? '剪掉照抄的一截' : '才写了 ' + job.text.trim().length + ' 字'}，接着写`);
         }
-        job.text = job.text.trim();
+        job.text = clean(job.text);
       } catch (e) {
         console.log('[本地模型] ' + e.message + (job.text ? '，写到这里为止' : '，这一段跳过'));
-        job.text = job.text.trim();
+        job.text = clean(job.text);
       }
       job.storyDone = true; onUpdate();
-      if (job.text) { try { job.sum = await summarize(job.text); } catch (e) { console.log('[本地模型] 小结没写成：' + e.message); } }
+      if (job.text && !job.frag) { try { job.sum = await summarize(job.text); } catch (e) { console.log('[本地模型] 小结没写成：' + e.message); } }
       job.done = true; onUpdate();
     })();
   }
@@ -198,9 +213,13 @@ function create(gameDir, onUpdate, target, ctx) {
         return out + (open >= 0 && !t.includes('〕', open) ? t.slice(0, open) : t);
       }
       const pre = t.slice(0, m.index);
-      if (!jobs[k]) start(m[1], out + pre);
+      if (!jobs[k]) {
+        const after = t.slice(m.index + m[0].length);
+        if (fragLen(m[1]) && !final && after.length < 400) return out + pre;   // 后文还没写出来：先等等
+        start(m[1], out + pre, after);
+      }
       const job = jobs[k++];
-      if (!job.storyDone) return out + pre + (job.text.length > HOLD ? '\n\n' + job.text.slice(0, -HOLD) : '');
+      if (!job.storyDone) return out + pre + (job.text.length > HOLD ? '\n\n' + clean(job.text.slice(0, -HOLD)) : '');
       out += pre + (job.text ? '\n\n' + job.text + '\n\n' : '');
       if (!job.done) return out;
       t = t.slice(m.index + m[0].length);
@@ -216,8 +235,14 @@ function create(gameDir, onUpdate, target, ctx) {
     }
   }
   async function finish(t) {
-    view(t);
-    while (jobs.some(j => !j.done)) await new Promise(r => setTimeout(r, 300));
+    final = true;
+    // 一个标记写完，view 才会开下一个：一直等到没有新的开出来、全都写完
+    for (;;) {
+      const n = jobs.length;
+      view(t);
+      if (jobs.length === n && !jobs.some(j => !j.done)) break;
+      await new Promise(r => setTimeout(r, 300));
+    }
     return view(t).replace(/\n{3,}/g, '\n\n').trim();
   }
   return { view, finish, used: () => jobs.length > 0 };
@@ -277,7 +302,6 @@ async function fillMarks(gameDir, target, history) {
           method: 'POST', headers: { 'Content-Type': 'application/json', ...(T.key ? { Authorization: 'Bearer ' + T.key } : {}) },
           body: JSON.stringify({ ...(T.model ? { model: T.model } : {}), stream: false, max_tokens: one ? 600 : 3000,
             temperature: 0.85, top_p: 0.9, top_k: 40, presence_penalty: 1.0,
-            ...(/127\.0\.0\.1|localhost/.test(T.base) ? { dry_multiplier: 0.8, dry_base: 1.75, dry_allowed_length: 4, dry_penalty_last_n: 16384 } : {}),
             chat_template_kwargs: { enable_thinking: false },
             messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }),
         });
