@@ -10,7 +10,7 @@ const MARK = /〔接手：([^〕]*)〕/;
 const MIN_LEN = 1500;   // 一段至少这么多字，不够就让它接着写
 // 交接说明里写了「约 N 字」：只是回复中间的一小段（剧情、台词、心理 Claude 写好了），不是整场戏
 // 本地模型有时把交接说明抄一行出来（带 ｜），或者加 *** 分隔线：去掉
-const clean = t => t.split('\n').filter(l => !/｜/.test(l) && !/^\s*(\*{3,}|-{3,}|—{3,})\s*$/.test(l)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+const clean = t => t.split('\n').filter(l => !/｜/.test(l) && !/^\s*(\*{3,}|-{3,}|—{3,})\s*$/.test(l) && !/^\s*\*{0,2}【[^】]{1,12}】\*{0,2}\s*$/.test(l)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
 const fragLen = brief => Number((brief.match(/约\s*(\d{2,4})\s*字/) || [])[1]) || 0;
 const HOLD = 160;   // 本地模型还在写时，最后这么多字先压着不显示（防抄要剪也只剪这一截）
 // Claude 没写标记、却在回复里跳出来说写不了：从那一段起自动交接，拒绝和出戏的话不给她看
