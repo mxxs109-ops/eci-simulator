@@ -1,4 +1,4 @@
-﻿# 恶雌模拟器 · 一键安装器
+# 恶雌模拟器 · 一键安装器
 # 用法（cmd 里，或者 Win + R 的「运行」框里，粘贴这一行回车）：
 #   powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/mxxs109-ops/eci-simulator/main/install.ps1 | iex"
 # 做的事：准备好 Node.js（没有就下一个免安装版），只下载安装器那几个文件放到 %LOCALAPPDATA%\EciSimulator，
@@ -22,7 +22,7 @@ function Fetch($url, $out, [switch]$Quiet) {
   New-Item -ItemType Directory -Force (Split-Path $out) | Out-Null
   $curl = Join-Path $env:WINDIR 'System32\curl.exe'
   if (Test-Path $curl) {
-    $ca = @('-fL', '--retry', '3', '-o', $out, $url)
+    $ca = @('-fL', '--retry', '3', '--connect-timeout', '15', '-o', $out, $url)
     if ($Quiet) { $ca = @('-s') + $ca } else { $ca = @('-#') + $ca }
     & $curl @ca
     if ($LASTEXITCODE -ne 0) { throw "下载失败：$url" }
@@ -57,6 +57,7 @@ else {
 
 # 2. 安装器：只下载仓库里 installer 文件夹的那几个文件（不拖整个游戏）
 Step 2 '下载安装器'
+Write-Host '  问 GitHub 要文件清单…'
 $dest = Join-Path $Home2 'installer'
 $tmp = Join-Path $env:TEMP 'eci-installer-new'
 if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
@@ -64,7 +65,7 @@ if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
 $files = @('installer/server.js', 'installer/shortcut.ps1', 'installer/tts_server.py', 'installer/web/index.html',
   'installer/web/icon.png', 'installer/web/icon.ico', 'installer/web/guide/deepseek.svg', 'installer/web/guide/apikey.svg')
 try {
-  $tree = Invoke-RestMethod "https://api.github.com/repos/$Repo/git/trees/$Branch`?recursive=1" -Headers @{ 'User-Agent' = 'eci-installer' }
+  $tree = Invoke-RestMethod "https://api.github.com/repos/$Repo/git/trees/$Branch`?recursive=1" -Headers @{ 'User-Agent' = 'eci-installer' } -TimeoutSec 8
   $list = @($tree.tree | Where-Object { $_.type -eq 'blob' -and $_.path -like 'installer/*' } | ForEach-Object { $_.path })
   if ($list.Count) { $files = $list }
 } catch {}
