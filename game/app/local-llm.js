@@ -1,5 +1,5 @@
 // 本地模型接手：Claude 写到 〔接手：…〕 标记时，这一段交给本地大模型（llama.cpp，OpenAI 兼容接口）写，
-// 写完拼回原位，Claude 后面写的（📌 小结）接在后面。亲密戏整段都由本地模型写，Claude 只写标记。网页上看到的是一整段连贯的回复。
+// 写完再让它写一段 📌 小结（发生了什么、戏完没完、他在等她什么），Claude 标记后面记的判定（骰子、好感）并进同一段。亲密戏整段都由本地模型写，Claude 只写标记。网页上看到的是一整段连贯的回复。
 // 本地模型没开 / 出错：标记直接去掉，Claude 前后两段照样接上。
 const fs = require('fs');
 const path = require('path');
@@ -143,6 +143,21 @@ function create(gameDir, onUpdate, target, ctx) {
     } catch (e) { if (!copied) throw e; }
     return copied;
   }
+  // 📌 小结：大白话 2～3 句，让她知道这场戏还在不在继续、他在等她什么
+  async function summarize(story) {
+    const r = await fetch(T.base.replace(/\/+$/, '') + '/chat/completions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...(T.key ? { Authorization: 'Bearer ' + T.key } : {}) },
+      body: JSON.stringify({ ...(T.model ? { model: T.model } : {}), stream: false, max_tokens: 300, temperature: 0.3,
+        chat_template_kwargs: { enable_thinking: false },
+        messages: [
+          { role: 'system', content: '你是一款兽世恋爱游戏的旁白，给玩家（「你」）写这一轮的小结。用大白话写 2～3 句，不写露骨细节，不加标题：第一句说这一轮发生了什么；第二句说这场戏结束了没有——除非她自己说了停、结束、睡了，否则就是「还没结束」；最后说他现在在等你做什么、回什么。只输出这几句话。' },
+          { role: 'user', content: (ctx?.her ? '【她这一轮说的话】\n' + ctx.her + '\n\n' : '') + '【这一轮的故事】\n' + story.slice(-4000) },
+        ] }),
+    });
+    if (!r.ok) throw new Error('本地模型 ' + r.status);
+    const t = ((await r.json()).choices?.[0]?.message?.content || '').trim();
+    return t.replace(/^📌\s*/, '').replace(/^小结[：:]\s*/, '').replace(/\s*\n+\s*/g, '');
+  }
   function start(brief, before) {
     const job = { text: '', done: false };
     jobs.push(job);
@@ -161,6 +176,8 @@ function create(gameDir, onUpdate, target, ctx) {
         console.log('[本地模型] ' + e.message + (job.text ? '，写到这里为止' : '，这一段跳过'));
         job.text = job.text.trim();
       }
+      job.storyDone = true; onUpdate();
+      if (job.text) { try { job.sum = await summarize(job.text); } catch (e) { console.log('[本地模型] 小结没写成：' + e.message); } }
       job.done = true; onUpdate();
     })();
   }
@@ -178,9 +195,19 @@ function create(gameDir, onUpdate, target, ctx) {
       const pre = t.slice(0, m.index);
       if (!jobs[k]) start(m[1], out + pre);
       const job = jobs[k++];
-      if (!job.done) return out + pre + (job.text.length > HOLD ? '\n\n' + job.text.slice(0, -HOLD) : '');
+      if (!job.storyDone) return out + pre + (job.text.length > HOLD ? '\n\n' + job.text.slice(0, -HOLD) : '');
       out += pre + (job.text ? '\n\n' + job.text + '\n\n' : '');
+      if (!job.done) return out;
       t = t.slice(m.index + m[0].length);
+      if (job.sum) {
+        // Claude 标记后面的「📌 小结：判定…」并进本地模型写的小结后面，只留一段小结
+        let rest = t.replace(/^\s+/, '');
+        const P = '📌 小结：';
+        if (P.startsWith(rest)) rest = '';   // 还没写完那几个字：先不显示
+        const fact = rest.startsWith(P) ? rest.slice(P.length).split('\n')[0] : '';
+        out += P + job.sum + (fact ? ' ' + fact : '');
+        t = fact ? rest.slice(P.length + fact.length) : (rest ? '\n\n' + rest : '');
+      }
     }
   }
   async function finish(t) {
