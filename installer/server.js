@@ -156,7 +156,7 @@ function writeLaunchers() {
 }
 
 // ---------- 1. 游戏本体：下载、更新 ----------
-const SAVE_FILES = ['自定义规则.md', 'app/自定义记录.json', '状态.md', '物品与等级.md', '回忆.md', '回忆摘要.md', '我的一天.md', '模拟日志.md', '崽崽.md', '开局.json', '兽夫日记', '归档',
+const SAVE_FILES = ['我的日记', '自定义规则.md', 'app/自定义记录.json', '状态.md', '物品与等级.md', '回忆.md', '回忆摘要.md', '我的一天.md', '模拟日志.md', '崽崽.md', '开局.json', '兽夫日记', '归档',
   'app/config.json', 'app/history.json', 'app/session.json', 'app/session-api.json', 'app/sim.json', 'app/room.json', 'app/ui.json', 'app/uploads', '配音/缓存'];
 async function remoteVersion() {
   const r = await fetch(`https://raw.githubusercontent.com/${REPO}/${BRANCH}/version.json?t=${Date.now()}`, { signal: AbortSignal.timeout(15000) });

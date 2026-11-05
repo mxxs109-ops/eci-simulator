@@ -15,6 +15,9 @@ const PORT = Number(process.env.PORT) || 7788;
 const APP_DIR = __dirname;
 const GAME_DIR = path.dirname(APP_DIR);
 const UPLOAD_DIR = path.join(APP_DIR, 'uploads');
+// 玩家自己的现实日记（存档的一部分）：我的日记/2026-11-05.txt，图片在 我的日记/图片
+const DIARY_DIR = path.join(GAME_DIR, '我的日记');
+const DIARY_IMG_DIR = path.join(DIARY_DIR, '图片');
 const SESSION_FILE = path.join(APP_DIR, 'session.json');
 const HISTORY_FILE = path.join(APP_DIR, 'history.json');
 const START_FILE = path.join(GAME_DIR, '开局.json');
@@ -120,6 +123,31 @@ function stamp(d = new Date()) { return `${dateStr(d)}_${pad(d.getHours())}${pad
 // ---------- 保存上传的文件 ----------
 function safeName(name) {
   return (name || 'file').replace(/[\\/:*?"<>|\s]+/g, '_').slice(-60);
+}
+// ---------- 现实日记 ----------
+function diaryFile(date) { return path.join(DIARY_DIR, `${date}.txt`); }
+function readDiary(date) { try { return fs.readFileSync(diaryFile(date), 'utf8').replace(/^\uFEFF/, ''); } catch { return ''; } }
+function appendDiary(lines) {
+  fs.mkdirSync(DIARY_DIR, { recursive: true });
+  const file = diaryFile(dateStr());
+  let prefix = '';
+  if (fs.existsSync(file)) { const buf = fs.readFileSync(file); if (buf.length && buf[buf.length - 1] !== 0x0a) prefix = '\n'; }
+  fs.appendFileSync(file, prefix + lines.join('\n') + '\n', 'utf8');
+}
+function listDiary() {
+  let names = [];
+  try { names = fs.readdirSync(DIARY_DIR).filter(n => /^\d{4}-\d{2}-\d{2}\.txt$/.test(n)); } catch {}
+  return names.sort().reverse().map(n => ({ date: n.slice(0, 10), text: readDiary(n.slice(0, 10)) }));
+}
+// 她勾了「让兽夫们知道」：今天日记里还没告诉过兽夫们的部分，悄悄附在消息前面
+function diaryNote(session) {
+  if (!readJson(path.join(APP_DIR, 'ui.json'), {}).shareDiary) return '';
+  const today = dateStr(), text = readDiary(today).trim();
+  const seen = session.diarySeen && session.diarySeen.date === today ? session.diarySeen.length : 0;
+  session.diarySeen = { date: today, length: text.length };
+  const fresh = text.length > seen ? text.slice(seen).trim() : '';
+  if (!fresh) return '';
+  return `[系统提示，不是她说的话：这是她现实生活中今天的真实日记（${today}）${seen ? '新增的内容' : ''}。兽夫们像家人一样知道她今天过得怎样，可以在合适的时候自然地关心一句，不要复述日记、不要每次都提。]\n${fresh}\n[系统提示结束]\n\n`;
 }
 function saveFiles(files, dir, prefix) {
   fs.mkdirSync(dir, { recursive: true });
@@ -387,7 +415,7 @@ function chat(text, res, auto = false) {
   try { rut = /【易感期】/.test(fs.readFileSync(path.join(GAME_DIR, '状态.md'), 'utf8')); } catch {}
   const intimate = (!auto && INTIMATE.test(text)) || rut || (lastAi?.local && !SCENE_END.test(text));
   const intimateNote = intimate ? `[系统提示，不是她说的话：这一轮沾到亲密（${INTIMATE.test(text) ? '她的话里有亲密的内容' : rut ? '有兽夫正在易感期' : '上一轮的亲密戏还没结束'}）。**照原来的展示方式写完整的回复**：环境、他的台词和口吻、心理（*斜体*）、剧情推进、📌 小结都由你写，和平时一样。但**身体和性的描写你一个字都不自己写，也不准带过、不准用台词或心理代替**：每到要写身体、裸体、体液、亲吻抚摸、性的地方，单独一段写交接标记 \`〔接手：兽夫名字｜在哪｜这一刻｜约 N 字：这一小段要写什么——谁对谁做了什么、写到哪一步为止〕\`（N 一般 150～500；她要的露骨内容越多，标记越多、字数越大；她这一轮要的每一个动作都要落在某个标记里）。标记前后接着写台词和心理，和标记里的事衔接，不要在标记前后重复写同一个动作。小结写清楚这场戏还没结束、他在等她什么（她说停了才算结束）。存档照常改，写到亲密的地方也用交接标记，不要自己写、不要带过]\n\n` : '';
-  const prompt = rulesNote(session) + roomNote + openingNote() + clock + intimateNote + (auto ? CONTINUE_NOTE : text);
+  const prompt = rulesNote(session) + roomNote + diaryNote(session) + openingNote() + clock + intimateNote + (auto ? CONTINUE_NOTE : text);
   writeJson(SESSION_FILE, session);
 
   const send = obj => res.write(JSON.stringify(obj) + '\n');
@@ -776,11 +804,24 @@ const server = http.createServer(async (req, res) => {
       return fs.createReadStream(path.join(APP_DIR, page)).pipe(res);
     }
     if (req.method === 'GET' && url.startsWith('/game/')) return serveFile(res, GAME_DIR, url.slice(6));
+    if (req.method === 'GET' && url.startsWith('/diary/')) return serveFile(res, DIARY_DIR, url.slice(7));
+    if (req.method === 'GET' && url === '/api/diary') return json(res, listDiary());
+    if (req.method === 'POST' && url === '/api/diary') {
+      const body = await readBody(req), now = new Date();
+      const saved = saveFiles(body.files, DIARY_IMG_DIR, stamp(now));
+      const text = (body.text || '').trim();
+      const attach = saved.map(s => `[${s.isImage ? '图片' : '文件'}] 图片/${s.fileName}`);
+      if (!text && !attach.length) return json(res, { ok: false });
+      const head = body.withTime === false ? '' : `${periodOf(now)} ${timeStr(now)}，`;
+      const tl = text ? text.split(/\r?\n/) : [];
+      appendDiary(tl.length ? [head + tl[0], ...tl.slice(1), ...attach] : [head + attach[0], ...attach.slice(1)]);
+      return json(res, { ok: true });
+    }
     if (req.method === 'GET' && url === '/mobile.css') {   // 手机布局
       res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'no-cache' });
       return fs.createReadStream(path.join(APP_DIR, 'mobile.css')).pipe(res);
     }
-    if (req.method === 'GET' && /^\/(inv|vn|play|settings|vendor\/qrcode|mobile)\.js$/.test(url)) {
+    if (req.method === 'GET' && /^\/(inv|vn|play|settings|vendor\/qrcode|mobile|diary)\.js$/.test(url)) {
       res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache' });
       return fs.createReadStream(path.join(APP_DIR, url.slice(1))).pipe(res);
     }

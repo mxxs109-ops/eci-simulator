@@ -450,7 +450,8 @@ function faceStyle(name, size, zoom = ZOOM) {
   return `background-image:url('${fileUrl('/game/', src)}');background-size:${w}px auto;background-position:${x}px ${y}px`;
 }
 function avatar(name) {
-  const st = faceStyle(name, AV);
+  // 头像按屏幕上实际的大小裁（手机上 .av 小很多，还按电脑的尺寸裁，脸就跑出框了）
+  const st = faceStyle(name, innerWidth <= 760 ? 42 : innerWidth <= 900 ? 52 : AV);
   return st ? `<div class="av" style="${st}"></div>` : `<div class="av">${esc(name[0])}</div>`;
 }
 // 右侧：正在说话的兽夫显示大立绘，其他人是下面的小图
@@ -1041,6 +1042,7 @@ if (location.hash) document.querySelector(`.tab[data-view="${location.hash.slice
 </script>
 <script src="/vn.js"></script>
 <script src="/inv.js"></script>
+<script src="/diary.js"></script>
 <script src="/mobile.js"></script>
 <script src="/vendor/qrcode.js"></script>
 <script src="/settings.js"></script>
