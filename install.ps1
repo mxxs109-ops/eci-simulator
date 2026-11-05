@@ -193,6 +193,11 @@ Write-Host '  桌面上多了「恶雌模拟器安装器」'
 
 Write-Host ''
 Write-Host '好了！现在帮你打开安装器（浏览器里），之后的事都在那里点。' -ForegroundColor Green
+# 旧版安装器还在后台跑的话先关掉（只关我们自己目录里的），不然新页面会对着旧后台，一打开就空白
+try {
+  $old = (Get-NetTCPConnection -LocalPort 7790 -State Listen -ErrorAction SilentlyContinue).OwningProcess
+  if ($old) { $cl = (Get-CimInstance Win32_Process -Filter "ProcessId=$old").CommandLine; if ($cl -like "*$dest*") { Stop-Process -Id $old -Force; Start-Sleep 1 } }
+} catch {}
 Start-Process wscript.exe "`"$vbs`""
 # 装好了：这个黑窗口用不着了，倒数 5 秒自己关（是从 cmd 里跑的，就连 cmd 一起关）
 Write-Host ''

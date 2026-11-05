@@ -1250,7 +1250,9 @@ async function uninstall(parts, say) {
 // ---------- 网页 ----------
 function json(res, data, status = 200) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data)); }
 function body(req) { return new Promise((ok, no) => { let b = ''; req.on('data', c => b += c); req.on('end', () => { try { ok(JSON.parse(b || '{}')); } catch (e) { no(e); } }); }); }
+const BUILD = String(Math.floor(fs.statSync(__filename).mtimeMs));   // 这一版安装器的记号
 const routes = {
+  'GET /api/hello': async () => ({ build: BUILD }),
   'GET /api/state': async () => {
     state(); try { reconcile(); } catch {}   // 先读一次（坏了就备份），再照磁盘改正
     const s = state(), d = dirs(s);
@@ -1375,4 +1377,18 @@ const server = http.createServer(async (req, res) => {
   } catch (e) { json(res, { ok: false, error: e.message }, 500); }
 });
 server.listen(PORT, '127.0.0.1', () => { if (!process.env.NO_OPEN) openUrl(`http://127.0.0.1:${PORT}/`); });
-server.on('error', e => { if (e.code === 'EADDRINUSE') { if (!process.env.NO_OPEN) openUrl(`http://127.0.0.1:${PORT}/`); setTimeout(() => process.exit(0), 800); } });
+// 端口被占：先问占着的那个是哪一版。同一版就只打开浏览器；旧版 / 卡死了 / 不认识这个问题，就把它关掉（只关我们自己目录里的），自己接手
+let retried = false;
+server.on('error', async e => {
+  if (e.code !== 'EADDRINUSE') return;
+  const other = await fetch(`http://127.0.0.1:${PORT}/api/hello`, { signal: AbortSignal.timeout(3000) }).then(r => (r.ok ? r.json() : null)).catch(() => null);
+  if (other && other.build === BUILD) { if (!process.env.NO_OPEN) openUrl(`http://127.0.0.1:${PORT}/`); return setTimeout(() => process.exit(0), 800); }
+  if (retried) return process.exit(1);
+  retried = true;
+  try {
+    const pid = MAC ? Number(execFileSync('lsof', ['-nP', `-iTCP:${PORT}`, '-sTCP:LISTEN', '-t'], { encoding: 'utf8' }).trim().split(/\s+/)[0]) : portPid(PORT);
+    const cmd = MAC ? execFileSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8' }) : await psAsync(`(Get-CimInstance Win32_Process -Filter "ProcessId=${pid}").CommandLine`);
+    if (pid && cmd.toLowerCase().includes(path.resolve(HERE).toLowerCase())) { console.log('旧版安装器还在跑（' + pid + '），关掉它接手'); process.kill(pid); }
+  } catch {}
+  setTimeout(() => server.listen(PORT, '127.0.0.1', () => { if (!process.env.NO_OPEN) openUrl(`http://127.0.0.1:${PORT}/`); }), 1500);
+});
