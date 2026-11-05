@@ -4,12 +4,15 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { spawn, exec, execSync, execFileSync } = require('child_process');
+const { spawn, exec, execSync, execFileSync, execFile } = require('child_process');
 
 const REPO = 'mxxs109-ops/eci-simulator';
 const BRANCH = 'main';
 const PORT = Number(process.env.ECI_PORT) || 7790;
-const HOME = process.env.ECI_HOME || path.join(process.env.LOCALAPPDATA || os.homedir(), 'EciSimulator');   // ECI_HOME：测试时换个地方   // 安装器自己住的地方
+// Mac：走下面各处的 MAC 分支；MAC_TEST=1 在 Windows 上假装是 Mac（只用来看页面，不跑 Mac 的命令）
+const MAC = process.platform === 'darwin' || process.env.MAC_TEST === '1';
+const HOME = process.env.ECI_HOME || (MAC ? path.join(os.homedir(), 'Library', 'Application Support', 'EciSimulator')
+  : path.join(process.env.LOCALAPPDATA || os.homedir(), 'EciSimulator'));   // ECI_HOME：测试时换个地方   // 安装器自己住的地方
 const STATE_FILE = path.join(HOME, 'state.json');
 const NODE = process.execPath;
 const HERE = __dirname;
@@ -31,10 +34,21 @@ function saveState(patch) { const s = { ...state(), ...patch }; writeJson(STATE_
 const dirs = (s = state()) => ({ game: path.join(s.root, 'game'), llm: path.join(s.root, 'llm'), tts: path.join(s.root, 'tts') });
 // PowerShell 的输出按 UTF-8 读：不然中文路径（选文件夹、桌面在中文用户名下）会变成乱码
 const ps = cmd => execSync(`powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncoding=[Text.Encoding]::UTF8; ${cmd.replace(/"/g, '\\"')}"`, { encoding: 'utf8', windowsHide: true }).trim();
-const desktop = () => { try { return ps('[Environment]::GetFolderPath(\'Desktop\')'); } catch { return path.join(os.homedir(), 'Desktop'); } };
+const desktop = () => { if (MAC) return path.join(os.homedir(), 'Desktop'); try { return ps('[Environment]::GetFolderPath(\'Desktop\')'); } catch { return path.join(os.homedir(), 'Desktop'); } };
 function writeBat(file, lines) { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, ['@echo off', 'chcp 65001 >nul', ...lines, ''].join('\r\n'), 'utf8'); }
+// Mac 的启动脚本：.command 双击会在终端里跑
+function writeSh(file, lines) { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, ['#!/bin/bash', ...lines, ''].join('\n'), 'utf8'); fs.chmodSync(file, 0o755); }
+const shq = s => "'" + String(s).replace(/'/g, "'\\''") + "'";   // 给 bash 用的单引号
+// Mac 上用 open 打开网址、文件
+const macOpen = (...a) => { try { execFile('open', a, () => {}); } catch {} };
+// 桌面图标在 Mac 上叫什么（卸载时一起删）
+const MAC_ICONS = ['恶雌模拟器.command', '恶雌模拟器安装器.app', '恶雌模拟器安装器.command'];
 // 桌面图标：用 shortcut.ps1（IShellLinkW），中文名字、中文路径在任何语言的 Windows 上都行
 function shortcut(name, target, args, icon) {
+  if (MAC) {   // Mac：桌面放一个 .command，双击就跑 target
+    const f = path.join(process.env.ECI_HOME ? HOME : desktop(), name + '.command');
+    return writeSh(f, [`exec ${shq(target)}`]);
+  }
   const lnk = path.join(process.env.ECI_HOME ? HOME : desktop(), name + '.lnk');   // 测试时图标放进测试文件夹，不动真桌面
   const r = require('child_process').spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(HERE, 'shortcut.ps1'),
     lnk, target, args || '', path.dirname(target), icon || ''], { windowsHide: true, encoding: 'utf8' });
@@ -42,7 +56,10 @@ function shortcut(name, target, args, icon) {
 }
 const rmrf = p => { try { fs.rmSync(p, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 }); } catch {} };
 // 端口上的程序是不是我们装的：模型、配音看程序文件在不在安装文件夹里；游戏问它自己的文件夹
-function portPid(port) { try { return Number(ps(`(Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess`)) || 0; } catch { return 0; } }
+function portPid(port) {
+  if (MAC) { try { return Number(execFileSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim().split(/\s+/)[0]) || 0; } catch { return 0; } }
+  try { return Number(ps(`(Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess`)) || 0; } catch { return 0; }
+}
 async function stopOurs(...which) {
   const d = dirs();
   for (const w of which) {
@@ -51,6 +68,8 @@ async function stopOurs(...which) {
     let ours = false;
     if (w === 'game') {
       try { const st = await (await fetch('http://127.0.0.1:7788/api/status', { signal: AbortSignal.timeout(1500) })).json(); ours = !!st.gameDir && path.resolve(st.gameDir).toLowerCase() === path.resolve(d.game).toLowerCase(); } catch {}
+    } else if (MAC) {   // Mac：启动脚本里写的是绝对路径，看命令行里有没有安装文件夹
+      try { ours = execFileSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8' }).toLowerCase().includes(path.resolve(d[w]).toLowerCase() + '/'); } catch {}
     } else {
       try { ours = ps(`(Get-Process -Id ${pid}).Path`).toLowerCase().startsWith(path.resolve(d[w]).toLowerCase()); } catch {}
     }
@@ -66,7 +85,12 @@ const kids = new Set();
 let cancelling = false;   // 卸载开始了：别的任务看到它就停下，不再往下装
 const track = p => { kids.add(p); p.on('close', () => kids.delete(p)); return p; };
 const stopIfCancelled = () => { if (cancelling) throw new Error('已经停下（要卸载）'); };
-function killKids() { for (const p of kids) { try { execSync(`taskkill /pid ${p.pid} /T /F`, { stdio: 'ignore', windowsHide: true }); } catch {} } }
+function killKids() {
+  for (const p of kids) {
+    if (MAC) { try { execFileSync('pkill', ['-KILL', '-P', String(p.pid)], { stdio: 'ignore' }); } catch {} try { process.kill(p.pid, 'SIGKILL'); } catch {} continue; }
+    try { execSync(`taskkill /pid ${p.pid} /T /F`, { stdio: 'ignore', windowsHide: true }); } catch {}
+  }
+}
 function job(name, fn) {
   if (jobs[name] && !jobs[name].done) throw new Error('正在进行中');
   const j = jobs[name] = { step: '准备中', pct: 0, log: [], done: false, error: '' };
@@ -83,7 +107,7 @@ function job(name, fn) {
 // 大小写成人看得懂的：1GB 以下用 MB
 const size = b => b >= 1e9 ? (b / 1e9).toFixed(2) + ' GB' : b >= 1e6 ? Math.round(b / 1e6) + ' MB' : Math.max(1, Math.round(b / 1e3)) + ' KB';   // 网慢时速度不到 1MB，写 KB，别显示成 0
 const dur = sec => sec >= 3600 ? Math.floor(sec / 3600) + ' 小时 ' + Math.round(sec % 3600 / 60) + ' 分' : sec >= 60 ? Math.round(sec / 60) + ' 分钟' : Math.max(1, Math.round(sec)) + ' 秒';
-// 断线续传下载：用 Windows 自带的 curl.exe，按文件大小算进度。
+// 断线续传下载：用系统自带的 curl（Windows 是 curl.exe），按文件大小算进度。
 // opt.from / opt.to：这次下载占整个进度条的哪一段；opt.estimate：服务器不告诉总大小时（GitHub 打包下载）按这个估
 async function download(url, file, say, label, opt = {}) {
   const from = opt.from ?? 0, to = opt.to ?? 100;
@@ -95,7 +119,7 @@ async function download(url, file, say, label, opt = {}) {
   for (let attempt = 1; attempt <= 30; attempt++) {
     const ok = await new Promise(resolve => {
       stopIfCancelled();
-      const p = track(spawn('curl.exe', ['-L', '-C', '-', '--retry', '5', '--connect-timeout', '30', '-s', '-o', file, url], { windowsHide: true }));
+      const p = track(spawn(MAC ? 'curl' : 'curl.exe', ['-L', '-C', '-', '--retry', '5', '--connect-timeout', '30', '-s', '-o', file, url], { windowsHide: true }));
       let last = fs.existsSync(file) ? fs.statSync(file).size : 0, speed = 0;
       const t = setInterval(() => {
         const got = fs.existsSync(file) ? fs.statSync(file).size : 0;
@@ -121,7 +145,8 @@ function unzip(zip, dest) {
   const tmp = dest.replace(/[\\/]+$/, '') + '.unzip-tmp';
   rmrf(tmp);
   const q = s => "'" + s.replace(/'/g, "''") + "'";
-  ps(`Add-Type -AssemblyName System.IO.Compression.FileSystem; [IO.Compression.ZipFile]::ExtractToDirectory(${q(zip)}, ${q(tmp)}, [Text.Encoding]::UTF8)`);
+  if (MAC) execFileSync('ditto', ['-x', '-k', zip, tmp], { stdio: 'ignore' });   // Mac 自带的 ditto，中文文件名也没事
+  else ps(`Add-Type -AssemblyName System.IO.Compression.FileSystem; [IO.Compression.ZipFile]::ExtractToDirectory(${q(zip)}, ${q(tmp)}, [Text.Encoding]::UTF8)`);
   fs.mkdirSync(dest, { recursive: true });
   fs.cpSync(tmp, dest, { recursive: true, force: true });
   rmrf(tmp);
@@ -140,9 +165,19 @@ function run(cmd, args, opts, say) {
 
 // ---------- 0. 安装位置 ----------
 function pickFolder() {
+  if (MAC) {   // 点「取消」时 osascript 会报错：当作没选
+    try { return execFileSync('osascript', ['-e', 'activate', '-e', 'POSIX path of (choose folder with prompt "选一个文件夹，游戏和模型都装在这里面")'], { encoding: 'utf8' }).trim().replace(/\/+$/, ''); } catch { return ''; }
+  }
   return ps("Add-Type -AssemblyName System.Windows.Forms; $f=New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description='选一个文件夹，游戏和模型都装在这里面'; $f.ShowNewFolderButton=$true; if($f.ShowDialog() -eq 'OK'){$f.SelectedPath}");
 }
 function freeGB(p) {
+  if (MAC) {   // df 要一个已经有的文件夹：往上找
+    try {
+      let d = path.resolve(p); while (!fs.existsSync(d) && path.dirname(d) !== d) d = path.dirname(d);
+      const cols = execFileSync('df', ['-k', d], { encoding: 'utf8' }).trim().split('\n').pop().trim().split(/\s+/);
+      return Math.floor(Number(cols[3]) * 1024 / 1e9);
+    } catch { return null; }
+  }
   try { const drive = path.parse(path.resolve(p)).root.replace(/[\\:]/g, ''); return Math.floor(Number(ps(`(Get-PSDrive ${drive}).Free`)) / 1e9); } catch { return null; }
 }
 async function moveRoot(to, say) {
@@ -160,7 +195,9 @@ async function moveRoot(to, say) {
       if (!fs.existsSync(a)) continue;
       say(`正在搬 ${name}（大文件可能要几分钟）`);
       try { fs.renameSync(a, b); }   // 同一个盘：一下就好
-      catch { await run('robocopy', [a, b, '/E', '/MOVE', '/NFL', '/NDL', '/NJH', '/NJS'], {}, say).catch(e => { if (!/退出码 [0-7]：/.test(e.message)) throw e; }); }
+      catch (e) {
+        if (MAC) { await run('ditto', [a, b], {}, say); rmrf(a); continue; }   // Mac 换了盘：ditto 复制过去再删旧的
+        await run('robocopy', [a, b, '/E', '/MOVE', '/NFL', '/NDL', '/NJH', '/NJS'], {}, say).catch(e => { if (!/退出码 [0-7]：/.test(e.message)) throw e; }); }
     }
     try { fs.rmdirSync(from); } catch {}
   }
@@ -173,6 +210,7 @@ async function moveRoot(to, say) {
 function writeLaunchers() {
   const s = state(), d = dirs(s);
   if (!s.game) return;
+  if (MAC) return writeLaunchersMac(s, d);
   const lines = ['title 恶雌模拟器', 'rem 本机模型和配音装了就顺手开（已经在跑就不重复开）；记下这次是游戏开的，游戏关了它们也跟着关', 'set "ECI_START="'];
   if (s.llm) lines.push(`netstat -ano | findstr ":8080 " | findstr LISTENING >nul || (start "恶雌模拟器-本地模型" /min "${path.join(d.llm, '启动本地模型.bat')}" & set "ECI_START=%ECI_START% llm")`);
   if (s.tts) lines.push(`netstat -ano | findstr ":9880 " | findstr LISTENING >nul || (start "恶雌模拟器-配音" /min "${path.join(d.tts, '启动配音.bat')}" & set "ECI_START=%ECI_START% tts")`);
@@ -181,6 +219,28 @@ function writeLaunchers() {
   writeBat(path.join(d.game, '启动游戏.bat'), lines);
   const ico = path.join(d.game, 'app', 'icon.ico');
   shortcut('恶雌模拟器', path.join(d.game, '启动游戏.bat'), '', fs.existsSync(ico) ? ico : '');
+}
+// Mac：游戏在终端窗口里跑（关掉窗口游戏就停）；本地模型在后台跑，日志写进 llm/log.txt
+// 从桌面双击时 PATH 很短：把 Claude Code 常装的地方加上，游戏才找得到 claude
+const MAC_PATH = '"$CC:$HOME/.local/bin:$HOME/.claude/local:/opt/homebrew/bin:/usr/local/bin:$PATH"';
+const MAC_CC = 'CC="$(ls -dt "$HOME"/.vscode/extensions/anthropic.claude-code-*/resources/native-binary 2>/dev/null | head -1)"';
+const macUp = port => `lsof -nP -iTCP:${port} -sTCP:LISTEN >/dev/null 2>&1`;
+const macLlm = () => path.join(dirs().llm, '启动本地模型.command');
+function writeLaunchersMac(s, d) {
+  const lines = ['# 恶雌模拟器', MAC_CC, `export PATH=${MAC_PATH}`, 'ECI_START=""'];
+  if (s.llm) lines.push(`${macUp(8080)} || { nohup ${shq(path.join(d.llm, '启动本地模型.command'))} >${shq(path.join(d.llm, 'log.txt'))} 2>&1 </dev/null & ECI_START="$ECI_START llm"; }`);
+  lines.push(`[ -n "$ECI_START" ] && ${shq(NODE)} ${shq(path.join(HERE, 'watch.js'))} 7788 $ECI_START`);
+  // 游戏自己开浏览器的那句只认 Windows：这里等它起来再 open
+  lines.push('( for i in $(seq 60); do sleep 1; curl -s -o /dev/null http://127.0.0.1:7788/api/status && { open http://localhost:7788/; break; }; done ) &');
+  lines.push(`cd ${shq(path.join(d.game, 'app'))}`, `NO_OPEN=1 exec ${shq(NODE)} server.js`);
+  writeSh(path.join(d.game, '启动游戏.command'), lines);
+  shortcut('恶雌模拟器', path.join(d.game, '启动游戏.command'));
+}
+// Mac：后台开本地模型
+function startLlmMac() {
+  const out = fs.openSync(path.join(dirs().llm, 'log.txt'), 'w');
+  spawn('/bin/bash', [macLlm()], { detached: true, stdio: ['ignore', out, out] }).unref();
+  fs.closeSync(out);
 }
 
 // ---------- 1. 游戏本体：下载、更新 ----------
@@ -374,11 +434,14 @@ async function withGame(fn) {
     if (st.gameDir && path.resolve(st.gameDir).toLowerCase() === path.resolve(d.game).toLowerCase()) return await fn('http://127.0.0.1:7788');
   } catch {}
   if (brainReady().what === '本地模型' && !(await up('http://127.0.0.1:8080/health')) && state().llm) {
+    if (MAC) startLlmMac(); else
     spawn('cmd', ['/c', 'start', '"恶雌模拟器-本地模型"', '/min', path.join(dirs().llm, '启动本地模型.bat')], { windowsHide: true, detached: true });
     for (let i = 0; i < 90 && !(await up('http://127.0.0.1:8080/health')); i++) await new Promise(r => setTimeout(r, 2000));
   }
   const port = 7791;
-  const child = spawn(NODE, ['server.js'], { cwd: path.join(d.game, 'app'), env: { ...process.env, PORT: String(port), NO_OPEN: '1', NO_SIM: '1' }, windowsHide: true });
+  const env = { ...process.env, PORT: String(port), NO_OPEN: '1', NO_SIM: '1' };
+  if (MAC) env.PATH = [path.dirname(findClaudeMac() || '/'), path.join(os.homedir(), '.local', 'bin'), '/opt/homebrew/bin', '/usr/local/bin', env.PATH || ''].join(':');   // 游戏找 PATH 里的 claude
+  const child = spawn(NODE, ['server.js'], { cwd: path.join(d.game, 'app'), env, windowsHide: true });
   try {
     for (let i = 0; i < 40 && !(await up(`http://127.0.0.1:${port}/api/status`)); i++) await new Promise(r => setTimeout(r, 300));
     return await fn(`http://127.0.0.1:${port}`);
@@ -389,6 +452,11 @@ const gameApi = (base, p, b) => fetch(base + p, b === undefined ? {} : { method:
 // ---------- 2. 语言模型：检查电脑 → 推荐 → 安装 ----------
 function hardware() {
   const h = { ramGB: Math.round(os.totalmem() / 1e9), cpu: os.cpus()[0]?.model || '', cores: os.cpus().length, gpus: [], nvidia: null };
+  if (MAC) {   // Mac：没有 NVIDIA；苹果芯片（M1 以后）用 Metal 跑，内存就是显存
+    try { h.apple = execFileSync('sysctl', ['-n', 'hw.optional.arm64'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() === '1'; } catch { h.apple = process.arch === 'arm64'; }
+    h.mac = true; h.gpus = h.apple ? [h.cpu + '（Metal）'] : [];
+    return h;
+  }
   try {
     const out = execSync('nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader,nounits', { encoding: 'utf8', windowsHide: true }).trim();
     const [name, mem, drv] = out.split('\n')[0].split(',').map(x => x.trim());
@@ -400,6 +468,16 @@ function hardware() {
 function llmPlan() {
   const h = hardware(), s = state();
   const free = freeGB(s.root);
+  if (MAC) {   // Mac：苹果芯片 + 32GB 内存起步；模型和系统共用内存，留出余量
+    let tier = 'api', why = [];
+    if (!h.apple) why.push('Intel 芯片的 Mac 跑不动本地模型');
+    else if (h.ramGB >= 48) tier = 'full';
+    else if (h.ramGB >= 32) tier = 'lite';
+    else why.push(`内存只有 ${h.ramGB}GB，Mac 上本地模型至少要 32GB`);
+    const need = tier === 'api' ? 0 : Math.ceil(MODELS[tier].gb + 1.5);
+    if (need && free != null && free < need) { why.push(`安装位置所在的盘只剩 ${free}GB，要 ${need}GB`); tier = 'api'; }
+    return { hw: h, free, tier, build: tier === 'api' ? null : 'metal', model: MODELS[tier] || null, needGB: tier === 'api' ? 0 : need, why };
+  }
   const otherGpu = !h.nvidia && h.gpus.some(g => /AMD|Radeon|Intel\(R\) Arc/i.test(g));
   const drvOk = h.nvidia && Number(h.nvidia.driver.split('.')[0]) >= 528;
   let tier = 'api', build = null, why = [];
@@ -416,6 +494,7 @@ function llmPlan() {
 async function installLLM(tier, build, say) {
   const s = state(), d = dirs(s);
   const m = MODELS[tier]; if (!m) throw new Error('这台电脑不建议装本地模型');
+  if (MAC) return installLLMMac(tier, m, say);
   const base = `https://github.com/ggml-org/llama.cpp/releases/download/${LLAMA_TAG}/`;
   const zips = build === 'cuda' ? [`llama-${LLAMA_TAG}-bin-win-cuda-12.4-x64.zip`, 'cudart-llama-bin-win-cuda-12.4-x64.zip']
     : build === 'vulkan' ? [`llama-${LLAMA_TAG}-bin-win-vulkan-x64.zip`] : [`llama-${LLAMA_TAG}-bin-win-cpu-x64.zip`];
@@ -436,15 +515,35 @@ async function installLLM(tier, build, say) {
   writeLaunchers();
   say('装好了');
 }
+// Mac：llama.cpp 官方的 macOS 苹果芯片版（Metal），tar.gz 里是 llama-<版本>/ 一层文件夹
+async function installLLMMac(tier, m, say) {
+  const d = dirs();
+  const tgz = `llama-${LLAMA_TAG}-bin-macos-arm64.tar.gz`, f = path.join(d.llm, 'download', tgz), dest = path.join(d.llm, 'llama.cpp');
+  await download(`https://github.com/ggml-org/llama.cpp/releases/download/${LLAMA_TAG}/${tgz}`, f, say, '下载 llama.cpp', { from: 0, to: 6 });
+  say('解压 ' + tgz, 7);
+  rmrf(dest); fs.mkdirSync(dest, { recursive: true });
+  execFileSync('tar', ['-xzf', f, '-C', dest, '--strip-components', '1'], { stdio: 'ignore' });
+  try { execFileSync('xattr', ['-dr', 'com.apple.quarantine', dest], { stdio: 'ignore' }); } catch {}   // 有隔离标记的话 Mac 不让跑
+  await download(`https://huggingface.co/${MODEL_REPO}/resolve/main/${m.file}`, path.join(d.llm, 'models', m.file), say, '下载模型', { estimate: m.gb * 1e9, from: 8, to: 97 });
+  const ctx = tier === 'full' ? 65536 : 49152;
+  // 用绝对路径跑：安装器靠命令行里的路径认出这是我们开的
+  writeSh(macLlm(), ['# 恶雌模拟器-本地模型 (端口 8080)', 'D="$(cd "$(dirname "$0")" && pwd)"',
+    `exec "$D/llama.cpp/llama-server" -m "$D/models/${m.file}" --jinja -c ${ctx} -np 1 -ngl 99 -t ${Math.max(4, Math.min(16, os.cpus().length - 2))} --host 127.0.0.1 --port 8080`]);
+  rmrf(path.join(d.llm, 'download'));
+  saveState({ llm: { tier, build: 'metal', file: m.file, ctx } });
+  writeLaunchers();
+  say('装好了');
+}
 async function testLLM(say) {
   const d = dirs();
   await stopOurs('llm');
+  if (MAC) startLlmMac(); else
   spawn('cmd', ['/c', 'start', '"恶雌模拟器-本地模型"', '/min', path.join(d.llm, '启动本地模型.bat')], { windowsHide: true, detached: true });
   say('启动本地模型（第一次要把模型从硬盘读进内存，1～3 分钟）');
   for (let i = 0; i < 180; i++) {
     try { if ((await (await fetch('http://127.0.0.1:8080/health')).json()).status === 'ok') break; } catch {}
     await new Promise(r => setTimeout(r, 2000));
-    if (i === 179) throw new Error('本地模型没起来，看看那个最小化的黑窗口里写了什么');
+    if (i === 179) throw new Error(MAC ? '本地模型没起来，看看 ' + path.join(d.llm, 'log.txt') + ' 里写了什么' : '本地模型没起来，看看那个最小化的黑窗口里写了什么');
   }
   say('试写一句');
   const t0 = Date.now();
@@ -464,8 +563,20 @@ function setBrain(b) {
   if (isGame(dirs().game)) writeJson(f, c); else saveState({ pendingCfg: c });
   return c;
 }
+// Mac：claude 程序在哪（VS Code 插件自带的，或者命令行版常装的几个地方）；从桌面图标开的安装器 PATH 很短，挨个看
+function findClaudeMac() {
+  const ext = path.join(os.homedir(), '.vscode', 'extensions');
+  try {
+    const hit = fs.readdirSync(ext).filter(d => d.startsWith('anthropic.claude-code-')).map(d => path.join(ext, d, 'resources', 'native-binary', 'claude'))
+      .filter(p => fs.existsSync(p)).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
+    if (hit) return hit;
+  } catch {}
+  for (const p of [path.join(os.homedir(), '.local', 'bin', 'claude'), path.join(os.homedir(), '.claude', 'local', 'claude'), '/opt/homebrew/bin/claude', '/usr/local/bin/claude']) if (fs.existsSync(p)) return p;
+  try { return execSync('command -v claude', { encoding: 'utf8', shell: '/bin/bash', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return ''; }
+}
 function findClaude() {
   const ext = path.join(os.homedir(), '.vscode', 'extensions');
+  if (MAC) { const p = findClaudeMac(); return !p ? '' : p.startsWith(ext) ? 'VS Code 插件' : '命令行 claude'; }
   try { if (fs.readdirSync(ext).some(d => d.startsWith('anthropic.claude-code-'))) return 'VS Code 插件'; } catch {}
   try { execSync('where claude', { windowsHide: true, stdio: 'ignore' }); return '命令行 claude'; } catch {}
   return '';
@@ -475,15 +586,16 @@ function findClaude() {
 const getJson = (u, ms = 1500) => fetch(u, { signal: AbortSignal.timeout(ms) }).then(r => (r.ok ? r.json() : null)).catch(() => null);
 async function detectLLM() {
   const d = dirs(), s = state(), hw = hardware();
-  const vram = hw.nvidia ? hw.nvidia.vramGB : 0;
+  const vram = MAC ? (hw.apple ? Math.floor(hw.ramGB * 0.65) : 0) : hw.nvidia ? hw.nvidia.vramGB : 0;   // Mac：内存的三分之二左右能给模型用
   const found = [];
+  const macApp = n => MAC && fs.existsSync(path.join('/Applications', n + '.app'));
   // 本机 llama.cpp（我们装的，或者别人自己开的 8080）
   const lc = await getJson('http://127.0.0.1:8080/v1/models');
   if (lc) found.push({ id: 'local', name: '本地模型（llama.cpp）', base: 'http://127.0.0.1:8080/v1', models: (lc.data || []).map(m => m.id), model: 'local', running: true });
   else if (s.llm) found.push({ id: 'local', name: '本地模型（已装，没开）', base: 'http://127.0.0.1:8080/v1', models: ['local'], model: 'local', running: false });
   // Ollama：11434
   const ol = await getJson('http://127.0.0.1:11434/api/tags');
-  const olInstalled = ol || fs.existsSync(path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Ollama', 'ollama.exe'));
+  const olInstalled = ol || macApp('Ollama') || fs.existsSync(path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Ollama', 'ollama.exe'));
   if (olInstalled) {
     const list = ((ol && ol.models) || []).map(m => ({ id: m.name, gb: Math.round((m.size || 0) / 1e8) / 10 }));
     // 挑一个：能塞进显存的里面最大的；中文好的（qwen / deepseek / glm / yi）优先
@@ -494,7 +606,7 @@ async function detectLLM() {
   }
   // LM Studio：1234
   const lm = await getJson('http://127.0.0.1:1234/v1/models');
-  const lmInstalled = lm || ['LM Studio', 'lm-studio'].some(n => fs.existsSync(path.join(process.env.LOCALAPPDATA || '', 'Programs', n)));
+  const lmInstalled = lm || macApp('LM Studio') || ['LM Studio', 'lm-studio'].some(n => fs.existsSync(path.join(process.env.LOCALAPPDATA || '', 'Programs', n)));
   if (lmInstalled) { const ids = ((lm && lm.data) || []).map(m => m.id).filter(id => !/embed/i.test(id)); found.push({ id: 'lmstudio', name: 'LM Studio', base: 'http://127.0.0.1:1234/v1', models: ids, model: ids[0] || '', running: !!lm }); }
   // Claude Code
   const cc = findClaude();
@@ -571,6 +683,7 @@ async function geo(city) {
 
 // ---------- 3. 配音：检查 → 安装 ----------
 function ttsPlan() {
+  if (MAC) return { hw: hardware(), free: null, ok: false, mac: true, why: ['Mac 不支持配音（要 NVIDIA 显卡）'] };
   const h = hardware(), s = state(), free = freeGB(s.root), why = [];
   if (!h.nvidia) why.push('配音要 NVIDIA 显卡（没有找到）');
   else {
@@ -617,6 +730,10 @@ async function installTTS(say) {
 // 手机和电脑登录同一个 Tailscale 账号，手机在哪都能连回这台电脑；转发端口 8788 → 游戏 7788（走本机，游戏不用开「手机连接」、不用防火墙）
 const TS_PORT = 8788;
 function tsExe() {
+  if (MAC) {   // Mac 版（App Store / 官网）里的程序本身就能当命令行用
+    for (const p of ['/Applications/Tailscale.app/Contents/MacOS/Tailscale', '/opt/homebrew/bin/tailscale', '/usr/local/bin/tailscale']) if (fs.existsSync(p)) return p;
+    try { return execSync('command -v tailscale', { encoding: 'utf8', shell: '/bin/bash', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null; } catch { return null; }
+  }
   for (const d of [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], 'C:\\Program Files']) {
     if (!d) continue;
     const p = path.join(d, 'Tailscale', 'tailscale.exe');
@@ -638,6 +755,7 @@ function tsState() {
 }
 async function installTailscale(say) {
   if (tsExe()) return say('电脑上已经有 Tailscale 了', 100);
+  if (MAC) throw new Error('Mac 版要从官网或 App Store 装');
   const dir = path.join(HOME, 'tmp-tailscale'); fs.mkdirSync(dir, { recursive: true });
   const msi = path.join(dir, 'tailscale-setup.msi');
   await download(`https://pkgs.tailscale.com/stable/tailscale-setup-latest-${process.arch === 'arm64' ? 'arm64' : 'amd64'}.msi`, msi, say, '下载 Tailscale', { estimate: 39e6, from: 0, to: 80 });
@@ -658,9 +776,9 @@ async function tsLogin() {
     await new Promise(r => setTimeout(r, 500));
     const s = tsState();
     if (s.loggedIn) return { ok: true };
-    if (/^https:\/\//.test(s.authUrl)) { exec(`start "" "${s.authUrl}"`); return { ok: true, url: s.authUrl }; }
+    if (/^https:\/\//.test(s.authUrl)) { if (MAC) macOpen(s.authUrl); else exec(`start "" "${s.authUrl}"`); return { ok: true, url: s.authUrl }; }
   }
-  throw new Error('没拿到登录网址：点电脑右下角托盘里的 Tailscale 图标登录也行');
+  throw new Error(MAC ? '没拿到登录网址：点屏幕右上角菜单栏里的 Tailscale 图标登录也行' : '没拿到登录网址：点电脑右下角托盘里的 Tailscale 图标登录也行');
 }
 function tsServe(on) {
   if (!tsExe()) throw new Error('先装 Tailscale');
@@ -679,6 +797,7 @@ const newIssueUrl = (title, body) => `https://github.com/${REPO}/issues/new?labe
 
 // ---------- 7. 手机连接：防火墙放行 7788（要管理员，弹一次确认） ----------
 function firewall(on) {
+  if (MAC) return;   // Mac 默认不拦；开了防火墙的话第一次连会自己问
   const cmd = on
     ? 'netsh advfirewall firewall add rule name=EciSimulator dir=in action=allow protocol=TCP localport=7788 profile=private'
     : 'netsh advfirewall firewall delete rule name=EciSimulator';
@@ -707,10 +826,20 @@ async function uninstall(parts, say) {
     del(savesDir(s), '其他存档');
     del(templateDir(s), '新存档用的模板');
     try { fs.unlinkSync(path.join(desktop(), '恶雌模拟器.lnk')); } catch {}
+    if (MAC) rmrf(path.join(process.env.ECI_HOME ? HOME : desktop(), '恶雌模拟器.command'));
     saveState({ game: null });
   }
   if (parts.includes('installer')) {
     try { if (tsExe()) tsServe(false); } catch {}
+    if (MAC) {   // Mac：桌面图标都删掉；安装器文件夹（连同自己下的 Node.js）等这个程序退出后再删
+      for (const n of MAC_ICONS) rmrf(path.join(process.env.ECI_HOME ? HOME : desktop(), n));
+      try { fs.rmdirSync(s.root); } catch {}
+      say('安装器会在关掉后把自己删掉');
+      spawn('/bin/sh', ['-c', 'sleep 3; rm -rf "$0"', path.resolve(HOME)], { detached: true, stdio: 'ignore' }).unref();
+      setTimeout(() => process.exit(0), 1500);
+      cancelling = false;
+      return;
+    }
     try { execSync('netsh advfirewall firewall show rule name=EciSimulator', { windowsHide: true, stdio: 'ignore' }); firewall(false); } catch {}   // 没有这条规则就不弹「是否允许更改」
     try { fs.rmdirSync(s.root); } catch {}
     try { fs.unlinkSync(path.join(desktop(), '恶雌模拟器安装器.lnk')); } catch {}
@@ -729,14 +858,17 @@ const routes = {
   'GET /api/state': async () => {
     const s = state(), d = dirs(s);
     const cfg = brainCfg();
-    return { ...s, dirs: d, home: HOME, free: freeGB(s.root), brain: cfg.brain || (isGame(d.game) ? 'claude' : null), api: { ...(cfg.api || {}), key: cfg.api?.key ? cfg.api.key.slice(0, 4) + '…' + cfg.api.key.slice(-4) : '' }, claude: findClaude(),
+    return { ...s, platform: MAC ? 'darwin' : process.platform, dirs: d, home: HOME, free: freeGB(s.root), brain: cfg.brain || (isGame(d.game) ? 'claude' : null), api: { ...(cfg.api || {}), key: cfg.api?.key ? cfg.api.key.slice(0, 4) + '…' + cfg.api.key.slice(-4) : '' }, claude: findClaude(),
       running: { game: await up('http://127.0.0.1:7788/api/status'), llm: await up('http://127.0.0.1:8080/health'), tts: await up('http://127.0.0.1:9880/health') } };
   },
   'POST /api/pick-folder': async () => ({ path: pickFolder() }),
   'POST /api/location': async b => { job('location', say => moveRoot(b.dir, say)); return { ok: true }; },
   'GET /api/game/check': async () => { const r = await remoteVersion(); return { remote: r, local: state().game?.version || null }; },
   'POST /api/game/install': async () => { job('game', installGame); return { ok: true }; },
-  'POST /api/game/open': async () => { spawn('cmd', ['/c', 'start', '""', path.join(dirs().game, '启动游戏.bat')], { detached: true, windowsHide: true }); return { ok: true }; },
+  'POST /api/game/open': async () => {
+    if (MAC) { macOpen(path.join(dirs().game, '启动游戏.command')); return { ok: true }; }   // 在终端里打开
+    spawn('cmd', ['/c', 'start', '""', path.join(dirs().game, '启动游戏.bat')], { detached: true, windowsHide: true }); return { ok: true };
+  },
   'GET /api/llm/check': async () => llmPlan(),
   'GET /api/llm/detect': async () => detectLLM(),
   'POST /api/brain/models': async b => listModels(b.api || {}),
@@ -757,8 +889,8 @@ const routes = {
   'GET /api/tts/check': async () => ttsPlan(),
   'POST /api/tts/install': async () => { if (!ttsPlan().ok) throw new Error('检查没通过'); job('tts', installTTS); return { ok: true }; },
   'GET /api/board': async () => board(),
-  'POST /api/board/new': async b => { exec(`start "" "${newIssueUrl(b.title, b.body).replace(/"/g, '%22')}"`); return { ok: true }; },
-  'POST /api/open': async b => { if (/^https:\/\//.test(b.url)) exec(`start "" "${b.url.replace(/"/g, '%22')}"`); return { ok: true }; },
+  'POST /api/board/new': async b => { if (MAC) { macOpen(newIssueUrl(b.title, b.body)); return { ok: true }; } exec(`start "" "${newIssueUrl(b.title, b.body).replace(/"/g, '%22')}"`); return { ok: true }; },
+  'POST /api/open': async b => { if (/^https:\/\//.test(b.url)) MAC ? macOpen(b.url) : exec(`start "" "${b.url.replace(/"/g, '%22')}"`); return { ok: true }; },
   'POST /api/firewall': async b => { firewall(!!b.on); return { ok: true }; },
   // 防火墙规则在不在（查不用管理员）；游戏设置里开没开手机连接
   'POST /api/geo': async b => { try { return { ok: true, ...(await geo(String(b.city || '').trim())) }; } catch (e) { return { ok: false, error: e.message }; } },
@@ -770,6 +902,7 @@ const routes = {
   'POST /api/tailscale/login': async () => tsLogin(),
   'POST /api/tailscale/serve': async b => ({ ok: true, ...tsServe(!!b.on) }),
   'GET /api/firewall': async () => {
+    if (MAC) return { on: true, mac: true, lan: !!readJson(path.join(dirs().game, 'app', 'config.json'), {}).lan?.enabled };   // Mac 不用放行
     let on = false; try { execSync('netsh advfirewall firewall show rule name=EciSimulator', { windowsHide: true, stdio: 'ignore' }); on = true; } catch {}
     const lan = !!readJson(path.join(dirs().game, 'app', 'config.json'), {}).lan?.enabled;
     return { on, lan };
@@ -815,5 +948,5 @@ const server = http.createServer(async (req, res) => {
     fs.createReadStream(file).pipe(res);
   } catch (e) { json(res, { ok: false, error: e.message }, 500); }
 });
-server.listen(PORT, '127.0.0.1', () => { if (!process.env.NO_OPEN) exec(`start "" http://127.0.0.1:${PORT}/`); });
-server.on('error', e => { if (e.code === 'EADDRINUSE') { exec(`start "" http://127.0.0.1:${PORT}/`); process.exit(0); } });
+server.listen(PORT, '127.0.0.1', () => { if (!process.env.NO_OPEN) MAC ? macOpen(`http://127.0.0.1:${PORT}/`) : exec(`start "" http://127.0.0.1:${PORT}/`); });
+server.on('error', e => { if (e.code === 'EADDRINUSE') { if (MAC) { macOpen(`http://127.0.0.1:${PORT}/`); return setTimeout(() => process.exit(0), 800); } exec(`start "" http://127.0.0.1:${PORT}/`); process.exit(0); } });

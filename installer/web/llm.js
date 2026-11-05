@@ -42,6 +42,7 @@ const P = [
   { id: 'custom', g: 'Api', name: '其他', sub: '任何 OpenAI 兼容接口', lg: ['#8b7262', '+'], base: '', model: '',
     steps: ['填服务商给的「OpenAI 兼容」接口地址（一般以 /v1 结尾）和 key。', '点「📋 拿模型列表」选一个，再点「测试一下」。'] },
 ];
+const T = x => (S.platform === 'darwin' ? x.replace(/cmd/g, '终端') : x);
 const LG = { local: ['#5b4636', '本'], ollama: ['#222', 'O'], lmstudio: ['#4a3aff', 'LM'], claudecode: ['#d97757', 'C'] };
 const pvHtml = p => `<div class="pv" data-pv="${p.id}"><span class="lg" style="background:${p.lg[0]}">${p.lg[1]}</span><div><b>${esc(p.name)}</b><small>${esc(p.sub)}</small></div></div>`;
 $('provLocal').innerHTML = P.filter(p => p.g === 'Local').map(pvHtml).join('');
@@ -129,7 +130,7 @@ function showPv(id, scroll = true) {
     <div class="row"><button id="cRecheck">重新检查</button>${using ? `<button class="okbtn" disabled>${NOW()} Claude Code</button>` : `<button class="${brainLabel() ? '' : 'p'}" id="cUse" ${S.claude ? '' : 'disabled'}>${brainLabel() ? '改用 Claude Code' : '用 Claude Code 当大脑'}</button>`}</div></div>`;
   else box.innerHTML = `<div class="card pop ${using ? 'doneCard' : ''}"><h2><span class="lg" style="background:${p.lg[0]};width:30px;height:30px;border-radius:9px;display:inline-grid;place-items:center;color:#fff;font-size:13px">${p.lg[1]}</span> ${esc(p.name)}</h2>
     ${using ? `<div class="note ok">${NOW()}它当大脑（模型 ${esc(S.api.model)}）</div>` : ''}
-    <h3>${p.auto ? '怎么用' : '怎么拿到 key'}</h3><ol class="steps ${using ? 'done' : brainLabel() ? 'idle' : ''}">${p.steps.map(x => `<li>${x}</li>`).join('')}</ol>
+    <h3>${p.auto ? '怎么用' : '怎么拿到 key'}</h3><ol class="steps ${using ? 'done' : brainLabel() ? 'idle' : ''}">${p.steps.map(x => `<li>${T(x)}</li>`).join('')}</ol>
     ${p.shot ? `<img class="shot" src="guide/${p.shot}.svg" alt="示意图">` : ''}
     ${p.id === 'ollama' ? '<div id="olRec"></div>' : ''}
     ${p.auto ? '<div class="row"><button class="p" id="aAuto">🔍 自动识别并填写</button><span class="soft" id="aAutoMsg"></span></div>' : ''}
@@ -161,7 +162,7 @@ function wirePanel(p) {
       const h = plan.hw;
       const rows = [['显卡', h.nvidia ? `${h.nvidia.name}，${h.nvidia.vramGB}GB 显存，驱动 ${h.nvidia.driver}` : (h.gpus.join('、') || '没找到')], ['内存', h.ramGB + ' GB'], ['CPU', `${h.cpu}（${h.cores} 线程）`], ['安装盘剩余', plan.free == null ? '—' : plan.free + ' GB']];
       const verdict = plan.tier === 'api' ? '<div class="note bad"><b>这台电脑带不动本地模型。</b>建议选线上 API（DeepSeek 最便宜，几块钱能玩很久）。</div>'
-        : `<div class="note ok"><b>✓ 可以装：${esc(plan.model.label)}</b>，用 ${plan.build === 'cuda' ? 'NVIDIA 显卡' : plan.build === 'vulkan' ? 'Vulkan（AMD / Intel 显卡）' : 'CPU'} 跑，要下载约 ${plan.needGB}GB。</div>`;
+        : `<div class="note ok"><b>✓ 可以装：${esc(plan.model.label)}</b>，用 ${plan.build === 'cuda' ? 'NVIDIA 显卡' : plan.build === 'metal' ? '苹果芯片的 GPU（Metal）' : plan.build === 'vulkan' ? 'Vulkan（AMD / Intel 显卡）' : 'CPU'} 跑，要下载约 ${plan.needGB}GB。</div>`;
       $('lReport').innerHTML = `<table class="kv" style="margin-top:12px">${rows.map(r => `<tr><td>${r[0]}</td><td>${esc(r[1])}</td></tr>`).join('')}</table>${verdict}${plan.why.map(w => `<p class="soft">· ${esc(w)}</p>`).join('')}${S.game ? '' : '<div class="note bad">先去「游戏本体」装游戏。</div>'}`;
       $('lInstall').disabled = plan.tier === 'api' || !S.game; $('lInstall').classList.toggle('p', !$('lInstall').disabled);
     });
@@ -193,7 +194,7 @@ function wirePanel(p) {
     const auto = async () => {
       const d = await api('/api/llm/detect').catch(() => ({ found: [] }));
       const x = d.found.find(f => f.id === p.id);
-      if (p.id === 'ollama' && $('olRec')) $('olRec').innerHTML = `<div class="note info">按你的显卡（${d.vram || '?'}GB 显存）推荐：<span class="cmd" style="cursor:pointer" data-copy="ollama pull ${d.ollamaRec}">ollama pull ${d.ollamaRec}</span> <span class="soft">← 点一下复制，到 cmd 里粘贴回车</span></div>`;
+      if (p.id === 'ollama' && $('olRec')) $('olRec').innerHTML = `<div class="note info">${S.platform === 'darwin' ? '按你的内存（' + d.ramGB + 'GB）' : '按你的显卡（' + (d.vram || '?') + 'GB 显存）'}推荐：<span class="cmd" style="cursor:pointer" data-copy="ollama pull ${d.ollamaRec}">ollama pull ${d.ollamaRec}</span> <span class="soft">← 点一下复制，${T('到 cmd 里粘贴回车')}</span></div>`;
       if (!x) return $('aAutoMsg').innerHTML = `<span class="bad">没找到 ${p.name}：先装好、打开它</span>`;
       if (!x.running) return $('aAutoMsg').innerHTML = `<span class="bad">装了但没开：先打开 ${p.name}</span>`;
       if (!x.models.length) return $('aAutoMsg').innerHTML = '<span class="bad">开着，但还没有模型：先下载一个</span>';

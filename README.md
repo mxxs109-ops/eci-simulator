@@ -26,6 +26,22 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubus
 irm https://raw.githubusercontent.com/mxxs109-ops/eci-simulator/main/install.ps1 | iex
 ```
 
+## 安装（Mac）
+
+打开「终端」，粘贴这一行回车：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mxxs109-ops/eci-simulator/main/install.sh | bash
+```
+
+彻底卸载（安装器打不开时也能删干净）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mxxs109-ops/eci-simulator/main/install.sh | bash -s -- --uninstall
+```
+
+Mac 上没有配音；本地模型要苹果芯片、32GB 以上内存。
+
 桌面上会出现 **「恶雌模拟器安装器」**。之后的事都在安装器里点：
 
 | | |

@@ -294,7 +294,7 @@
 
 <!-- 手机 -->
 <section id="s-phone">
-  <div class="hd"><h1>📱 用手机玩</h1><p>游戏在电脑上跑，手机用浏览器打开就能玩，安卓和 iPhone 都一样，不用装 App。手机和电脑连同一个 Wi-Fi，照下面 4 步做。</p></div>
+  <div class="hd"><h1>📱 用手机玩</h1><p id="phHd">游戏在电脑上跑，手机用浏览器打开就能玩，安卓和 iPhone 都一样，不用装 App。手机和电脑连同一个 Wi-Fi，照下面 4 步做。</p></div>
   <div class="card">
     <ol class="steps">
       <li id="phStep1"><b>让防火墙放行游戏</b><br><span class="soft">点按钮，Windows 会问「是否允许更改」，点「是」。</span>
@@ -323,7 +323,7 @@
         <div class="row"><button class="ghost" data-open="https://apps.apple.com/app/tailscale/id1470499037">iPhone 下载</button><button class="ghost" data-open="https://play.google.com/store/apps/details?id=com.tailscale.ipn">安卓下载</button></div>
         <div id="tsQr"></div></li>
     </ol></div>
-  <div class="card"><h2>🔧 连不上？</h2><ul class="soft" style="margin:0"><li>手机和电脑是不是同一个 Wi-Fi（公司、酒店的 Wi-Fi 常常不让设备互相访问，换手机热点试试）</li><li>第 1 步的防火墙放行做了没有</li><li>电脑上的游戏还开着吗</li><li>二维码有好几个时，挨个扫一下试试（电脑连着好几个网络）</li></ul></div>
+  <div class="card"><h2>🔧 连不上？</h2><ul class="soft" style="margin:0"><li>手机和电脑是不是同一个 Wi-Fi（公司、酒店的 Wi-Fi 常常不让设备互相访问，换手机热点试试）</li><li id="phFwTip">第 1 步的防火墙放行做了没有</li><li>电脑上的游戏还开着吗</li><li>二维码有好几个时，挨个扫一下试试（电脑连着好几个网络）</li></ul></div>
 </section>
 
 <!-- 留言板 -->
@@ -349,7 +349,7 @@
 
 <!-- 卸载 -->
 <section id="s-del">
-  <div class="hd"><h1>🧹 一键卸载</h1><p>默认全部删干净：游戏和所有存档、语言模型、配音、安装器自己、桌面图标、防火墙规则。</p></div>
+  <div class="hd"><h1>🧹 一键卸载</h1><p id="delHd">默认全部删干净：游戏和所有存档、语言模型、配音、安装器自己、桌面图标、防火墙规则。</p></div>
   <div class="card">
     <label><input type="checkbox" class="dp" value="game" checked> 游戏本体和所有存档</label><br>
     <label><input type="checkbox" class="dp" value="llm" checked> 语言模型</label><br>
@@ -400,8 +400,20 @@ function brainLabel() {
   if (!S.api?.base || !S.api?.model) return '';
   return isLocal() ? (/:8080/.test(S.api.base) ? '本地模型' : '本机模型（' + S.api.model + '）') : S.api.model;
 }
+const MACP = () => S.platform === 'darwin';
+let macDone = false;
+function macTweaks() {
+  if (macDone || !MACP()) return; macDone = true;
+  $('phStep1').hidden = true; $('phFwTip').hidden = true;
+  $('phHd').textContent = $('phHd').textContent.replace('4 步', '3 步');
+  $('delHd').textContent = '默认全部删干净：游戏和所有存档、语言模型、安装器自己（连同它下的 Node.js）、桌面图标。';
+  $('tCheck').disabled = true; $('tCheck').classList.remove('p'); $('tInstall').disabled = true;
+  $('tReport').innerHTML = '<div class="note info">Mac 不支持配音（要 NVIDIA 显卡）。不影响玩，只是没有声音。</div>';
+  $('tsInstall').textContent = '去官网下载 Tailscale';
+}
 async function refresh() {
   S = await api('/api/state');
+  macTweaks();
   $('where').textContent = S.game ? '版本 ' + S.game.version + (S.save ? ' · ' + S.save : '') : '安装器';
   $('locNow').textContent = S.root; $('locFree').textContent = S.free == null ? '—' : S.free + ' GB';
   $('gVer').innerHTML = S.game ? esc(S.game.version) + (S.running.game ? ' <span class="tag ok">● 运行中</span>' : '') : '还没装';
@@ -419,8 +431,8 @@ async function refresh() {
   $('tgGame').className = 'tag ' + (S.game ? 'ok' : 'me'); $('tgGame').textContent = S.game ? '✓ 装好了' : '第 1 步';
   $('tLlm').textContent = b || '还没选';
   $('tgLlm').className = 'tag ' + (b ? 'ok' : S.game ? 'me' : ''); $('tgLlm').textContent = b ? '✓ ' + (S.llm ? '本地已装' : '可以用') : '第 2 步';
-  $('tTts').textContent = S.tts ? (S.running.tts ? '运行中' : '装好了') : '可选，有 NVIDIA 显卡才行';
-  $('tgTts').className = 'tag ' + (S.tts ? 'ok' : ''); $('tgTts').textContent = S.tts ? '✓ 装好了' : '可选';
+  $('tTts').textContent = S.tts ? (S.running.tts ? '运行中' : '装好了') : MACP() ? 'Mac 不支持' : '可选，有 NVIDIA 显卡才行';
+  $('tgTts').className = 'tag ' + (S.tts ? 'ok' : ''); $('tgTts').textContent = S.tts ? '✓ 装好了' : MACP() ? 'Mac 不支持' : '可选';
   const [t, p, btn, to] = !S.game ? ['欢迎来到兽世', '三步就能开始：装游戏 → 选一个大脑 → 开玩。', '开始安装', 'game']
     : !b ? ['游戏装好了', '下一步：选一个语言模型当游戏的大脑。', '选大脑', 'llm']
     : ['一切就绪', '大脑：' + b + '。双击桌面上的「恶雌模拟器」，或者点这里。', '▶ 打开游戏', 'open'];
@@ -551,7 +563,7 @@ async function tsLoad() {
   const ready = TS.installed && TS.running !== false;
   $('ts1').classList.toggle('done', !!TS.installed);
   $('tsCheck').hidden = !!TS.installed; $('tsInstall').hidden = TS.installed;
-  $('tsMsg').innerHTML = TS.installed ? (ready ? '<span class="ok">✓ 电脑上已经有了</span>' : '<span class="bad">装了但没在运行：从开始菜单打开 Tailscale</span>') : '<span class="soft">电脑上还没有</span>';
+  $('tsMsg').innerHTML = TS.installed ? (ready ? '<span class="ok">✓ 电脑上已经有了</span>' : (MACP() ? '<span class="bad">装了但没在运行：从「应用程序」打开 Tailscale</span>' : '<span class="bad">装了但没在运行：从开始菜单打开 Tailscale</span>')) : '<span class="soft">电脑上还没有</span>';
   $('ts2').classList.toggle('done', !!TS.loggedIn);
   $('tsLogin').disabled = !ready || TS.loggedIn; $('tsLogin').className = TS.loggedIn ? 'okbtn' : ready ? 'p' : '';
   $('tsLogin').textContent = TS.loggedIn ? '✓ 已登录' : '登录';
@@ -567,7 +579,7 @@ async function tsLoad() {
   } else { const q = qrcode(0, 'M'); q.addData(TS.url); q.make(); qr.innerHTML = `<div class="qrs"><div class="qr"><img src="${q.createDataURL(6, 0)}" alt="二维码">${esc(TS.url)}</div></div>`; }
 }
 $('tsCheck').onclick = e => busyBtn(e.target, tsLoad);
-$('tsInstall').onclick = () => api('/api/tailscale/install', {});
+$('tsInstall').onclick = () => { if (MACP()) { api('/api/open', { url: 'https://tailscale.com/download/mac' }); return toast('装好、打开 Tailscale 以后，点「检查电脑」'); } api('/api/tailscale/install', {}); };
 $('tsLogin').onclick = e => busyBtn(e.target, async () => {
   const r = await api('/api/tailscale/login', {}).catch(err => ({ error: err.message }));
   if (r.error) return toast(r.error, 'bad');
@@ -596,7 +608,7 @@ async function loadPhone() {
   $('lanOn').checked = !!(g.lan && g.lan.enabled); $('lanOn').disabled = !!g.none;
   $('lanTxt').textContent = g.none ? '先在「游戏本体」里装好游戏' : g.lan.enabled ? '已打开：同一个 Wi-Fi 下的手机能连进来' : '允许同一个 Wi-Fi 下的手机连进来';
   const qr = $('qrBox');
-  if (g.none || !g.lan.enabled) { qr.innerHTML = '<p class="soft" style="margin:8px 0 0">打开上面第 2 步的开关，二维码就出现在这里。</p>'; $('phStep3').classList.remove('done'); }
+  if (g.none || !g.lan.enabled) { qr.innerHTML = '<p class="soft" style="margin:8px 0 0">打开上面第 ' + (MACP() ? 1 : 2) + ' 步的开关，二维码就出现在这里。</p>'; $('phStep3').classList.remove('done'); }
   else if (!g.urls.length) qr.innerHTML = '<div class="note bad">没找到这台电脑的局域网地址：确认电脑连着 Wi-Fi 或网线。</div>';
   else if (!gameUp) {
     qr.innerHTML = '<div class="note">电脑上的游戏还没开，开了才能扫码：<button class="p" id="qrOpen" style="padding:4px 12px">▶ 打开游戏</button></div>';
@@ -703,7 +715,7 @@ $('bNew').onclick = () => { api('/api/board/new', { title: $('bTitle').value.tri
 $('locPick').onclick = async () => {
   const r = await api('/api/pick-folder', {});
   if (!r.path) return;
-  const dir = /eci/i.test(r.path) ? r.path : r.path.replace(/[\\/]$/, '') + '\\EciSimulator';
+  const dir = /eci/i.test(r.path) ? r.path : r.path.replace(/[\\/]$/, '') + (MACP() ? '/' : '\\') + 'EciSimulator';
   if (!confirm('装到：' + dir + '\n' + (S.game || S.llm || S.tts ? '已经装的东西会搬过去。' : ''))) return;
   await api('/api/location', { dir });
 };

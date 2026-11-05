@@ -1,6 +1,6 @@
 // 看门：游戏关了（端口没了）就把跟着游戏一起开的本地模型、配音窗口也关掉
-// 用法（启动游戏.bat 里调用）：node watch.js 7788 llm tts   —— 后面只写这次是游戏顺手开的那几个
-const { spawn, execSync } = require('child_process');
+// 用法（启动游戏.bat / Mac 的 启动游戏.command 里调用）：node watch.js 7788 llm tts   —— 后面只写这次是游戏顺手开的那几个
+const { spawn, execSync, execFileSync } = require('child_process');
 const net = require('net');
 
 // 先把自己挪到后台（不挂在黑窗口上），这样关黑窗口不会把看门的也关掉
@@ -17,7 +17,14 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const alive = p => new Promise(r => { const s = net.connect(p, '127.0.0.1'); s.setTimeout(1500); s.on('connect', () => { s.destroy(); r(true); }); s.on('error', () => r(false)); s.on('timeout', () => { s.destroy(); r(false); }); });
 const ps = cmd => execSync('powershell -NoProfile -EncodedCommand ' + Buffer.from(cmd, 'utf16le').toString('base64'), { encoding: 'utf8', windowsHide: true });
 
+// Mac：按端口找到在听的程序关掉；还没开始听（模型还在读）的，按程序路径再找一遍
+function stopMac(w) {
+  try { for (const pid of execFileSync('lsof', ['-nP', `-iTCP:${PORTS[w]}`, '-sTCP:LISTEN', '-t'], { encoding: 'utf8' }).trim().split(/\s+/)) if (pid) process.kill(Number(pid)); } catch {}
+  if (w === 'llm') { try { execFileSync('pkill', ['-f', '/llm/llama.cpp/llama-server'], { stdio: 'ignore' }); } catch {} }
+}
+
 function stop(w) {
+  if (process.platform === 'darwin') return stopMac(w);
   // 关掉开它的那个黑窗口（连同里面的模型 / 配音）；再按端口补一刀
   try { ps(`Get-CimInstance Win32_Process -Filter "Name='cmd.exe'" | Where-Object { $_.CommandLine -like '*${BAT[w]}*' } | ForEach-Object { taskkill /PID $_.ProcessId /T /F | Out-Null }`); } catch {}
   try {
