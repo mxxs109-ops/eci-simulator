@@ -62,7 +62,7 @@ $dest = Join-Path $Home2 'installer'
 $tmp = Join-Path $env:TEMP 'eci-installer-new'
 if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
 # 安装器有哪些文件：先问 GitHub 要最新的清单；问不到（一小时最多 60 次）就用下面这份
-$files = @('installer/server.js', 'installer/shortcut.ps1', 'installer/tts_server.py', 'installer/web/index.html',
+$files = @('installer/server.js', 'installer/watch.js', 'installer/shortcut.ps1', 'installer/tts_server.py', 'installer/web/index.html',
   'installer/web/llm.js', 'installer/web/vendor/qrcode.js', 'installer/web/icon.png', 'installer/web/icon.ico', 'installer/web/guide/deepseek.svg', 'installer/web/guide/apikey.svg')
 try {
   $tree = Invoke-RestMethod "https://api.github.com/repos/$Repo/git/trees/$Branch`?recursive=1" -Headers @{ 'User-Agent' = 'eci-installer' } -TimeoutSec 8
@@ -97,3 +97,11 @@ Write-Host '  桌面上多了「恶雌模拟器安装器」'
 Write-Host ''
 Write-Host '好了！现在帮你打开安装器（浏览器里），之后的事都在那里点。' -ForegroundColor Green
 Start-Process wscript.exe "`"$vbs`""
+# 装好了：这个黑窗口用不着了，倒数 5 秒自己关（是从 cmd 里跑的，就连 cmd 一起关）
+Write-Host ''
+for ($n = 5; $n -gt 0; $n--) { Write-Host "`r  这个窗口 $n 秒后自动关掉  " -NoNewline; Start-Sleep 1 }
+try {
+  $parent = Get-CimInstance Win32_Process -Filter "ProcessId=$PID" | ForEach-Object { Get-Process -Id $_.ParentProcessId -ErrorAction Stop }
+  if ($parent.ProcessName -eq 'cmd') { Stop-Process -Id $parent.Id -Force }
+} catch {}
+[Environment]::Exit(0)

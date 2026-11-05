@@ -173,9 +173,10 @@ async function moveRoot(to, say) {
 function writeLaunchers() {
   const s = state(), d = dirs(s);
   if (!s.game) return;
-  const lines = ['title 恶雌模拟器', 'rem 本机模型和配音装了就顺手开（已经在跑就不重复开）'];
-  if (s.llm) lines.push(`netstat -ano | findstr ":8080 " | findstr LISTENING >nul || start "恶雌模拟器-本地模型" /min "${path.join(d.llm, '启动本地模型.bat')}"`);
-  if (s.tts) lines.push(`netstat -ano | findstr ":9880 " | findstr LISTENING >nul || start "恶雌模拟器-配音" /min "${path.join(d.tts, '启动配音.bat')}"`);
+  const lines = ['title 恶雌模拟器', 'rem 本机模型和配音装了就顺手开（已经在跑就不重复开）；记下这次是游戏开的，游戏关了它们也跟着关', 'set "ECI_START="'];
+  if (s.llm) lines.push(`netstat -ano | findstr ":8080 " | findstr LISTENING >nul || (start "恶雌模拟器-本地模型" /min "${path.join(d.llm, '启动本地模型.bat')}" & set "ECI_START=%ECI_START% llm")`);
+  if (s.tts) lines.push(`netstat -ano | findstr ":9880 " | findstr LISTENING >nul || (start "恶雌模拟器-配音" /min "${path.join(d.tts, '启动配音.bat')}" & set "ECI_START=%ECI_START% tts")`);
+  lines.push(`if defined ECI_START "${NODE}" "${path.join(HERE, 'watch.js')}" 7788 %ECI_START%`);
   lines.push(`cd /d "${path.join(d.game, 'app')}"`, `"${NODE}" server.js`, 'pause');
   writeBat(path.join(d.game, '启动游戏.bat'), lines);
   const ico = path.join(d.game, 'app', 'icon.ico');
@@ -653,12 +654,12 @@ async function uninstall(parts, say) {
     saveState({ game: null });
   }
   if (parts.includes('installer')) {
-    try { firewall(false); } catch {}
+    try { execSync('netsh advfirewall firewall show rule name=EciSimulator', { windowsHide: true, stdio: 'ignore' }); firewall(false); } catch {}   // 没有这条规则就不弹「是否允许更改」
     try { fs.rmdirSync(s.root); } catch {}
     try { fs.unlinkSync(path.join(desktop(), '恶雌模拟器安装器.lnk')); } catch {}
     say('安装器会在关掉后把自己删掉');
     // 自己删不了正在运行的自己：交给一个等 3 秒的 cmd
-    spawn('cmd', ['/c', `timeout /t 3 /nobreak >nul & rmdir /s /q "${HOME}"`], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+    spawn('cmd', ['/c', `ping -n 4 127.0.0.1 >nul & rmdir /s /q "${path.resolve(HOME)}"`], { detached: true, stdio: 'ignore', windowsHide: true, windowsVerbatimArguments: true }).unref();
     setTimeout(() => process.exit(0), 1500);
   } else writeLaunchers();
   cancelling = false;   // 只卸了一部分：之后还能接着装
@@ -704,6 +705,7 @@ const routes = {
   'POST /api/firewall': async b => { firewall(!!b.on); return { ok: true }; },
   // 防火墙规则在不在（查不用管理员）；游戏设置里开没开手机连接
   'POST /api/geo': async b => { try { return { ok: true, ...(await geo(String(b.city || '').trim())) }; } catch (e) { return { ok: false, error: e.message }; } },
+  'GET /api/gameup': async () => ({ up: await up('http://127.0.0.1:7788/api/status') }),
   'GET /api/gamecfg': async () => (isGame(dirs().game) ? gameCfg() : { none: true }),
   'POST /api/gamecfg': async b => setGameCfg(b),
   'GET /api/firewall': async () => {
@@ -735,8 +737,12 @@ const routes = {
 };
 async function up(u) { try { return (await fetch(u, { signal: AbortSignal.timeout(1200) })).ok; } catch { return false; } }
 
+// 安装器网页关掉 3 分钟、又没有下载 / 安装在跑：安装器自己退出（网页开着每秒都会来问一次）
+let lastHit = Date.now();
+setInterval(() => { if (Date.now() - lastHit > 180000 && Object.values(jobs).every(j => j.done)) process.exit(0); }, 30000).unref();
 const server = http.createServer(async (req, res) => {
   if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress)) { res.writeHead(403); return res.end(); }
+  lastHit = Date.now();
   const url = req.url.split('?')[0];
   try {
     const fn = routes[`${req.method} ${url}`];

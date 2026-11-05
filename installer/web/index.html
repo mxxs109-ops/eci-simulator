@@ -301,7 +301,7 @@
         <div class="row"><button class="p" id="fwOn">放行防火墙</button><button class="ghost" id="fwOff" hidden>取消放行</button></div></li>
       <li id="phStep2"><b>打开手机连接</b>
         <div><label class="switch"><input type="checkbox" id="lanOn"><span class="sl"></span><span id="lanTxt">允许同一个 Wi-Fi 下的手机连进来</span></label></div></li>
-      <li id="phStep3"><b>手机打开相机，扫下面的二维码</b><br><span class="soft">点弹出来的链接，游戏就在手机浏览器里打开了。电脑上的游戏要开着。</span>
+      <li id="phStep3"><b>手机打开相机，扫下面的二维码</b><br><span class="soft">点弹出来的链接，游戏就在手机浏览器里打开了。</span>
         <div id="qrBox"></div></li>
       <li id="phStep4"><b>放到手机桌面</b>，以后点图标就进游戏（全屏，和 App 一样）
         <div class="row" style="align-items:flex-start;gap:28px">
@@ -424,7 +424,8 @@ const JOB_BTN = { game: 'gInstall', tts: 'tInstall', llm: 'lInstall', llmtest: '
 const JOB_TXT = { game: () => (S.game ? '更新中…' : '安装中…'), tts: () => '安装中…', llm: () => '安装中…', llmtest: () => '启动中…', location: () => '搬家中…', uninstall: () => '卸载中…' };
 let firstPoll = true;   // 打开页面时已经做完的任务不再弹提示
 async function poll() {
-  const jobs = await api('/api/jobs').catch(() => ({}));
+  const jobs = await api('/api/jobs').catch(() => null);
+  if (!jobs) { if (byeAll) bye(); return; }   // 安装器自己删完退出了
   if (firstPoll) { firstPoll = false; for (const [n, j] of Object.entries(jobs)) if (j.done) jobSeen[n] = n + j.log.length + j.done; }
   for (const [name, j] of Object.entries(jobs)) {
     const box = $('job-' + name); if (!box) continue;
@@ -437,6 +438,7 @@ async function poll() {
       else if (btn.dataset.locked) { delete btn.dataset.locked; btn.classList.remove('busy'); btn.disabled = false; }
     }
     const key = name + j.log.length + j.done;
+    if (name === 'uninstall' && j.done && !j.error && byeAll) return bye();
     if (j.done && jobSeen[name] !== key) {
       jobSeen[name] = key; refresh();
       if (name === 'game') checkUpdate();
@@ -527,19 +529,30 @@ $('cuClear').onclick = async () => { if (!confirm('清空所有自定义规则�
 
 // ---------- 手机 ----------
 // 手机页：防火墙放没放行、手机连接开没开，都去真的查一下再变绿（点了「放行」可能在 Windows 弹窗里点了「否」）
+let gameUp = false;
+// 停在手机页时每 3 秒看一眼游戏开没开：开了二维码马上出来，关了马上收起
+setInterval(async () => {
+  if (!$('s-phone').classList.contains('on') || document.hidden) return;
+  const now = !!(await api('/api/gameup').catch(() => ({}))).up;
+  if (now !== gameUp) loadPhone();
+}, 3000);
 async function loadPhone() {
   const r = await api('/api/firewall').catch(() => ({}));
   const g = await api('/api/gamecfg').catch(() => ({ none: true }));
+  gameUp = !!(await api('/api/gameup').catch(() => ({}))).up;
   $('phStep1').classList.toggle('done', !!r.on); $('phStep2').classList.toggle('done', !!(g.lan && g.lan.enabled));
   $('lanOn').checked = !!(g.lan && g.lan.enabled); $('lanOn').disabled = !!g.none;
   $('lanTxt').textContent = g.none ? '先在「游戏本体」里装好游戏' : g.lan.enabled ? '已打开：同一个 Wi-Fi 下的手机能连进来' : '允许同一个 Wi-Fi 下的手机连进来';
   const qr = $('qrBox');
   if (g.none || !g.lan.enabled) { qr.innerHTML = '<p class="soft" style="margin:8px 0 0">打开上面第 2 步的开关，二维码就出现在这里。</p>'; $('phStep3').classList.remove('done'); }
   else if (!g.urls.length) qr.innerHTML = '<div class="note bad">没找到这台电脑的局域网地址：确认电脑连着 Wi-Fi 或网线。</div>';
+  else if (!gameUp) {
+    qr.innerHTML = '<div class="note">电脑上的游戏还没开，开了才能扫码：<button class="p" id="qrOpen" style="padding:4px 12px">▶ 打开游戏</button></div>';
+    $('qrOpen').onclick = e => { api('/api/game/open', {}); e.target.disabled = true; e.target.textContent = '正在打开…'; };
+  }
   else {
     qr.innerHTML = '<div class="qrs">' + g.urls.map(u => { const q = qrcode(0, 'M'); q.addData(u); q.make(); return `<div class="qr"><img src="${q.createDataURL(6, 0)}" alt="二维码">${esc(u.replace(/\?t=.*/, ''))}</div>`; }).join('') + '</div>'
-      + (S.running.game ? '' : '<div class="note">电脑上的游戏还没开：<button class="p" id="qrOpen" style="padding:4px 12px">▶ 打开游戏</button> 开着手机才连得上</div>');
-    if ($('qrOpen')) $('qrOpen').onclick = () => { api('/api/game/open', {}); toast('正在打开游戏…'); setTimeout(refresh, 4000); };
+;
   }
   $('fwOn').disabled = !!r.on; $('fwOn').className = r.on ? 'okbtn' : 'p'; $('fwOn').textContent = r.on ? '✓ 已放行' : '放行防火墙';
   $('fwOff').hidden = !r.on;
@@ -649,8 +662,16 @@ $('dGo').onclick = () => {
   if (!parts.length) return;
   const running = document.querySelectorAll('[data-locked]').length;
   if (!confirm('确定删除：' + parts.map(p => ({ game: '游戏和所有存档', llm: '语言模型', tts: '配音', installer: '安装器' }[p])).join('、') + '？删了找不回来。' + (running ? '\n\n正在下载 / 安装的会先停下。' : ''))) return;
+  byeAll = parts.includes('installer');
   api('/api/uninstall', { parts });
 };
+// 全删完了：安装器已经不在了，网页也不留着
+let byeAll = false, byeDone = false;
+function bye() {
+  if (byeDone) return; byeDone = true;
+  document.body.innerHTML = '<div style="min-height:100vh;display:grid;place-items:center;background:var(--bg);text-align:center"><div><div style="font-size:72px">🧹</div><h1 style="margin:12px 0 6px">全部删干净了</h1><p class="soft" id="byeTxt">3 秒后关掉</p></div></div>';
+  setTimeout(() => { window.close(); setTimeout(() => { $('byeTxt').textContent = '可以关掉这个网页了'; }, 500); }, 3000);
+}
 
 refresh().then(() => { go(location.hash.slice(1) || 'home'); checkUpdate(); const c = currentPv(); if (c && brainLabel()) showPv(c, false); });
 </script>
