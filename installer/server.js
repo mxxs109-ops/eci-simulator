@@ -498,6 +498,38 @@ async function listModels(api) {
   return { ok: true, models: [...new Set(ids)] };
 }
 
+// ---------- 游戏设置：亲密段落交给谁写、天气城市、手机连接（游戏里不再有设置，全在这里） ----------
+const GAME_PORT = 7788;
+const cfgFile = () => path.join(dirs().game, 'app', 'config.json');
+function gameCfg() {
+  const c = readJson(cfgFile(), {});
+  const lan = { enabled: false, token: '', ...(c.lan || {}) };
+  if (!lan.token) { lan.token = require('crypto').randomBytes(12).toString('base64url'); writeJson(cfgFile(), { ...c, lan }); }
+  const ips = [];
+  for (const list of Object.values(os.networkInterfaces())) for (const a of list || []) if (a.family === 'IPv4' && !a.internal && !a.address.startsWith('169.254.')) ips.push(a.address);
+  const mask = k => (k ? k.slice(0, 4) + '…' + k.slice(-4) : '');
+  const h = { base: 'http://127.0.0.1:8080/v1', key: '', model: '', ...(c.handoff || {}) };
+  return { handoff: { ...h, key: mask(h.key) }, city: c.city || '', lan: { enabled: !!lan.enabled }, urls: ips.map(ip => `http://${ip}:${GAME_PORT}/?t=${lan.token}`) };
+}
+async function setGameCfg(b) {
+  if (!isGame(dirs().game)) throw new Error('先装游戏本体');
+  // 游戏开着（而且是我们装的这份）：交给它改，手机连接开关能马上生效
+  try {
+    const st = await (await fetch(`http://127.0.0.1:${GAME_PORT}/api/status`, { signal: AbortSignal.timeout(1500) })).json();
+    if (st.gameDir && path.resolve(st.gameDir).toLowerCase() === path.resolve(dirs().game).toLowerCase()) {
+      await fetch(`http://127.0.0.1:${GAME_PORT}/api/config`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b), signal: AbortSignal.timeout(5000) });
+      return gameCfg();
+    }
+  } catch {}
+  const c = readJson(cfgFile(), {});
+  const keep = (old = {}, nu) => ({ ...old, ...nu, key: nu.key && !nu.key.includes('…') ? nu.key : old.key || '' });
+  if (b.handoff) c.handoff = keep(c.handoff, b.handoff);
+  if (b.city !== undefined) c.city = String(b.city).trim();
+  if (b.lan) c.lan = { ...(c.lan || {}), enabled: !!b.lan.enabled };
+  writeJson(cfgFile(), c);
+  return gameCfg();
+}
+
 // ---------- 3. 配音：检查 → 安装 ----------
 function ttsPlan() {
   const h = hardware(), s = state(), free = freeGB(s.root), why = [];
@@ -622,6 +654,14 @@ const routes = {
   'POST /api/board/new': async b => { exec(`start "" "${newIssueUrl(b.title, b.body).replace(/"/g, '%22')}"`); return { ok: true }; },
   'POST /api/open': async b => { if (/^https:\/\//.test(b.url)) exec(`start "" "${b.url.replace(/"/g, '%22')}"`); return { ok: true }; },
   'POST /api/firewall': async b => { firewall(!!b.on); return { ok: true }; },
+  // 防火墙规则在不在（查不用管理员）；游戏设置里开没开手机连接
+  'GET /api/gamecfg': async () => (isGame(dirs().game) ? gameCfg() : { none: true }),
+  'POST /api/gamecfg': async b => setGameCfg(b),
+  'GET /api/firewall': async () => {
+    let on = false; try { execSync('netsh advfirewall firewall show rule name=EciSimulator', { windowsHide: true, stdio: 'ignore' }); on = true; } catch {}
+    const lan = !!readJson(path.join(dirs().game, 'app', 'config.json'), {}).lan?.enabled;
+    return { on, lan };
+  },
   'POST /api/uninstall': async b => { job('uninstall', say => uninstall(b.parts || ['game', 'llm', 'tts', 'installer'], say)); return { ok: true }; },
   'GET /api/saves': async () => ({ list: listSaves(), template: isGame(templateDir()) }),
   'POST /api/saves/new': async b => { job('saves', say => newSave(b.name, say)); return { ok: true }; },

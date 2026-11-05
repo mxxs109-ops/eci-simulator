@@ -98,8 +98,24 @@
   .note { padding: 10px 14px; border-radius: 12px; background: var(--meSoft); margin: 10px 0; font-size: 14px; }
   .note.ok { background: var(--okSoft); color: inherit; } .note.bad { background: var(--badSoft); }
   .result { margin-top: 10px; min-height: 1em; font-weight: 700; }
-  .steps.done li::before { content: "✓"; background: var(--ok); }
-  .steps.done li { color: var(--soft); }
+  /* 做完的步骤：整行变绿、圆圈打勾（整组做完用 .steps.done，单步用 li.done） */
+  .steps.done li::before, .steps li.done::before { content: "✓"; background: var(--ok); }
+  .steps.done li, .steps li.done { background: var(--okSoft); }
+  /* 已经有大脑在用：别家的步骤只是参考，圆圈用灰色，不用橙色催 */
+  .steps.idle li:not(.done)::before { background: var(--soft); }
+  .switch { display: inline-flex; align-items: center; gap: 12px; cursor: pointer; font-weight: 700; margin-top: 10px; user-select: none; }
+  .switch input { display: none; }
+  .switch .sl { width: 54px; height: 30px; border-radius: 99px; background: var(--line); position: relative; transition: background .2s; flex: none; }
+  .switch .sl::after { content: ""; position: absolute; left: 3px; top: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.25); transition: transform .2s; }
+  .switch input:checked + .sl { background: var(--ok); }
+  .switch input:checked + .sl::after { transform: translateX(24px); }
+  .qrs { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; }
+  .qr { background: #fff; border-radius: 16px; padding: 12px; text-align: center; box-shadow: var(--shadow); color: #333; font-size: 12px; }
+  .qr img { display: block; width: 190px; height: 190px; image-rendering: pixelated; margin-bottom: 6px; }
+  .opt { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 14px; border: 2px solid var(--line); margin: 8px 0; cursor: pointer; }
+  .opt.on { border-color: var(--me); background: var(--meSoft); }
+  .opt.on.ready { border-color: var(--ok); background: var(--okSoft); }   /* 选中而且能用了才绿 */
+  .opt input { margin-top: 4px; }
   .note.info { background: var(--bg2); color: var(--soft); }
   button.okbtn { background: var(--okSoft); color: var(--ok); border-color: transparent; font-weight: 700; cursor: default; opacity: 1; }
   .card.doneCard { border-color: var(--ok); box-shadow: 0 0 0 3px var(--okSoft), var(--shadow); }
@@ -201,6 +217,11 @@
     <div class="row"><button class="p big" id="gInstall">安装</button><button id="gOpen">▶ 打开游戏</button><button class="ghost" id="gCheck">检查更新</button></div>
     <div class="job" id="job-game"></div>
   </div>
+  <div class="card" id="cityCard"><h2>🌤️ 游戏里的天气</h2>
+    <p class="soft" style="margin:0">游戏的天气和时间跟你现实中一样。空着 = 按网络位置自动找你在哪个城市。</p>
+    <div class="row"><input type="text" id="city" placeholder="城市，例如：上海、London、Tokyo（空着就自动）" style="flex:1;min-width:220px"><button id="citySave">保存</button></div>
+    <div class="result" id="cityMsg"></div>
+  </div>
 </section>
 
 <!-- 大脑 -->
@@ -216,6 +237,13 @@
     <div class="prov" id="provApi"></div>
   </div>
     <div id="provPanel"></div>
+  <div class="card" id="hoCard"><h2>💋 亲密段落交给谁写</h2>
+    <p class="soft" style="margin:0">Claude 和大部分线上模型不写最露骨的那几段，这几段会交给这里选的模型写。</p>
+    <label class="opt" data-ho="local"><input type="radio" name="ho" value="local"><div><b>本地模型（推荐）</b><br><span class="soft" id="hoLocalTxt">安装器里「本地模型」装的那个</span></div></label>
+    <label class="opt" data-ho="custom"><input type="radio" name="ho" value="custom"><div><b>自己填一个接口</b><br><span class="soft">Ollama、LM Studio 或者别的 OpenAI 兼容接口</span>
+      <div id="hoFields" hidden><label class="f">接口地址 <input type="text" id="hoBase" placeholder="比如 http://127.0.0.1:11434/v1"></label><label class="f">模型名 <input type="text" id="hoModel"></label><label class="f">API key（本机的不用填） <input type="password" id="hoKey"></label></div></div></label>
+    <div class="row"><button id="hoSave">保存</button><span class="result" id="hoMsg" style="margin:0"></span></div>
+  </div>
 </section>
 
 <!-- 配音 -->
@@ -264,21 +292,24 @@
 
 <!-- 手机 -->
 <section id="s-phone">
-  <div class="hd"><h1>📱 用手机玩</h1><p>游戏在电脑上跑，手机用浏览器打开就能玩，安卓和 iPhone 都一样，不用装 App。手机和电脑连同一个 Wi-Fi。</p></div>
+  <div class="hd"><h1>📱 用手机玩</h1><p>游戏在电脑上跑，手机用浏览器打开就能玩，安卓和 iPhone 都一样，不用装 App。手机和电脑连同一个 Wi-Fi，照下面 4 步做。</p></div>
   <div class="card">
     <ol class="steps">
-      <li>点下面的按钮，让 Windows 防火墙放行游戏（会问「是否允许更改」，点「是」）。<div class="row"><button class="p" id="fwOn">放行防火墙</button><button class="ghost" id="fwOff">取消放行</button></div></li>
-      <li>电脑上打开游戏 → 右上角 ⚙️ → 勾上「允许同一个 Wi-Fi 下的手机连进来」→ 保存，会出现二维码。</li>
-      <li>手机打开<b>相机</b>，对准电脑屏幕上的二维码，点弹出来的链接，游戏就在手机浏览器里打开了。</li>
-      <li>把它放到手机桌面，以后点图标就进游戏（全屏，和 App 一样）：
-        <div class="row" style="align-items:flex-start;gap:24px">
-          <div><b>iPhone（Safari）</b><br><span class="soft">底部「分享」按钮 → 「添加到主屏幕」→「添加」</span></div>
+      <li id="phStep1"><b>让防火墙放行游戏</b><br><span class="soft">点按钮，Windows 会问「是否允许更改」，点「是」。</span>
+        <div class="row"><button class="p" id="fwOn">放行防火墙</button><button class="ghost" id="fwOff" hidden>取消放行</button></div></li>
+      <li id="phStep2"><b>打开手机连接</b>
+        <div><label class="switch"><input type="checkbox" id="lanOn"><span class="sl"></span><span id="lanTxt">允许同一个 Wi-Fi 下的手机连进来</span></label></div></li>
+      <li id="phStep3"><b>手机打开相机，扫下面的二维码</b><br><span class="soft">点弹出来的链接，游戏就在手机浏览器里打开了。电脑上的游戏要开着。</span>
+        <div id="qrBox"></div></li>
+      <li id="phStep4"><b>放到手机桌面</b>，以后点图标就进游戏（全屏，和 App 一样）
+        <div class="row" style="align-items:flex-start;gap:28px">
+          <div><b>iPhone（Safari）</b><br><span class="soft">底部「分享」按钮 →「添加到主屏幕」→「添加」</span></div>
           <div><b>安卓（Chrome 等）</b><br><span class="soft">右上角「⋮」→「添加到主屏幕」或「安装应用」</span></div>
         </div></li>
     </ol>
   </div>
   <div class="card"><h2>🌍 出门在外也想玩？</h2><p class="soft" style="margin:0">电脑和手机都装 <a href="#" data-open="https://tailscale.com/download">Tailscale</a>（免费），登录同一个账号。之后手机在哪都能连回家里的电脑，二维码照样扫。</p></div>
-  <div class="card"><h2>🔧 连不上？</h2><ul class="soft" style="margin:0"><li>手机和电脑是不是同一个 Wi-Fi（公司、酒店的 Wi-Fi 常常不让设备互相访问，换手机热点试试）</li><li>第 1 步的防火墙放行做了没有</li><li>电脑上的游戏还开着吗</li><li>扫码打开后显示「请在电脑上打开游戏」：电脑那边换过连接码，重新扫一次</li></ul></div>
+  <div class="card"><h2>🔧 连不上？</h2><ul class="soft" style="margin:0"><li>手机和电脑是不是同一个 Wi-Fi（公司、酒店的 Wi-Fi 常常不让设备互相访问，换手机热点试试）</li><li>第 1 步的防火墙放行做了没有</li><li>电脑上的游戏还开着吗</li><li>二维码有好几个时，挨个扫一下试试（电脑连着好几个网络）</li></ul></div>
 </section>
 
 <!-- 留言板 -->
@@ -337,6 +368,9 @@ function go(s) {
   if (s === 'board') loadBoard();
   if (s === 'saves') loadSaves();
   if (s === 'custom') loadCustom();
+  if (s === 'phone') loadPhone();
+  if (s === 'llm') loadHandoff();
+  if (s === 'game') loadCity();
 
 }
 $('nav').onclick = e => { const a = e.target.closest('a'); if (a) { e.preventDefault(); go(a.dataset.s); } };
@@ -490,8 +524,73 @@ $('cuSave2').onclick = async () => { await api('/api/custom/save', { rules: $('c
 $('cuClear').onclick = async () => { if (!confirm('清空所有自定义规则，游戏恢复原样？')) return; await api('/api/custom/save', { rules: '' }); toast('恢复原样了', 'ok'); loadCustom(); };
 
 // ---------- 手机 ----------
-$('fwOn').onclick = async () => { const r = await api('/api/firewall', { on: true }).catch(e => ({ error: e.message })); r.ok ? toast('放行了', 'ok') : toast(r.error, 'bad'); };
-$('fwOff').onclick = async () => { await api('/api/firewall', { on: false }); toast('取消了'); };
+// 手机页：防火墙放没放行、手机连接开没开，都去真的查一下再变绿（点了「放行」可能在 Windows 弹窗里点了「否」）
+async function loadPhone() {
+  const r = await api('/api/firewall').catch(() => ({}));
+  const g = await api('/api/gamecfg').catch(() => ({ none: true }));
+  $('phStep1').classList.toggle('done', !!r.on); $('phStep2').classList.toggle('done', !!(g.lan && g.lan.enabled));
+  $('lanOn').checked = !!(g.lan && g.lan.enabled); $('lanOn').disabled = !!g.none;
+  $('lanTxt').textContent = g.none ? '先在「游戏本体」里装好游戏' : g.lan.enabled ? '已打开：同一个 Wi-Fi 下的手机能连进来' : '允许同一个 Wi-Fi 下的手机连进来';
+  const qr = $('qrBox');
+  if (g.none || !g.lan.enabled) { qr.innerHTML = '<p class="soft" style="margin:8px 0 0">打开上面第 2 步的开关，二维码就出现在这里。</p>'; $('phStep3').classList.remove('done'); }
+  else if (!g.urls.length) qr.innerHTML = '<div class="note bad">没找到这台电脑的局域网地址：确认电脑连着 Wi-Fi 或网线。</div>';
+  else {
+    qr.innerHTML = '<div class="qrs">' + g.urls.map(u => { const q = qrcode(0, 'M'); q.addData(u); q.make(); return `<div class="qr"><img src="${q.createDataURL(6, 0)}" alt="二维码">${esc(u.replace(/\?t=.*/, ''))}</div>`; }).join('') + '</div>'
+      + (S.running.game ? '' : '<div class="note">电脑上的游戏还没开：<button class="p" id="qrOpen" style="padding:4px 12px">▶ 打开游戏</button> 开着手机才连得上</div>');
+    if ($('qrOpen')) $('qrOpen').onclick = () => { api('/api/game/open', {}); toast('正在打开游戏…'); setTimeout(refresh, 4000); };
+  }
+  $('fwOn').disabled = !!r.on; $('fwOn').className = r.on ? 'okbtn' : 'p'; $('fwOn').textContent = r.on ? '✓ 已放行' : '放行防火墙';
+  $('fwOff').hidden = !r.on;
+}
+$('fwOn').onclick = e => busyBtn(e.target, async () => { await api('/api/firewall', { on: true }).catch(() => {}); await loadPhone(); toast($('phStep1').classList.contains('done') ? '放行了' : '没放行：Windows 问「是否允许更改」时要点「是」', $('phStep1').classList.contains('done') ? 'ok' : 'bad'); });
+$('fwOff').onclick = e => busyBtn(e.target, async () => { await api('/api/firewall', { on: false }).catch(() => {}); await loadPhone(); toast('取消了'); });
+$('lanOn').onchange = async e => {
+  const on = e.target.checked;
+  const r = await api('/api/gamecfg', { lan: { enabled: on } }).catch(err => ({ error: err.message }));
+  if (r.error) { toast(r.error, 'bad'); e.target.checked = !on; return; }
+  toast(on ? '手机连接打开了，扫下面的二维码' : '手机连接关了', on ? 'ok' : '');
+  await loadPhone();
+};
+
+// 亲密段落交给谁写
+async function loadHandoff() {
+  const g = await api('/api/gamecfg').catch(() => ({ none: true }));
+  if (g.none) { $('hoCard').hidden = true; return; }
+  $('hoCard').hidden = false;
+  const local = /127\.0\.0\.1:8080/.test(g.handoff.base || '') || !g.handoff.base;
+  document.querySelector(`input[name=ho][value=${local ? 'local' : 'custom'}]`).checked = true;
+  $('hoBase').value = local ? '' : g.handoff.base; $('hoModel').value = g.handoff.model || ''; $('hoKey').value = g.handoff.key || '';
+  $('hoLocalTxt').textContent = S.llm ? (S.running.llm ? '✓ 已经装好，正在运行' : '✓ 已经装好（玩游戏时会自动打开）') : '还没装：在上面「本地模型」里装（要好显卡）；没装的话这几段会跳过';
+  paintHo(local);
+}
+function paintHo(local) {
+  const ready = local ? !!S.llm : !!$('hoBase').value.trim();
+  document.querySelectorAll('[data-ho]').forEach(x => { x.classList.toggle('on', x.dataset.ho === (local ? 'local' : 'custom')); x.classList.toggle('ready', x.dataset.ho === (local ? 'local' : 'custom') && ready); });
+  $('hoFields').hidden = local;
+  $('hoCard').classList.toggle('doneCard', ready);
+}
+document.querySelectorAll('input[name=ho]').forEach(r => r.onchange = () => { paintHo(r.value === 'local'); $('hoSave').classList.add('p'); });
+['hoBase', 'hoModel', 'hoKey'].forEach(id => $(id).addEventListener('input', () => $('hoSave').classList.add('p')));
+$('city').addEventListener('input', () => $('citySave').classList.add('p'));
+$('hoSave').onclick = e => busyBtn(e.target, async () => {
+  const local = document.querySelector('input[name=ho]:checked').value === 'local';
+  const handoff = local ? { base: 'http://127.0.0.1:8080/v1', model: '', key: '' } : { base: $('hoBase').value.trim(), model: $('hoModel').value.trim(), key: $('hoKey').value.trim() };
+  if (!local && !handoff.base) return toast('填一下接口地址', 'bad');
+  const r = await api('/api/gamecfg', { handoff }).catch(err => ({ error: err.message }));
+  r.error ? toast(r.error, 'bad') : toast('保存好了', 'ok'); $('hoSave').classList.remove('p'); loadHandoff();
+});
+
+// 天气城市
+async function loadCity() {
+  const g = await api('/api/gamecfg').catch(() => ({ none: true }));
+  $('cityCard').hidden = !!g.none; if (g.none) return;
+  $('city').value = g.city || '';
+  $('cityMsg').innerHTML = g.city ? `<span class="ok">✓ 用 ${esc(g.city)} 的天气</span>` : '<span class="ok">✓ 按网络位置自动定位</span>';
+}
+$('citySave').onclick = e => busyBtn(e.target, async () => {
+  const r = await api('/api/gamecfg', { city: $('city').value.trim() }).catch(err => ({ error: err.message }));
+  r.error ? toast(r.error, 'bad') : toast('保存好了，游戏下一次整点会换成这里的天气', 'ok'); $('citySave').classList.remove('p'); loadCity();
+});
 
 // ---------- 留言板 ----------
 async function loadBoard() {
@@ -522,6 +621,7 @@ $('dGo').onclick = () => {
 
 refresh().then(() => { go(location.hash.slice(1) || 'home'); checkUpdate(); const c = currentPv(); if (c && brainLabel()) showPv(c, false); });
 </script>
+<script src="vendor/qrcode.js"></script>
 <script src="llm.js"></script>
 </body>
 </html>

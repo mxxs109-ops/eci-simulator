@@ -25,7 +25,7 @@
   #eciSet .qr { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; }
   #eciSet .qr div { text-align: center; font-size: 12px; word-break: break-all; max-width: 200px; }
   #eciSet .qr img { width: 180px; height: 180px; background: #fff; padding: 6px; border-radius: 8px; }
-  header { padding-right: 64px !important; }
+  #eciSetBtn { display: none !important; }   /* 设置都在安装器里，游戏里只玩 */
   #eciSetBtn { position: fixed; right: 14px; top: 10px; display: grid; place-items: center; padding: 0; line-height: 1; z-index: 9998; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line, #e2d3c2); background: var(--card, #fffaf4); font-size: 20px; cursor: pointer; }`;
   document.head.insertAdjacentHTML('beforeend', `<style>${css}</style>`);
   document.body.insertAdjacentHTML('beforeend', `

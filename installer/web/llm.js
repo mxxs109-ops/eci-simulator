@@ -74,7 +74,7 @@ async function detect() {
       : d.models && d.models.length ? (d.models.length > 1 ? `有 ${d.models.length} 个模型，帮你挑了 ${d.model}` : '模型：' + d.model)
       : '开着，但还没有模型：先下载一个（点「看步骤」）';
     const can = d.id === 'claudecode' || (d.running && d.model);
-    const btn = on ? '<button class="okbtn" disabled>✓ 正在用</button>' : can ? `<button class="p" data-duse="${d.id}">一键用它</button>` : `<button class="ghost" data-dshow="${d.id}">看步骤</button>`;
+    const btn = on ? '<button class="okbtn" disabled>✓ 正在用</button>' : can ? (brainLabel() ? `<button data-duse="${d.id}">改用它</button>` : `<button class="p" data-duse="${d.id}">一键用它</button>`) : `<button class="ghost" data-dshow="${d.id}">看步骤</button>`;
     return `<div class="det ${on ? 'on' : ''}"><span class="lg" style="background:${LG[d.id][0]}">${LG[d.id][1]}</span><div class="tx"><b>${esc(d.name)}</b><small>${esc(info)}</small></div>${sel}${btn}</div>`;
   }).join('');
   $('detList').innerHTML = rows || '<p class="soft">没找到已经装好的。下面任选一家，照步骤做：有好显卡推荐「本地模型」，没有就选 DeepSeek（便宜）。</p>';
@@ -108,24 +108,24 @@ function showPv(id, scroll = true) {
     ${using ? '<div class="note ok">✓ 正在用它当大脑</div>' : S.llm ? '<div class="note ok">✓ 已经装好了</div>' : ''}
     <p>在你电脑上跑一个不限尺度的开源大模型（Qwen 35B）。要好显卡、大内存；比线上慢，一轮 1～3 分钟。</p>
     <div class="row">
-      <button id="lCheck" class="${S.llm ? 'okbtn' : 'p'}" ${S.llm ? 'disabled' : ''}>${S.llm ? '✓ 已检查' : '① 检查我的电脑'}</button>
+      <button id="lCheck" class="${S.llm ? 'okbtn' : brainLabel() ? '' : 'p'}" ${S.llm ? 'disabled' : ''}>${S.llm ? '✓ 已检查' : '① 检查我的电脑'}</button>
       <button id="lInstall" class="${S.llm ? 'okbtn' : ''}" disabled>${S.llm ? '✓ 已安装' : '② 安装'}</button>
       <button id="lTest" ${S.llm ? '' : 'disabled'}>③ 试一下</button>
-      <button id="lUse" class="${using ? 'okbtn' : S.llm ? 'p' : ''}" ${S.llm && !using ? '' : 'disabled'}>${using ? '✓ 正在用' : '④ 用它当大脑'}</button></div>
+      <button id="lUse" class="${using ? 'okbtn' : S.llm && !brainLabel() ? 'p' : ''}" ${S.llm && !using ? '' : 'disabled'}>${using ? '✓ 正在用' : '④ 用它当大脑'}</button></div>
     <div id="lReport"></div><div class="job" id="job-llm"></div><div class="job" id="job-llmtest"></div>
     <p class="soft">想快一点：大脑用 Claude 或线上 API，本地模型只写亲密段落（装好就自动会用，不用点 ④）。</p></div>`;
   else if (p.kind === 'claude') box.innerHTML = `<div class="card pop ${using ? 'doneCard' : ''}"><h2>✳️ Claude Code</h2>
     <div class="note ${S.claude ? 'ok' : 'bad'}">${using ? '✓ 正在用 Claude Code 当大脑' : S.claude ? `✓ 找到了 Claude Code（${esc(S.claude)}）` : '还没找到 Claude Code，照下面做：'}</div>
-    <ol class="steps ${S.claude ? 'done' : ''}">
-      <li>要有 Claude 的付费订阅（Pro 或 Max），或者 Anthropic 的 API 额度。<a href="#" data-open="https://claude.ai/upgrade">看订阅</a></li>
-      <li>装 Claude Code：装好 <a href="#" data-open="https://code.visualstudio.com/">VS Code</a>，左边「扩展」里搜 <b>Claude Code</b> 点安装；或者照 <a href="#" data-open="https://docs.claude.com/en/docs/claude-code/setup">官方教程</a> 装命令行版。</li>
-      <li>打开一次 Claude Code，照提示用你的 Claude 账号登录。</li>
+    <ol class="steps ${using ? 'done' : brainLabel() ? 'idle' : ''}">
+      <li class="${S.claude ? 'done' : ''}">要有 Claude 的付费订阅（Pro 或 Max），或者 Anthropic 的 API 额度。<a href="#" data-open="https://claude.ai/upgrade">看订阅</a></li>
+      <li class="${S.claude ? 'done' : ''}">装 Claude Code：装好 <a href="#" data-open="https://code.visualstudio.com/">VS Code</a>，左边「扩展」里搜 <b>Claude Code</b> 点安装；或者照 <a href="#" data-open="https://docs.claude.com/en/docs/claude-code/setup">官方教程</a> 装命令行版。</li>
+      <li class="${S.claude ? 'done' : ''}">打开一次 Claude Code，照提示用你的 Claude 账号登录。</li>
       <li>回到这里点「重新检查」，找到了就点「用 Claude Code 当大脑」。</li>
     </ol>
-    <div class="row"><button id="cRecheck">重新检查</button>${using ? '<button class="okbtn" disabled>✓ 正在用 Claude Code</button>' : `<button class="p" id="cUse" ${S.claude ? '' : 'disabled'}>用 Claude Code 当大脑</button>`}</div></div>`;
+    <div class="row"><button id="cRecheck">重新检查</button>${using ? '<button class="okbtn" disabled>✓ 正在用 Claude Code</button>' : `<button class="${brainLabel() ? '' : 'p'}" id="cUse" ${S.claude ? '' : 'disabled'}>${brainLabel() ? '改用 Claude Code' : '用 Claude Code 当大脑'}</button>`}</div></div>`;
   else box.innerHTML = `<div class="card pop ${using ? 'doneCard' : ''}"><h2><span class="lg" style="background:${p.lg[0]};width:30px;height:30px;border-radius:9px;display:inline-grid;place-items:center;color:#fff;font-size:13px">${p.lg[1]}</span> ${esc(p.name)}</h2>
     ${using ? `<div class="note ok">✓ 正在用它当大脑（模型 ${esc(S.api.model)}）</div>` : ''}
-    <h3>${p.auto ? '怎么用' : '怎么拿到 key'}</h3><ol class="steps ${using ? 'done' : ''}">${p.steps.map(x => `<li>${x}</li>`).join('')}</ol>
+    <h3>${p.auto ? '怎么用' : '怎么拿到 key'}</h3><ol class="steps ${using ? 'done' : brainLabel() ? 'idle' : ''}">${p.steps.map(x => `<li>${x}</li>`).join('')}</ol>
     ${p.shot ? `<img class="shot" src="guide/${p.shot}.svg" alt="示意图">` : ''}
     ${p.id === 'ollama' ? '<div id="olRec"></div>' : ''}
     ${p.auto ? '<div class="row"><button class="p" id="aAuto">🔍 自动识别并填写</button><span class="soft" id="aAutoMsg"></span></div>' : ''}
@@ -133,7 +133,7 @@ function showPv(id, scroll = true) {
     ${p.auto ? '' : '<label class="f">API key <input type="password" id="aKey" placeholder="把复制的 key 粘贴到这里"></label>'}
     <label class="f">模型名 <input type="text" id="aModel" list="mlist" value="${esc(p.model)}" placeholder="${p.auto ? '点上面「自动识别并填写」' : '粘贴 key 以后会自动挑一个推荐的'}"><datalist id="mlist"></datalist></label>
     <div id="aRec">${(p.rec || []).map(([m, why]) => `<span class="rec" data-rec="${esc(m)}">⭐ ${esc(m)}<small>（${esc(why)}）</small></span>`).join('')}</div>
-    <div class="row"><button class="ghost" id="aList">📋 拿模型列表</button><button id="aTest">🔌 测试一下</button><button class="p" id="aSave">${using ? '保存修改' : '保存，用它当大脑'}</button></div>
+    <div class="row"><button class="ghost" id="aList">📋 拿模型列表</button><button id="aTest">🔌 测试一下</button><button class="${using || !brainLabel() ? 'p' : ''}" id="aSave">${using ? '保存修改' : brainLabel() ? '保存，改用它' : '保存，用它当大脑'}</button></div>
     <div class="result" id="aMsg"></div></div>`;
   if (!p.kind && currentPv() === id && S.api) { $('aBase').value = S.api.base || p.base; $('aModel').value = S.api.model || p.model; if (S.api.key && $('aKey')) $('aKey').value = S.api.key; }
   wirePanel(p);
