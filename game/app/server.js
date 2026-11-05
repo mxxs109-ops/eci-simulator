@@ -6,6 +6,9 @@ const os = require('os');
 const { spawn, exec } = require('child_process');
 const crypto = require('crypto');
 const localLLM = require('./local-llm');   // 〔接手：…〕 那段交给本地模型写
+// 她的话沾一点亲密就整段交给本地模型；说了这些，上一轮没写完的亲密戏才算结束
+const INTIMATE = /露骨|色情|涩|做爱|交合|交配|结合|性爱|上床|阴茎|阳具|肉棒|鸡巴|龟头|阴道|阴蒂|小穴|子宫|宫口|乳|奶子|胸|屁股|臀|肛|直肠|前列腺|下体|腿间|精液|射精|射了|内射|高潮|潮吹|呻吟|娇喘|喘息|一丝不挂|赤裸|裸|脱|衣服|吻|亲我|亲他|亲你|亲嘴|亲了|亲亲|舌|舔|吮|含住|摸|揉|捏|抚|抱|搂|贴着|蹭|骑|插|抽插|操|干我|要我|硬了|湿了|发情|易感期|热潮|逆鳞|洗澡|共浴|同睡|一起睡|暧昧|调情|撩|勾引|老公|宝贝/;
+const SCENE_END = /停下|停吧|不要了|不做了|结束|睡了|睡吧|晚安|起床|出门|下次再/;
 const agentApi = require('./agent-api');   // 不用 Claude 时：OpenAI 兼容接口 + 读写存档的工具
 
 const PORT = Number(process.env.PORT) || 7788;
@@ -370,7 +373,11 @@ function chat(text, res) {
   const moved = roomChanges(session.roomSeen || ROOM_START, roomNow);
   if (roomNow) session.roomSeen = roomNow;
   const roomNote = moved ? `[系统提示，不是她说的话：她刚动过家里的摆设——${moved}。现在的摆法：${describeRoom(roomNow)}。在场或进屋的兽夫会注意到，按各自性格自然地反应一下（发现、嘀咕、帮忙、有意见……），不在家的等回来看到再说；不要念这条提示]\n\n` : '';
-  const prompt = rulesNote(session) + roomNote + openingNote() + clock + text;
+  // 沾一点亲密就整段交给本地模型：她的话里有亲密的字眼，或者上一轮是本地模型写的、她还没说停
+  const lastAi = readJson(HISTORY_FILE, []).filter(m => m.role === 'ai' && !m.sim && !m.tick).pop();
+  const intimate = INTIMATE.test(text) || (lastAi?.local && !SCENE_END.test(text));
+  const intimateNote = intimate ? `[系统提示，不是她说的话：这一轮沾到亲密（${INTIMATE.test(text) ? '她的话里有亲密的内容' : '上一轮的亲密戏还没结束'}）。这一轮的故事**整段交给本地模型写**：你的回复里**一个故事字都不写**（不写环境、不写动作、不写台词、不写心理），只写两行——第一行交接标记 \`〔接手：兽夫名字｜在哪｜情绪和起因｜这一轮的方向：她要继续 / 要收住去做别的（照她的话判断）｜这一轮要写的：她做了什么、要什么，加上你想让剧情发生的要点（比如他拿出什么、提到什么事）〕\`，第二行 \`📌 小结：\` 只记判定（怀孕骰子、好感、状态变化）。存档照常改：状态、我的一天、回忆这些写到亲密的地方也用交接标记，不要自己写、不要带过]\n\n` : '';
+  const prompt = rulesNote(session) + roomNote + openingNote() + clock + intimateNote + text;
   writeJson(SESSION_FILE, session);
 
   const send = obj => res.write(JSON.stringify(obj) + '\n');
@@ -431,7 +438,7 @@ function chat(text, res) {
     if (full.trim()) {
       const history = readJson(HISTORY_FILE, []);
       const i = history.findIndex(e => e.live === live);
-      if (i >= 0) { history[i].text = full.trim(); delete history[i].live; }
+      if (i >= 0) { history[i].text = full.trim(); delete history[i].live; if (ho.used()) history[i].local = true; }
       else history.push({ role: 'user', text, time: time0 }, { role: 'ai', text: full.trim(), time: time0 });
       writeJson(HISTORY_FILE, history);
       const s = readJson(SESSION_FILE, {});
