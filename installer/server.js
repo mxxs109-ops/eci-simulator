@@ -269,7 +269,12 @@ async function pickFolder() {
   if (MAC) {   // 点「取消」时 osascript 会报错：当作没选
     return new Promise(ok => execFile('osascript', ['-e', 'activate', '-e', 'POSIX path of (choose folder with prompt "选一个文件夹，游戏和模型都装在这里面")'], { encoding: 'utf8' }, (e, out) => ok(e ? '' : String(out).trim().replace(/\/+$/, ''))));
   }
-  return psAsync("Add-Type -AssemblyName System.Windows.Forms; $f=New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description='选一个文件夹，游戏和模型都装在这里面'; $f.ShowNewFolderButton=$true; if($f.ShowDialog() -eq 'OK'){$f.SelectedPath}");
+  // 给对话框一个置顶的隐形父窗口，不然它会藏在浏览器后面，看起来像点了没反应；对话框要 STA
+  const cmd = "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Add-Type -AssemblyName System.Windows.Forms; $o=New-Object System.Windows.Forms.Form; $o.TopMost=$true; $o.ShowInTaskbar=$false; $o.StartPosition='CenterScreen'; $o.Size=New-Object System.Drawing.Size(1,1); $o.Opacity=0; $o.Show(); $o.Activate(); $f=New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description='选一个文件夹，游戏和模型都装在这里面'; $f.ShowNewFolderButton=$true; if($f.ShowDialog($o) -eq 'OK'){$f.SelectedPath}; $o.Close()";
+  return new Promise(ok => {
+    const p = spawn('powershell', ['-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(cmd, 'utf16le').toString('base64')], { windowsHide: true });
+    let out = ''; p.stdout.on('data', d => out += d.toString('utf8')); p.on('error', () => ok('')); p.on('close', () => ok(out.trim()));
+  });
 }
 function freeGB(p) {
   if (MAC) {   // df 要一个已经有的文件夹：往上找

@@ -235,7 +235,7 @@
 <section id="s-game">
   <div class="hd"><h1>🎮 游戏本体</h1><p>游戏程序、规则和兽夫们。更新只换程序和规则，存档、设置、你起的名字都不动。</p></div>
   <div class="card">
-    <table class="kv"><tr><td>已装版本</td><td id="gVer">—</td></tr><tr><td>GitHub 上的最新版</td><td id="gRemote">检查中…</td></tr><tr><td>装在</td><td id="gDir">—</td></tr></table>
+    <table class="kv"><tr><td>已装版本</td><td id="gVer">—</td></tr><tr><td>GitHub 上的最新版</td><td id="gRemote">检查中…</td></tr><tr><td>装在</td><td><span id="gDir">—</span> <button class="ghost" id="gMove" style="padding:3px 10px;margin-left:6px;font-size:13px">📁 换位置</button></td></tr></table>
     <div class="row"><button class="p big" id="gInstall">安装</button><button id="gOpen">▶ 打开游戏</button><button class="ghost" id="gCheck">检查更新</button><button id="gRepair" hidden>修复 / 重新下载</button></div>
     <div class="soft" id="gNote"></div>
     <div class="job" id="job-game"></div>
@@ -525,6 +525,7 @@ async function poll() {
 }
 function paintBusy() {
   if (!$('locPick').dataset.locked) $('locPick').disabled = BUSY;
+  $('gMove').disabled = BUSY;
   if (onPage('saves')) loadSaves();
 }
 // 任务做完：重新拿状态，相关的页面都画成完成后的样子（不用她手动刷新）
@@ -534,6 +535,7 @@ async function afterJob(name, j) {
   if (name === 'game' || name === 'uninstall' || name === 'location') { checkUpdate(); if (onPage('game')) loadCity(); }
   if (name === 'saves' || name === 'uninstall' || name === 'game') loadSaves();
   if (name === 'tailscale') tsLoad();
+  if (name === 'location' && $('gWhere')) $('gWhere').remove();   // 换了位置：下次点安装按新位置再问一次
   if (['llm', 'llmtest', 'ollama', 'lmstudio', 'uninstall'].includes(name)) { if (curPv) showPv(curPv, false); if (DET) detect(); if (onPage('llm')) loadHandoff(); }
   if (onPage('custom')) loadCustom();
   if (onPage('phone')) loadPhone();
@@ -565,7 +567,20 @@ async function checkUpdate() {
   renderGame();
   if (newer) { $('st-game').className = 'st new'; $('gInstall').classList.add('pop'); }
 }
-$('gInstall').onclick = e => startJob(e.target, '/api/game/install', {}, S.game ? '更新中…' : '安装中…', S.game ? '开始更新…' : '开始安装…');
+// 第一次装：先确认装在哪（就装这里 / 换个位置），确认了才开始
+$('gInstall').onclick = e => {
+  if (!S.game && !$('gWhere')) {
+    e.target.closest('.row').insertAdjacentHTML('afterend', `<div class="note info" id="gWhere" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-top:10px">
+      <div style="flex:1;min-width:220px">装到 <b>${esc(S.root)}</b>${S.free == null ? '' : '（这个盘还剩 ' + S.free + ' GB，游戏约 1GB，全装约 50GB）'}</div>
+      <button class="p" id="gHere">就装这里</button><button id="gElse">📁 换个位置</button></div>`);
+    $('gHere').onclick = () => { $('gWhere').remove(); startJob(e.target, '/api/game/install', {}, '安装中…', '开始安装…'); };
+    $('gElse').onclick = () => $('locPick').click();
+    return;
+  }
+  if ($('gWhere')) $('gWhere').remove();
+  startJob(e.target, '/api/game/install', {}, S.game ? '更新中…' : '安装中…', S.game ? '开始更新…' : '开始安装…');
+};
+$('gMove').onclick = () => $('locPick').click();
 // 修复：已经是最新也能点，重新下载程序和规则（存档、设置不动）
 $('gRepair').onclick = e => { if (confirm('重新下载游戏程序和规则？存档、设置、你起的名字都不动。')) startJob(e.target, '/api/game/install', {}, '下载中…', '开始重新下载…'); };
 $('gOpen').onclick = openGame;
