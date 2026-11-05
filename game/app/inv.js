@@ -23,6 +23,16 @@
   .inv .pic .nm { position: absolute; left: 0; right: 0; bottom: 0; padding: 30px 14px 12px; background: linear-gradient(transparent, rgba(20,12,8,.8)); color: #fff; }
   .inv .pic .nm b { font: 700 26px "STKaiti","KaiTi",serif; letter-spacing: 3px; }
   .inv .pic .nm small { display: block; opacity: .85; font-size: 12px; line-height: 1.5; }
+  .inv .rbox { background: rgba(255,255,255,.6); border-radius: 16px; padding: 10px 12px 6px; }
+  .inv .rbox h4 small { font: 400 12px system-ui; color: var(--muted); margin-left: 6px; letter-spacing: 0; }
+  .inv .radar { display: block; width: min(100%, 340px) !important; height: auto !important; aspect-ratio: 260 / 270; margin: 4px auto; overflow: visible; }
+  .inv .radar .cur { animation: rgrow .6s cubic-bezier(.3,1.4,.5,1); transform-origin: 130px 128px; }
+  @keyframes rgrow { from { transform: scale(.2); opacity: 0; } }
+  .inv .radar .rl { font: 700 12px "PingFang SC","Microsoft YaHei",sans-serif; fill: #5a4632; }
+  .inv .radar .rv { font: 700 11px system-ui; fill: #3b2f25; } .inv .radar .rp { font-weight: 400; fill: #a88a5c; }
+  .inv .rleg { display: flex; justify-content: center; gap: 16px; font-size: 12px; color: var(--muted); padding-bottom: 4px; }
+  .inv .rleg span::before { content: ""; display: inline-block; width: 14px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: 0; }
+  .inv .rleg .lc::before { background: var(--c); opacity: .6; } .inv .rleg .lp::before { border: 1.5px dashed #d9a84f; background: rgba(224,180,106,.15); }
   .inv .stchips { display: flex; flex-wrap: wrap; gap: 8px; }
   .inv .stchips span { background: #fff3e0; border: 1px solid #f0c58a; color: #8a4b12; border-radius: 999px; padding: 4px 12px; font-size: 14px; font-weight: 700; }
   .inv .stchips small { font-weight: 400; opacity: .8; margin-left: 2px; }
@@ -67,6 +77,31 @@
   const ATTR_ICON = { 现在: '⚡', 曾经: '👑', '兽核 / 经脉': '💠', 逆鳞: '🐉', 伤势: '🩸', 还能用的本事: '✨', 恢复条件: '🗝️', 恢复进度: '📈', 契约: '💍', 易感期: '🔥', 身高: '📏' };
 
   let data = [], sel = null, selItem = -1;
+  // 「战斗」「六维」画成状态条和雷达图，不放进下面的属性格子
+  const HIDE = ['现在', '曾经', '战斗', '六维'];
+  const shownAttrs = d => d.attrs.filter(a => !HIDE.includes(a.k));
+  const AXES = ['体魄', '攻击', '防御', '灵力', '精神力', '速度'];
+  function battle(d) {
+    const b = (d.attrs.find(a => a.k === '战斗') || {}).v || '', six = (d.attrs.find(a => a.k === '六维') || {}).v || '';
+    const pair = (txt, k) => { const m = txt.match(new RegExp(k + '\\s*(\\d+)\\s*/\\s*(\\d+)')); return m ? [+m[1], +m[2]] : null; };
+    const tier = (b.split(/[｜|]/)[0] || '').trim();
+    return { tier, hp: pair(b, '血量'), mp: pair(b, '灵力'), six: AXES.map(k => pair(six, k)) };
+  }
+  // 雷达：六个顶点从正上方顺时针；外圈三道参考线；巅峰一层金色虚线，现在一层用他的颜色填满
+  function radar(six, c) {
+    const W = 260, cx = 130, cy = 128, r = 92;
+    const pt = (i, v) => { const a = -Math.PI / 2 + i * Math.PI / 3; return [cx + Math.cos(a) * r * v / 100, cy + Math.sin(a) * r * v / 100]; };
+    const poly = vals => vals.map((v, i) => pt(i, v).map(n => n.toFixed(1)).join(',')).join(' ');
+    const rings = [33, 66, 100].map(v => `<polygon points="${poly(AXES.map(() => v))}" fill="none" stroke="rgba(120,90,60,.18)"/>`).join('');
+    const spokes = AXES.map((_, i) => { const [x, y] = pt(i, 100); return `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(120,90,60,.15)"/>`; }).join('');
+    const labels = AXES.map((k, i) => { const [x, y] = pt(i, 122); const v = six[i];
+      return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" class="rl">${k}<tspan x="${x.toFixed(1)}" dy="15" class="rv">${v ? v[0] + '<tspan class="rp"> / ' + v[1] + '</tspan>' : '—'}</tspan></text>`; }).join('');
+    const peak = six.map(v => (v ? v[1] : 0)), cur = six.map(v => (v ? v[0] : 0));
+    return `<svg class="radar" viewBox="0 0 ${W} ${W + 10}" role="img" aria-label="六维：现在和巅峰">${rings}${spokes}
+      <polygon points="${poly(peak)}" fill="rgba(224,180,106,.12)" stroke="#d9a84f" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <polygon class="cur" points="${poly(cur)}" fill="${c}" fill-opacity=".38" stroke="${c}" stroke-width="2" stroke-linejoin="round"/>
+      ${cur.map((v, i) => { const [x, y] = pt(i, v); return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="${c}"/>`; }).join('')}${labels}</svg>`;
+  }
   function parse(text) {
     return text.split(/^## /m).slice(1).map(p => {
       const [title, ...body] = p.split(/\r?\n/);
@@ -120,14 +155,18 @@
     const chips = [preg ? `🥚 怀孕${preg[1] ? ' 第 ' + preg[1] + ' 天' : ''}${!preg[1] || +preg[1] < 3 ? '<small>（他自己还不知道）</small>' : ''}` : '',
       /【战损】/.test(doing) ? '💀 重伤' : '', /【易感期】/.test(doing) ? '🔥 易感期' : ''].filter(Boolean);
     const stat = chips.length ? `<div class="stchips">${chips.map(c => `<span>${c}</span>`).join('')}</div>` : '';
-    const attrs = d.attrs.filter(a => a.k !== '现在' && a.k !== '曾经');
+    const attrs = shownAttrs(d);
+    const bt = battle(d);
+    const fight = [bt.hp ? bar('❤️‍🩹 血量', bt.hp[0] / bt.hp[1] * 100, '#e0533d', bt.hp[0] + ' / ' + bt.hp[1]) : '', bt.mp ? bar('💠 灵力', bt.mp[1] ? bt.mp[0] / bt.mp[1] * 100 : 0, '#4f8fe0', bt.mp[0] + ' / ' + bt.mp[1]) : ''].join('');
+    const radarBox = bt.six.some(Boolean) ? `<div class="rbox"><h4>六维 <small>${E(bt.tier)}</small></h4>${radar(bt.six, c)}<div class="rleg"><span class="lc" style="--c:${c}">现在</span><span class="lp">巅峰</span></div></div>` : '';
     const slotsN = Math.max(12, Math.ceil(d.items.length / 6) * 6);
     const slots = Array.from({ length: slotsN }, (_, i) => { const it = d.items[i];
       return it ? `<div class="slot ${i === selItem ? 'on' : ''}" data-slot="${i}" title="${E(it.n)}"><div class="ic">${iconOf(it.n)}</div><div class="n">${E(it.n.replace(/（[^）]*）/g, ''))}</div></div>` : '<div class="slot empty"></div>'; }).join('');
     const it = d.items[selItem];
     box.innerHTML = `<div class="iside">${side}</div><div class="main">
       <div class="pic"><img src="${pic}" onerror="this.style.display='none'"><div class="nm"><b>${E(d.name === '家里' ? '家里' : d.name)}</b>${d.away ? '<span class="away-tag">尚未登场</span>' : ''}<small>${T(now ? now.v.split(/[；;]/)[0] : '')}</small>${was ? `<small>曾经：${T(was.v)}</small>` : ''}</div></div>
-      ${stat}${bars ? `<div class="bars">${bars}</div>` : ''}
+      ${stat}${bars || fight ? `<div class="bars">${bars}${fight}</div>` : ''}
+      ${radarBox}
       ${attrs.length ? `<div><h4>属性</h4><div class="attrs">${attrs.map((a, i) => `<div class="attr" data-attr="${i}"><div class="k">${ATTR_ICON[a.k] || '◆'} ${E(a.k)}</div><div class="v">${T(a.v)}</div></div>`).join('')}</div></div>` : ''}
       <div><h4>背包 · ${d.items.length} 件</h4><div class="slots">${slots}</div>
         <div class="detail" style="margin-top:10px">${it ? `<div class="h">${iconOf(it.n)} ${T(it.n)}</div>${it.src ? `<div class="src">来历：${T(it.src)}</div>` : ''}<div>${T(it.d)}</div>` : ''}</div></div>
@@ -137,7 +176,7 @@
     const w = e.target.closest('[data-inv]'); if (w) { sel = w.dataset.inv; selItem = -1; draw(); return; }
     const s = e.target.closest('[data-slot]'); if (s) { selItem = +s.dataset.slot; draw(); s.animate && box.querySelector(`[data-slot="${selItem}"]`)?.animate([{ transform: 'scale(.9,1.1)' }, { transform: 'scale(1.08,.94)' }, { transform: 'scale(1)' }], { duration: 300 }); return; }
     const a = e.target.closest('[data-attr]'); if (a) {
-      const d = data.find(x => x.name === sel), at = d.attrs.filter(x => x.k !== '现在' && x.k !== '曾经')[+a.dataset.attr];
+      const d = data.find(x => x.name === sel), at = shownAttrs(d)[+a.dataset.attr];
       box.querySelector('.detail').innerHTML = `<div class="h">${ATTR_ICON[at.k] || '◆'} ${E(at.k)}</div><div>${T(at.v)}</div>`;
       box.querySelector('.detail').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
