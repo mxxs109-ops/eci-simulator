@@ -1,6 +1,6 @@
-# 恶雌模拟器 · 一键安装器
-# 用法（cmd 里，或者 Win + R 的「运行」框里，粘贴这一行回车）：
-#   powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/mxxs109-ops/eci-simulator/main/install.ps1 | iex"
+﻿# 恶雌模拟器 · 一键安装器
+# 用法（cmd 里粘贴这一行回车；先下载成文件再运行，不用「irm | iex」——Windows Defender 会把它误判成木马拦掉）：
+#   curl -fsSL -o "%TEMP%\eci-install.ps1" https://raw.githubusercontent.com/mxxs109-ops/eci-simulator/main/install.ps1 && powershell -NoProfile -ExecutionPolicy Bypass -File "%TEMP%\eci-install.ps1"
 # 做的事：准备好 Node.js（没有就下一个免安装版），只下载安装器那几个文件放到 %LOCALAPPDATA%\EciSimulator，
 # 桌面放一个「恶雌模拟器安装器」图标，然后打开它。不需要管理员权限。每一步都显示进度。
 $ErrorActionPreference = 'Stop'
