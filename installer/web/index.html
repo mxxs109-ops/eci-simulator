@@ -572,6 +572,8 @@ $('cuClear').onclick = async () => { if (!confirm('清空所有自定义规则�
 // ---------- 手机 ----------
 // 手机页：防火墙放没放行、手机连接开没开，都去真的查一下再变绿（点了「放行」可能在 Windows 弹窗里点了「否」）
 let gameUp = false;
+// 游戏本体还没装：二维码那里只给「去装游戏本体」（装都没装，「打开游戏」点了也开不起来）
+const NOGAME = '<div class="note">游戏本体还没装，装好了才能扫码：<button class="p" data-go="game" style="padding:4px 12px">去装游戏本体</button></div>';
 // ---------- 出门在外：Tailscale（点「检查电脑」才去查） ----------
 let TS = null, tsWatch = null;
 async function tsLoad() {
@@ -590,6 +592,7 @@ async function tsLoad() {
   $('tsTxt').textContent = !TS.loggedIn ? '先做完上面两步' : TS.serving ? '已打开：登录同一账号的手机在哪都能连进来' : '允许在外面的手机连回这台电脑';
   const qr = $('tsQr');
   if (!TS.serving) qr.innerHTML = '';
+  else if (!S.game) qr.innerHTML = NOGAME;
   else if (!gameUp) {
     qr.innerHTML = '<div class="note">电脑上的游戏还没开，开了才能扫码：<button class="p" id="tsOpen" style="padding:4px 12px">▶ 打开游戏</button></div>';
     $('tsOpen').onclick = e => { api('/api/game/open', {}); e.target.disabled = true; e.target.textContent = '正在打开…'; };
@@ -625,7 +628,8 @@ async function loadPhone() {
   $('lanOn').checked = !!(g.lan && g.lan.enabled); $('lanOn').disabled = !!g.none;
   $('lanTxt').textContent = g.none ? '先在「游戏本体」里装好游戏' : g.lan.enabled ? '已打开：同一个 Wi-Fi 下的手机能连进来' : '允许同一个 Wi-Fi 下的手机连进来';
   const qr = $('qrBox');
-  if (g.none || !g.lan.enabled) { qr.innerHTML = '<p class="soft" style="margin:8px 0 0">打开上面第 ' + (MACP() ? 1 : 2) + ' 步的开关，二维码就出现在这里。</p>'; $('phStep3').classList.remove('done'); }
+  if (!S.game) { qr.innerHTML = NOGAME; $('phStep3').classList.remove('done'); }
+  else if (g.none || !g.lan.enabled) { qr.innerHTML = '<p class="soft" style="margin:8px 0 0">打开上面第 ' + (MACP() ? 1 : 2) + ' 步的开关，二维码就出现在这里。</p>'; $('phStep3').classList.remove('done'); }
   else if (!g.urls.length) qr.innerHTML = '<div class="note bad">没找到这台电脑的局域网地址：确认电脑连着 Wi-Fi 或网线。</div>';
   else if (!gameUp) {
     qr.innerHTML = '<div class="note">电脑上的游戏还没开，开了才能扫码：<button class="p" id="qrOpen" style="padding:4px 12px">▶ 打开游戏</button></div>';
