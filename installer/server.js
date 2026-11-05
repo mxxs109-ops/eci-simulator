@@ -4,7 +4,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { spawn, exec, execSync } = require('child_process');
+const { spawn, exec, execSync, execFileSync } = require('child_process');
 
 const REPO = 'mxxs109-ops/eci-simulator';
 const BRANCH = 'main';
@@ -613,6 +613,62 @@ async function installTTS(say) {
   say('装好了（第一次开配音时还会自动下几个小模型，要等几分钟）');
 }
 
+// ---------- 出门在外也能玩：Tailscale ----------
+// 手机和电脑登录同一个 Tailscale 账号，手机在哪都能连回这台电脑；转发端口 8788 → 游戏 7788（走本机，游戏不用开「手机连接」、不用防火墙）
+const TS_PORT = 8788;
+function tsExe() {
+  for (const d of [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], 'C:\\Program Files']) {
+    if (!d) continue;
+    const p = path.join(d, 'Tailscale', 'tailscale.exe');
+    if (fs.existsSync(p)) return p;
+  }
+  try { return execSync('where tailscale', { encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }).split(/\r?\n/)[0].trim() || null; } catch { return null; }
+}
+const tsRun = (args, timeout = 15000) => execFileSync(tsExe(), args, { encoding: 'utf8', windowsHide: true, timeout, stdio: ['ignore', 'pipe', 'pipe'] });
+function tsState() {
+  if (!tsExe()) return { installed: false };
+  let st;
+  try { st = JSON.parse(tsRun(['status', '--json'])); } catch { return { installed: true, running: false }; }
+  const self = st.Self || {};
+  const ip = (self.TailscaleIPs || []).find(x => /^100\./.test(x)) || '';
+  let serving = false;
+  try { serving = tsRun(['serve', 'status', '--json']).includes('"' + TS_PORT + '"'); } catch {}
+  return { installed: true, running: true, state: st.BackendState, loggedIn: st.BackendState === 'Running', authUrl: st.AuthURL || '',
+    who: (st.User && self.UserID && st.User[self.UserID] && st.User[self.UserID].LoginName) || '', ip, serving, url: ip ? `http://${ip}:${TS_PORT}/` : '' };
+}
+async function installTailscale(say) {
+  if (tsExe()) return say('电脑上已经有 Tailscale 了', 100);
+  const dir = path.join(HOME, 'tmp-tailscale'); fs.mkdirSync(dir, { recursive: true });
+  const msi = path.join(dir, 'tailscale-setup.msi');
+  await download(`https://pkgs.tailscale.com/stable/tailscale-setup-latest-${process.arch === 'arm64' ? 'arm64' : 'amd64'}.msi`, msi, say, '下载 Tailscale', { estimate: 39e6, from: 0, to: 80 });
+  stopIfCancelled();
+  say('安装（Windows 问「是否允许更改」时点「是」）', 85);
+  try { ps(`Start-Process msiexec -ArgumentList '/i','"${msi}"','/quiet','/norestart' -Verb RunAs -Wait`); } catch {}
+  rmrf(dir);
+  if (!tsExe()) throw new Error('没装上：Windows 问「是否允许更改」时要点「是」，再点一次安装');
+  say('装好了', 100);
+}
+// 登录：后台跑 tailscale up，拿到登录网址就在浏览器里打开
+async function tsLogin() {
+  if (!tsExe()) throw new Error('先装 Tailscale');
+  const s0 = tsState();
+  if (s0.loggedIn) return { ok: true, already: true };
+  spawn(tsExe(), ['up'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+  for (let i = 0; i < 30; i++) {
+    await new Promise(r => setTimeout(r, 500));
+    const s = tsState();
+    if (s.loggedIn) return { ok: true };
+    if (/^https:\/\//.test(s.authUrl)) { exec(`start "" "${s.authUrl}"`); return { ok: true, url: s.authUrl }; }
+  }
+  throw new Error('没拿到登录网址：点电脑右下角托盘里的 Tailscale 图标登录也行');
+}
+function tsServe(on) {
+  if (!tsExe()) throw new Error('先装 Tailscale');
+  if (on) tsRun(['serve', '--bg', '--yes', '--http', String(TS_PORT), 'http://127.0.0.1:7788']);
+  else { try { tsRun(['serve', '--http', String(TS_PORT), 'off']); } catch {} }
+  return tsState();
+}
+
 // ---------- 4. 留言板：读 GitHub Issues（公开，不用登录） ----------
 async function board() {
   const r = await fetch(`https://api.github.com/repos/${REPO}/issues?state=open&per_page=50&labels=${encodeURIComponent('留言')}`, { headers: { 'User-Agent': 'eci-installer' } });
@@ -654,6 +710,7 @@ async function uninstall(parts, say) {
     saveState({ game: null });
   }
   if (parts.includes('installer')) {
+    try { if (tsExe()) tsServe(false); } catch {}
     try { execSync('netsh advfirewall firewall show rule name=EciSimulator', { windowsHide: true, stdio: 'ignore' }); firewall(false); } catch {}   // 没有这条规则就不弹「是否允许更改」
     try { fs.rmdirSync(s.root); } catch {}
     try { fs.unlinkSync(path.join(desktop(), '恶雌模拟器安装器.lnk')); } catch {}
@@ -708,6 +765,10 @@ const routes = {
   'GET /api/gameup': async () => ({ up: await up('http://127.0.0.1:7788/api/status') }),
   'GET /api/gamecfg': async () => (isGame(dirs().game) ? gameCfg() : { none: true }),
   'POST /api/gamecfg': async b => setGameCfg(b),
+  'GET /api/tailscale': async () => tsState(),
+  'POST /api/tailscale/install': async () => { job('tailscale', say => installTailscale(say)); return { ok: true }; },
+  'POST /api/tailscale/login': async () => tsLogin(),
+  'POST /api/tailscale/serve': async b => ({ ok: true, ...tsServe(!!b.on) }),
   'GET /api/firewall': async () => {
     let on = false; try { execSync('netsh advfirewall firewall show rule name=EciSimulator', { windowsHide: true, stdio: 'ignore' }); on = true; } catch {}
     const lan = !!readJson(path.join(dirs().game, 'app', 'config.json'), {}).lan?.enabled;

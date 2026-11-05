@@ -48,19 +48,17 @@
   #vnToggle { display: inline-flex; padding: 3px !important; gap: 2px; border-radius: 999px; background: var(--bg); }
   #vnToggle span { padding: 3px 12px; border-radius: 999px; color: var(--muted); transition: background .2s, color .2s; white-space: nowrap; }
   #vnToggle.on .a, #vnToggle:not(.on) .b { background: var(--me); color: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
-  #vn .hud { position: absolute; top: 40px; left: 12px; z-index: 7; display: flex; flex-direction: column; gap: 6px; }
-  #vn .hud .h { background: rgba(30,22,16,.72); color: #fbf3e6; border-radius: 10px; padding: 6px 10px; font-size: 12px; line-height: 1.6; min-width: 190px; max-width: 260px; border-left: 3px solid var(--c); }
-  #vn .hud .h b { font: 700 15px "STKaiti","KaiTi",serif; color: #fff; }
-  #vn .hud .bar2 { display: inline-block; width: 70px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.25); vertical-align: middle; overflow: hidden; margin: 0 4px; }
-  #vn .hud .bar2 i { display: block; height: 100%; }
-  #vn .hud .d { opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #vn .face .fst { position: absolute; top: 100%; left: -3px; right: -3px; margin-top: 6px; display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 6px; font: 600 12px/1.5 "PingFang SC","Microsoft YaHei",sans-serif; color: #f3e8d8; white-space: nowrap; }
+  #vn .face .fst .fb { display: block; width: 100%; height: 4px; border-radius: 2px; background: rgba(255,255,255,.22) linear-gradient(90deg,transparent calc(50% - 1px),rgba(0,0,0,.35) calc(50% - 1px),rgba(0,0,0,.35) calc(50% + 1px),transparent calc(50% + 1px)); overflow: hidden; }
+  #vn .face .fst .fb i { display: block; height: 100%; }
+  @media (max-width: 900px) { #vn .face .fst { display: none; } }
   @media (max-width: 900px) { #vn .box { font-size: 16px; padding: 20px 16px 26px; min-height: 30%; } #vn .box.hasface { padding-left: 104px; } #vn .face { width: 76px; height: 76px; margin-left: -90px; } #vn .spr { height: 110%; bottom: -24%; } #vn .name { font-size: 16px; bottom: calc(3% + 30% - 8px); } }
   ` }));
 
   // 场景
   const vn = document.createElement('div');
   vn.id = 'vn';
-  vn.innerHTML = `<div class="shade"></div><div class="sprites"></div><div class="count"></div><div class="hud"></div>
+  vn.innerHTML = `<div class="shade"></div><div class="sprites"></div><div class="count"></div>
     <div class="bar"><button data-vn="back" title="上一段">◀</button><button data-vn="skip" title="直接看完这一轮">⏭ 看完</button><button data-vn="auto" title="自动播放">▶ 自动</button><button data-vn="voice" title="配音" style="display:none">🔊</button><button data-vn="log" title="看聊天记录">📜 记录</button></div>
     <div class="name"></div><div class="box"><div class="face"></div><span class="txt"></span><span class="next" style="display:none">▼</span></div>`;
   $('#log').before(vn);
@@ -214,17 +212,15 @@
       keep.add(n);
     });
     box.querySelectorAll('.spr').forEach(el => { if (!keep.has(el.dataset.n)) el.remove(); });
-    vn.querySelector('.hud').innerHTML = here.map(n => {
-      const c = cast[n], hv = +(((c.food && c.food.nutrition) || '').match(/健康值\s*(\d+)/) || [])[1];
-      const bar = (v, col) => `<span class="bar2"><i style="width:${v}%;background:${col}"></i></span>`;
-      return `<div class="h" style="--c:${COLORS[n] || '#8a5a3c'}"><b>${escH(n)}</b>　❤ <span class="bar2" style="background-image:linear-gradient(90deg,transparent calc(50% - 1px),rgba(0,0,0,.28) calc(50% - 1px),rgba(0,0,0,.28) calc(50% + 1px),transparent calc(50% + 1px))"><i style="${favFill(c.favor, '#e57399')}"></i></span>${c.favor || 0}${hv >= 0 ? `　🩺 ${bar(hv, hv > 60 ? '#4caf50' : hv > 30 ? '#f0b429' : '#e53935')}${hv}` : ''}
-        <div class="d" title="${escH(c.doing || '')}">${escH((c.doing || '').replace('【战损】', '💀 ').replace('【易感期】', '🔥 '))}</div><div class="d">${escH(c.mood || '')}${c.food && c.food.body ? '｜' + escH(c.food.body) : ''}</div></div>`;
-    }).join('');
   }
   function paintCount() {
     vn.querySelector('.count').textContent = pages.length ? `${Math.max(0, idx) + 1} / ${pages.length}${sendBtn.disabled ? ' …' : ''}` : '';
   }
   function paint() { if (!on) return; paintScene(); showPage(false); paintCount(); }
+
+  // 名字牌贴在对话框上沿。对话框贴着底，字越打越多会往上长，所以框一变大小就重新放（只放一次会被字盖住）
+  const placeName = () => { const box = vn.querySelector('.box'), name = vn.querySelector('.name'), r = box.getBoundingClientRect(), v = vn.getBoundingClientRect(); name.style.top = (r.top - v.top - name.offsetHeight + 2) + 'px'; };
+  new ResizeObserver(placeName).observe(vn.querySelector('.box'));
 
   // 对话框：打字机
   function showPage(animate) {
@@ -252,7 +248,12 @@
     const fsMe = p.kind === 'me' ? `background-image:url(${G('立绘/2D/我-小人.png')});background-size:contain;background-position:center` : '';
     face.setAttribute('style', (fs2 || fsMe) + ';--c:' + (p.kind === 'me' ? 'var(--me)' : (COLORS[p.who] || '#c9a46a')));
     box.classList.toggle('hasface', !!(fs2 || fsMe));
-    requestAnimationFrame(() => { const r = box.getBoundingClientRect(), v = vn.getBoundingClientRect(); name.style.top = (r.top - v.top - name.offsetHeight + 2) + 'px'; });
+    if (cw) {
+      const hv = +(((cw.food && cw.food.nutrition) || '').match(/健康值\s*(\d+)/) || [])[1], d = cw.doing || '';
+      const st = [/【怀孕/.test(d) ? '🥚' : '', /【战损】/.test(d) ? '💀' : '', /【易感期】/.test(d) ? '🔥' : ''].join('');
+      face.innerHTML = `<div class="fst"><span class="fb"><i style="${favFill(cw.favor, '#e57399')}"></i></span><span>❤ ${cw.favor || 0}</span>${hv >= 0 ? `<span>🩺 ${hv}</span>` : ''}${st ? `<span>${st}</span>` : ''}</div>`;
+    } else face.innerHTML = '';
+    requestAnimationFrame(placeName);
     const html = inl(p.text);
     nx.style.display = 'none'; nx.textContent = '▼';
     if (!animate) { txt.innerHTML = html; shown = 'done'; nx.style.display = hasNext() ? '' : 'none'; return; }

@@ -310,7 +310,19 @@
         </div></li>
     </ol>
   </div>
-  <div class="card"><h2>🌍 出门在外也想玩？</h2><p class="soft" style="margin:0">电脑和手机都装 <a href="#" data-open="https://tailscale.com/download">Tailscale</a>（免费），登录同一个账号。之后手机在哪都能连回家里的电脑，二维码照样扫。</p></div>
+  <div class="card" id="tsCard"><h2>🌍 出门在外也能玩</h2><p class="soft" style="margin:0">不在同一个 Wi-Fi 也行：电脑和手机都装 Tailscale（免费），登录同一个账号。</p>
+    <ol class="steps">
+      <li id="ts1"><b>电脑装 Tailscale</b>
+        <div class="row"><button class="p" id="tsCheck">🔍 检查电脑</button><button class="p" id="tsInstall" hidden>一键安装 Tailscale</button><span class="result" id="tsMsg" style="margin:0"></span></div>
+        <div class="job" id="job-tailscale"></div></li>
+      <li id="ts2"><b>登录 Tailscale</b><br><span class="soft">浏览器里用 Google / 微软 / 苹果账号登录都行，手机上要登录同一个。</span>
+        <div class="row"><button id="tsLogin" disabled>登录</button><span class="result" id="tsWho" style="margin:0"></span></div></li>
+      <li id="ts3"><b>打开出门连接</b>
+        <div><label class="switch"><input type="checkbox" id="tsOn" disabled><span class="sl"></span><span id="tsTxt">先做完上面两步</span></label></div></li>
+      <li id="ts4"><b>手机装 Tailscale、登录同一个账号，再扫码</b>
+        <div class="row"><button class="ghost" data-open="https://apps.apple.com/app/tailscale/id1470499037">iPhone 下载</button><button class="ghost" data-open="https://play.google.com/store/apps/details?id=com.tailscale.ipn">安卓下载</button></div>
+        <div id="tsQr"></div></li>
+    </ol></div>
   <div class="card"><h2>🔧 连不上？</h2><ul class="soft" style="margin:0"><li>手机和电脑是不是同一个 Wi-Fi（公司、酒店的 Wi-Fi 常常不让设备互相访问，换手机热点试试）</li><li>第 1 步的防火墙放行做了没有</li><li>电脑上的游戏还开着吗</li><li>二维码有好几个时，挨个扫一下试试（电脑连着好几个网络）</li></ul></div>
 </section>
 
@@ -420,8 +432,8 @@ $('heroBtn').onclick = e => { const to = e.target.dataset.to; if (to === 'open')
 // 后台任务进度
 const jobSeen = {};
 // 哪个任务锁哪个按钮、锁住时写什么
-const JOB_BTN = { game: 'gInstall', tts: 'tInstall', llm: 'lInstall', llmtest: 'lTest', location: 'locPick', uninstall: 'dGo' };
-const JOB_TXT = { game: () => (S.game ? '更新中…' : '安装中…'), tts: () => '安装中…', llm: () => '安装中…', llmtest: () => '启动中…', location: () => '搬家中…', uninstall: () => '卸载中…' };
+const JOB_BTN = { tailscale: 'tsInstall', game: 'gInstall', tts: 'tInstall', llm: 'lInstall', llmtest: 'lTest', location: 'locPick', uninstall: 'dGo' };
+const JOB_TXT = { tailscale: () => '安装中…', game: () => (S.game ? '更新中…' : '安装中…'), tts: () => '安装中…', llm: () => '安装中…', llmtest: () => '启动中…', location: () => '搬家中…', uninstall: () => '卸载中…' };
 let firstPoll = true;   // 打开页面时已经做完的任务不再弹提示
 async function poll() {
   const jobs = await api('/api/jobs').catch(() => null);
@@ -446,6 +458,7 @@ async function poll() {
       if (name === 'llm' && !j.error) $('lTest') && ($('lTest').disabled = false);
       if (name === 'llmtest' && !j.error) $('lUse') && ($('lUse').disabled = false);
       if (name === 'saves') loadSaves();
+      if (name === 'tailscale') tsLoad();
     }
   }
 }
@@ -530,11 +543,50 @@ $('cuClear').onclick = async () => { if (!confirm('清空所有自定义规则�
 // ---------- 手机 ----------
 // 手机页：防火墙放没放行、手机连接开没开，都去真的查一下再变绿（点了「放行」可能在 Windows 弹窗里点了「否」）
 let gameUp = false;
+// ---------- 出门在外：Tailscale（点「检查电脑」才去查） ----------
+let TS = null, tsWatch = null;
+async function tsLoad() {
+  TS = await api('/api/tailscale').catch(() => ({ error: true }));
+  if (TS.error) { $('tsMsg').innerHTML = '<span class="bad">没查成，再点一次</span>'; return; }
+  const ready = TS.installed && TS.running !== false;
+  $('ts1').classList.toggle('done', !!TS.installed);
+  $('tsCheck').hidden = !!TS.installed; $('tsInstall').hidden = TS.installed;
+  $('tsMsg').innerHTML = TS.installed ? (ready ? '<span class="ok">✓ 电脑上已经有了</span>' : '<span class="bad">装了但没在运行：从开始菜单打开 Tailscale</span>') : '<span class="soft">电脑上还没有</span>';
+  $('ts2').classList.toggle('done', !!TS.loggedIn);
+  $('tsLogin').disabled = !ready || TS.loggedIn; $('tsLogin').className = TS.loggedIn ? 'okbtn' : ready ? 'p' : '';
+  $('tsLogin').textContent = TS.loggedIn ? '✓ 已登录' : '登录';
+  $('tsWho').innerHTML = TS.loggedIn ? '<span class="soft">' + esc(TS.who || '') + '</span>' : '';
+  $('tsOn').disabled = !TS.loggedIn; $('tsOn').checked = !!TS.serving;
+  $('ts3').classList.toggle('done', !!TS.serving);
+  $('tsTxt').textContent = !TS.loggedIn ? '先做完上面两步' : TS.serving ? '已打开：登录同一账号的手机在哪都能连进来' : '允许在外面的手机连回这台电脑';
+  const qr = $('tsQr');
+  if (!TS.serving) qr.innerHTML = '';
+  else if (!gameUp) {
+    qr.innerHTML = '<div class="note">电脑上的游戏还没开，开了才能扫码：<button class="p" id="tsOpen" style="padding:4px 12px">▶ 打开游戏</button></div>';
+    $('tsOpen').onclick = e => { api('/api/game/open', {}); e.target.disabled = true; e.target.textContent = '正在打开…'; };
+  } else { const q = qrcode(0, 'M'); q.addData(TS.url); q.make(); qr.innerHTML = `<div class="qrs"><div class="qr"><img src="${q.createDataURL(6, 0)}" alt="二维码">${esc(TS.url)}</div></div>`; }
+}
+$('tsCheck').onclick = e => busyBtn(e.target, tsLoad);
+$('tsInstall').onclick = () => api('/api/tailscale/install', {});
+$('tsLogin').onclick = e => busyBtn(e.target, async () => {
+  const r = await api('/api/tailscale/login', {}).catch(err => ({ error: err.message }));
+  if (r.error) return toast(r.error, 'bad');
+  if (r.url) toast('在打开的网页里登录，登录好了这里会自己变绿');
+  // 她点了登录：等她在浏览器里登完（最多 3 分钟），好了就刷新
+  clearInterval(tsWatch); let n = 0;
+  tsWatch = setInterval(async () => { await tsLoad(); if ((TS && TS.loggedIn) || ++n > 60) { clearInterval(tsWatch); if (TS && TS.loggedIn) toast('登录好了', 'ok'); } }, 3000);
+  await tsLoad();
+});
+$('tsOn').onchange = async e => {
+  const r = await api('/api/tailscale/serve', { on: e.target.checked }).catch(err => ({ error: err.message }));
+  if (r.error) toast('没打开：' + r.error, 'bad');
+  await tsLoad();
+};
 // 停在手机页时每 3 秒看一眼游戏开没开：开了二维码马上出来，关了马上收起
 setInterval(async () => {
   if (!$('s-phone').classList.contains('on') || document.hidden) return;
   const now = !!(await api('/api/gameup').catch(() => ({}))).up;
-  if (now !== gameUp) loadPhone();
+  if (now !== gameUp) { await loadPhone(); if (TS) tsLoad(); }
 }, 3000);
 async function loadPhone() {
   const r = await api('/api/firewall').catch(() => ({}));

@@ -117,7 +117,7 @@ function draw() {
       <div class="no handle" title="拖动排序">${it.on ? ++k : '—'}</div>
       <div class="pic" style="${it.img ? `background-image:url('/game/${encodeURI(it.img)}')` : ''}"></div>
       <div class="who">
-        <input value="${esc(finalName(it))}" data-nick="${i}" maxlength="6" title="点这里改名">${it.on ? `<span class="tag ${here ? '' : 'later'}">${here ? '开局' : '之后遇到'}</span>` : ''}${it.nick && it.nick !== it.name ? `<span class="orig">原名 ${esc(it.name)}</span>` : ''}
+        <input value="${esc(finalName(it))}" data-nick="${i}" maxlength="6" title="点这里改名">${it.on ? `<span class="tag ${here ? '' : 'later'}">${here ? '开局' : '之后遇到'}</span>` : ''}
         <div class="brief">${esc([it.race, it.brief].filter(Boolean).join(' · '))}</div>
       </div>
       <div class="ops">
