@@ -291,11 +291,11 @@
   // 一页切成几段按顺序念：括号动作 = 旁白；*斜体* 心里话 = 想事情的人压低声音；其余 = 说话的人（她自己 = 「我」，叙述 / 小结 = 旁白）
   const lead = w => (w || '').split(/[、,，和]/)[0].trim();
   const cleanV = t => t.replace(/\*+/g, '').replace(/[`#>]/g, '').replace(/\p{Extended_Pictographic}/gu, '').replace(/\s+/g, ' ').trim();
-  function voiceOf(i) {
-    const p = pages[i]; if (!p || p.kind === 'me') return [];   // 她自己打的字不读，只读兽夫和旁白
-    let j = i; while (j >= 0 && !(pages[j] && pages[j].kind === 'say')) j--;
+  function voiceOf(i, ps = pages) {
+    const p = ps[i]; if (!p || p.kind === 'me') return [];   // 她自己打的字不读，只读兽夫和旁白
+    let j = i; while (j >= 0 && !(ps[j] && ps[j].kind === 'say')) j--;
     const self = p.kind === 'say' ? lead(p.who) : p.kind === 'me' ? '我' : '旁白';
-    const thinker = self !== '旁白' ? self : j >= 0 ? lead(pages[j].who) : '旁白';
+    const thinker = self !== '旁白' ? self : j >= 0 ? lead(ps[j].who) : '旁白';
     const acts = self !== '旁白' ? (p.text.match(/[（(][^）)]*[）)]/g) || []).map(x => x.slice(1, -1)).join('，') : '';
     const segs = [];
     for (const m of p.text.matchAll(/([（(][^）)]*[）)])|(?<!\*)\*([^*\n]+)\*(?!\*)|([^（(*]+|\*+)/g)) {
@@ -423,10 +423,71 @@
   }
   const switchMode = v => {
     if (v === on) return;
-    if (v) { fromLog(); setMode(true); speak(idx); }
+    if (v) { stopRead(); paintRh(); fromLog(); setMode(true); speak(idx); }
     else { stopVoice(); setMode(false); requestAnimationFrame(toLog); }
   };
   tg.onclick = () => switchMode(!on);
+
+  /* ---------- 记录模式朗读：选中一段，点「🔊 从这里读」，从那段读到这条回复末尾 ---------- */
+  document.head.appendChild(Object.assign(document.createElement('style'), { textContent: `
+  #readHere { position: fixed; z-index: 50; display: none; padding: 6px 14px; border-radius: 999px; border: 0; background: #8a5a3c; color: #fff; font-size: 14px; box-shadow: 0 3px 12px rgba(0,0,0,.3); cursor: pointer; }
+  #log .reading { background: rgba(200,150,80,.18); border-radius: 8px; transition: background .3s; }
+  ` }));
+  const rh = Object.assign(document.createElement('button'), { id: 'readHere' });
+  document.body.appendChild(rh);
+  let reading = false, rtok = 0, rFrom = null;
+  const srcOf = el => {   // 记录里的一段 → 原文（心里话还原成 *…*，好让配音分出来）
+    const c = el.cloneNode(true);
+    c.querySelectorAll('.sumh, img, .who').forEach(x => x.remove());
+    c.querySelectorAll('i.think').forEach(x => { x.textContent = '*' + x.textContent + '*'; });
+    c.querySelectorAll('br').forEach(x => x.replaceWith('\n'));
+    return c.textContent.trim();
+  };
+  const pageOf = el => el.matches('.speaker') ? { who: el.querySelector('.name').textContent.trim(), text: srcOf(el.querySelector('.text')), kind: 'say' }
+    : { who: el.matches('.sum') ? '小结' : '', text: srcOf(el), kind: el.matches('.sum') ? 'sum' : el.matches('.env') ? 'env' : 'narr' };
+  function stopRead() { rtok++; reading = false; if (audio) { audio.pause(); audio = null; } document.querySelectorAll('#log .reading').forEach(x => x.classList.remove('reading')); }
+  async function readFrom(el) {
+    stopVoice(); stopRead(); const tok = rtok; reading = true;
+    const els = [...el.parentNode.children].slice([...el.parentNode.children].indexOf(el));
+    const ps = els.map(pageOf);
+    const urls = ps.map((p, k) => null);
+    const get = k => urls[k] || (urls[k] = voiceOf(k, ps).map(segUrl));
+    for (let k = 0; k < els.length; k++) {
+      if (tok !== rtok) return;
+      const us = get(k); if (k + 1 < els.length) Promise.all(us).then(() => tok === rtok && get(k + 1));   // 这段出来了就先生成下一段
+      document.querySelectorAll('#log .reading').forEach(x => x.classList.remove('reading'));
+      els[k].classList.add('reading'); els[k].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      for (const pu of us) {
+        const u = await pu; if (tok !== rtok) return;
+        if (!u) continue;
+        await new Promise(res => { audio = new Audio(u); audio.onended = audio.onerror = res; audio.play().catch(res); });
+        if (tok !== rtok) return;
+      }
+    }
+    stopRead(); paintRh();
+  }
+  const pickEl = () => {   // 选中的文字在哪一段（只认兽夫的回复，她自己打的字不读）
+    const s = getSelection(); if (!s || s.isCollapsed || !s.rangeCount) return null;
+    let n = s.getRangeAt(0).startContainer; if (n.nodeType !== 1) n = n.parentNode;
+    const el = n.closest && n.closest('#log .msg.ai > *');
+    return el && !el.matches('.tick') ? el : null;
+  };
+  function paintRh() {
+    if (reading) { rh.textContent = '⏹ 停止朗读'; rh.style.display = ''; rh.style.left = ''; rh.style.top = ''; rh.style.right = '20px'; rh.style.bottom = '96px'; return; }
+    const el = on ? null : pickEl(); rFrom = el;
+    if (!el || !voiceUp) { rh.style.display = 'none'; return; }
+    const r = getSelection().getRangeAt(0).getBoundingClientRect();
+    rh.textContent = '🔊 从这里读'; rh.style.display = ''; rh.style.right = ''; rh.style.bottom = '';
+    rh.style.left = Math.max(8, Math.min(innerWidth - 140, r.left)) + 'px';
+    rh.style.top = (r.top > 60 ? r.top - 44 : r.bottom + 8) + 'px';
+  }
+  let rhT = null;
+  document.addEventListener('selectionchange', () => { clearTimeout(rhT); rhT = setTimeout(paintRh, 250); });
+  rh.addEventListener('mousedown', e => e.preventDefault());   // 点按钮时别把选区点没了
+  rh.addEventListener('click', () => {
+    if (reading) { stopRead(); paintRh(); return; }
+    if (rFrom) { const el = rFrom; getSelection().removeAllRanges(); readFrom(el); paintRh(); }
+  });
 
   setMode(on); paintAutoBtn();
   loadLast(); loadWorld();
