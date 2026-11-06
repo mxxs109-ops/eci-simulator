@@ -285,7 +285,7 @@
   let voiceOn = (() => { try { return localStorage.getItem('vnVoice') !== 'off'; } catch { return true; } })();
   let voiceUp = false, audio = null;
   const voiceUrls = new Map();
-  const paintVoiceBtn = () => { const b = vn.querySelector('[data-vn="voice"]'); if (b) { b.textContent = voiceOn && voiceUp ? '🔊' : '🔇'; b.style.display = voiceUp ? '' : 'none'; } };
+  const paintVoiceBtn = () => { document.body.classList.toggle('voiceup', voiceUp); const b = vn.querySelector('[data-vn="voice"]'); if (b) { b.textContent = voiceOn && voiceUp ? '🔊' : '🔇'; b.style.display = voiceUp ? '' : 'none'; } };
   const checkVoice = () => fetch('/api/voice/status').then(r => r.json()).then(j => { voiceUp = !!j.ok; paintVoiceBtn(); }).catch(() => { voiceUp = false; paintVoiceBtn(); });
   checkVoice(); setInterval(checkVoice, 30000);
   // 一页切成几段按顺序念：括号动作 = 旁白；*斜体* 心里话 = 想事情的人压低声音；其余 = 说话的人（她自己 = 「我」，叙述 / 小结 = 旁白）
@@ -432,13 +432,16 @@
   document.head.appendChild(Object.assign(document.createElement('style'), { textContent: `
   #readHere { position: fixed; z-index: 50; display: none; padding: 6px 14px; border-radius: 999px; border: 0; background: #8a5a3c; color: #fff; font-size: 14px; box-shadow: 0 3px 12px rgba(0,0,0,.3); cursor: pointer; }
   #log .reading { background: rgba(200,150,80,.18); border-radius: 8px; transition: background .3s; }
+  #log .rd { display: none; cursor: pointer; font-size: 13px; margin-right: 4px; opacity: .55; user-select: none; font-style: normal; }
+  body.voiceup #log .rd { display: inline; }
+  #log .rd:hover, #log .reading .rd { opacity: 1; }
   ` }));
   const rh = Object.assign(document.createElement('button'), { id: 'readHere' });
   document.body.appendChild(rh);
   let reading = false, rtok = 0, rFrom = null;
   const srcOf = el => {   // 记录里的一段 → 原文（心里话还原成 *…*，好让配音分出来）
     const c = el.cloneNode(true);
-    c.querySelectorAll('.sumh, img, .who').forEach(x => x.remove());
+    c.querySelectorAll('.sumh, img, .who, .rd').forEach(x => x.remove());
     c.querySelectorAll('i.think').forEach(x => { x.textContent = '*' + x.textContent + '*'; });
     c.querySelectorAll('br').forEach(x => x.replaceWith('\n'));
     return c.textContent.trim();
@@ -473,16 +476,23 @@
     return el && !el.matches('.tick') ? el : null;
   };
   function paintRh() {
-    if (reading) { rh.textContent = '⏹ 停止朗读'; rh.style.display = ''; rh.style.left = ''; rh.style.top = ''; rh.style.right = '20px'; rh.style.bottom = '96px'; return; }
+    if (reading) { rh.textContent = '⏹ 停止朗读'; rh.style.display = 'block'; rh.style.left = ''; rh.style.top = ''; rh.style.right = '20px'; rh.style.bottom = '96px'; return; }
     const el = on ? null : pickEl(); rFrom = el;
     if (!el || !voiceUp) { rh.style.display = 'none'; return; }
     const r = getSelection().getRangeAt(0).getBoundingClientRect();
-    rh.textContent = '🔊 从这里读'; rh.style.display = ''; rh.style.right = ''; rh.style.bottom = '';
+    rh.textContent = '🔊 从这里读'; rh.style.display = 'block'; rh.style.right = ''; rh.style.bottom = '';
     rh.style.left = Math.max(8, Math.min(innerWidth - 140, r.left)) + 'px';
     rh.style.top = (r.top > 60 ? r.top - 44 : r.bottom + 8) + 'px';
   }
   let rhT = null;
   document.addEventListener('selectionchange', () => { clearTimeout(rhT); rhT = setTimeout(paintRh, 250); });
+  // 每段前面的小 🔊：回复一渲染出来就挂上
+  const addRd = () => document.querySelectorAll('#log .msg.ai > :not(.tick)').forEach(el => {
+    const host = el.matches('.speaker') ? el.querySelector('.text') : el;
+    if (host && !host.querySelector(':scope > .rd')) host.prepend(Object.assign(document.createElement('span'), { className: 'rd', textContent: '🔊', title: '从这段开始读' }));
+  });
+  new MutationObserver(addRd).observe(document.querySelector('#list'), { childList: true, subtree: true }); addRd();
+  document.querySelector('#log').addEventListener('click', e => { const b = e.target.closest('.rd'); if (!b) return; e.stopPropagation(); readFrom(b.closest('.msg.ai > *')); paintRh(); });
   rh.addEventListener('mousedown', e => e.preventDefault());   // 点按钮时别把选区点没了
   rh.addEventListener('click', () => {
     if (reading) { stopRead(); paintRh(); return; }
