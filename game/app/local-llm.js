@@ -326,8 +326,10 @@ async function fillMarks(gameDir, target, history) {
         const times = (history || []).filter(h => h.time && !h.sim && !h.tick);
         const lastT = times.length ? new Date(times[times.length - 1].time.replace(' ', 'T')) : new Date();
         const from = date ? new Date(date + 'T05:00:00') : new Date(lastT.getTime() - 86400000), to = new Date(from.getTime() + 86400000 + (date ? 0 : 60000));
-        const scenes = times.filter(h => { const t = new Date(h.time.replace(' ', 'T')); return t >= from && t < to; })
-          .map(h => (h.role === 'user' ? '【她】' : '【故事】') + h.text).join('\n\n');
+        const day = times.filter(h => { const t = new Date(h.time.replace(' ', 'T')); return t >= from && t < to; });
+        // 一天的原文太长，只给最后一段的话，前面的事模型看不到就会编：先给整天的经过（她每句话 + 每轮的 📌 小结），再给最后一段原文
+        const outline = day.map(h => h.role === 'user' ? `${h.time.slice(11)}【她】${h.text.replace(/\s+/g, ' ').slice(0, 220)}` : (h.text.match(/📌[^\n]*/) || [''])[0]).filter(Boolean).join('\n');
+        const scenes = day.map(h => (h.role === 'user' ? '【她】' : '【故事】') + h.text).join('\n\n');
         const name = spec.voice || m[1].split('｜')[0].trim();
         const pf = path.join(gameDir, '兽夫', name + '.md');
         const profile = name && fs.existsSync(pf) ? fs.readFileSync(pf, 'utf8').slice(0, 3000) : '';
@@ -338,8 +340,8 @@ async function fillMarks(gameDir, target, history) {
 - ${KIND_RULES[spec.kind]}
 - 只写交接说明里要的那一段，写完就停；不要标题、不要日期、不要说明，不要重复前后已经写过的句子
 - 可以彻底露骨：器官、动作、体液直接写名字，不用比喻遮掩；不准带过，不准写「记不清」「后来的事」「一夜过去」「继续交合」这种一笔带过的话；粗话、荤话随意用
-- 照「那一天的故事」里真实发生过的写，不编造没发生的事`;
-        const user = (profile ? `【${name}的档案】\n${profile}\n\n` : '') + (scenes ? `【那一天的故事】\n${scenes.slice(-9000)}\n\n` : '') +
+- 照「那一天的经过」里真实发生过的写，不编造没发生的事；交接说明里写明的事实（谁对谁做了什么、用的什么、在哪、先后顺序、身体哪个部位）一字不改地照办，交接说明没提到的事不要写进来`;
+        const user = (profile ? `【${name}的档案】\n${profile}\n\n` : '') + (outline ? `【那一天的经过（按时间，以这个为准）】\n${outline.slice(-9000)}\n\n` : '') + (scenes ? `【那一天最后一段的原文】\n${scenes.slice(-5000)}\n\n` : '') +
           `【标记前面的文字】\n${(one ? before.slice(before.lastIndexOf('\n') + 1) : entry).slice(-1500)}\n\n【标记后面的文字】\n${after.slice(0, 300)}\n\n【交接说明】\n${m[1]}\n\n现在写这一段：`;
         const r = await fetch(T.base.replace(/\/+$/, '') + '/chat/completions', {
           method: 'POST', headers: { 'Content-Type': 'application/json', ...(T.key ? { Authorization: 'Bearer ' + T.key } : {}) },
