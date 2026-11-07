@@ -11,6 +11,10 @@ const MIN_LEN = 1500;   // 一段至少这么多字，不够就让它接着写
 // 交接说明里写了「约 N 字」：只是回复中间的一小段（剧情、台词、心理 Claude 写好了），不是整场戏
 // 本地模型有时把交接说明抄一行出来（带 ｜），或者加 *** 分隔线：去掉
 const clean = t => t.split('\n').filter(l => !/｜/.test(l) && !/^\s*(\*{3,}|-{3,}|—{3,})\s*$/.test(l) && !/^\s*\*{0,2}【[^】]{1,12}】\*{0,2}\s*$/.test(l)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+// 整段抄出来的交接说明（以【交接说明】/剧情要点/交接说明 开头的那一段）也去掉
+const BRIEF = /^\s*\*{0,2}(【交接说明】|【剧情要点】|交接说明[：:]|剧情要点[：:])/;
+// 开头照抄了前文最后几段（和前文一字不差）：去掉，不然网页上同一段出现两遍
+const dropEcho = (t, before) => { const seen = new Set((before || '').split(/\n\s*\n/).map(p => p.trim()).filter(p => p.length > 20)); const ps = t.split(/\n\s*\n/).filter(p => !BRIEF.test(p)); while (ps.length && seen.has(ps[0].trim())) ps.shift(); return ps.join('\n\n'); };
 const fragLen = brief => Number((brief.match(/约\s*(\d{2,4})\s*字/) || [])[1]) || 0;
 const HOLD = 160;   // 本地模型还在写时，最后这么多字先压着不显示（防抄要剪也只剪这一截）
 // Claude 没写标记、却在回复里跳出来说写不了：从那一段起自动交接，拒绝和出戏的话不给她看
@@ -233,11 +237,11 @@ function create(gameDir, onUpdate, target, ctx) {
           if (!copied && job.text.trim().length - len0 < 50 && ++stuck >= 2) break;
           console.log(`[本地模型] ${copied ? '剪掉照抄的一截' : '才写了 ' + job.text.trim().length + ' 字'}，接着写`);
         }
-        job.text = clean(job.text);
+        job.text = dropEcho(clean(job.text), before);
         addSeen(job.text);
       } catch (e) {
         console.log('[本地模型] ' + e.message + (job.text ? '，写到这里为止' : '，这一段跳过'));
-        job.text = clean(job.text);
+        job.text = dropEcho(clean(job.text), before);
       }
       job.storyDone = true; onUpdate();
       if (job.text && !job.frag) { try { job.sum = await summarize(job.text); } catch (e) { console.log('[本地模型] 小结没写成：' + e.message); } }
@@ -262,7 +266,7 @@ function create(gameDir, onUpdate, target, ctx) {
         start(m[1], out + pre, after);
       }
       const job = jobs[k++];
-      if (!job.storyDone) return out + pre + (job.text.length > HOLD ? '\n\n' + clean(job.text.slice(0, -HOLD)) : '');
+      if (!job.storyDone) return out + pre + (job.text.length > HOLD ? '\n\n' + dropEcho(clean(job.text.slice(0, -HOLD)), out + pre) : '');
       out += pre + (job.text ? '\n\n' + job.text + '\n\n' : '');
       if (!job.done) return out;
       t = t.slice(m.index + m[0].length);
